@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { getActiveDormId } from "@/lib/dorms";
 import { createClient } from "@/lib/supabase/server";
 import { CreateUserForm } from "./create-user-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,13 +15,17 @@ export default async function AdminUsersPage() {
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
+  const activeDormId = await getActiveDormId();
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role, dorm_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership || membership.role !== "admin") {
+  const activeMembership =
+    memberships?.find((membership) => membership.dorm_id === activeDormId) ??
+    memberships?.[0];
+
+  if (!activeMembership || activeMembership.role !== "admin") {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -31,12 +36,12 @@ export default async function AdminUsersPage() {
   const { data: dorms } = await supabase
     .from("dorms")
     .select("id, name")
-    .eq("id", membership.dorm_id);
+    .eq("id", activeMembership.dorm_id);
 
   const { data: members } = await supabase
     .from("dorm_memberships")
     .select("user_id, role, profiles(display_name)")
-    .eq("dorm_id", membership.dorm_id)
+    .eq("dorm_id", activeMembership.dorm_id)
     .order("role", { ascending: true });
 
   return (

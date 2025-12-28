@@ -23,6 +23,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
+import { DormSwitcher } from "@/components/nav/dorm-switcher"
 
 // Menu items.
 const items = [
@@ -56,7 +57,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Dormy (Molave)</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            <DormSwitcher />
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleItems.map((item) => {

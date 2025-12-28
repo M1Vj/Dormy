@@ -42,6 +42,16 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dorms</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href="/admin/dorms">Manage dorms</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
