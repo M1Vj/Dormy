@@ -22,6 +22,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { useAuth } from "@/components/providers/auth-provider"
 
 // Menu items.
 const items = [
@@ -36,6 +37,20 @@ const items = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { role } = useAuth()
+
+  const occupantRoutes = new Set(["/payments", "/fines", "/evaluation"])
+  const visibleItems = items.filter((item) => {
+    if (role === "occupant") {
+      return occupantRoutes.has(item.url)
+    }
+
+    if (item.url === "/admin") {
+      return role === "admin"
+    }
+
+    return true
+  })
 
   return (
     <Sidebar>
@@ -44,7 +59,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Dormy (Molave)</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive = pathname === item.url ||
                   (item.url !== "/" && pathname.startsWith(item.url))
                 return (

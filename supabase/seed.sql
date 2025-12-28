@@ -41,3 +41,21 @@ join (
     ('Vandalism', 'major'::fine_severity, 50, -10)
 ) as rule(title, severity, default_pesos, default_points)
 on conflict do nothing;
+
+-- Optional: bootstrap the first admin profile + membership.
+-- 1) Create the auth user in Supabase Auth (Dashboard or CLI).
+-- 2) Replace <ADMIN_USER_ID> below with the auth.users.id.
+-- with dorm as (
+--   select id from public.dorms where slug = 'molave-mens-hall'
+-- )
+-- insert into public.profiles (user_id, display_name)
+-- select '<ADMIN_USER_ID>'::uuid, 'Dorm Admin'
+-- on conflict (user_id) do update set display_name = excluded.display_name;
+--
+-- with dorm as (
+--   select id from public.dorms where slug = 'molave-mens-hall'
+-- )
+-- insert into public.dorm_memberships (dorm_id, user_id, role)
+-- select dorm.id, '<ADMIN_USER_ID>'::uuid, 'admin'::app_role
+-- from dorm
+-- on conflict (dorm_id, user_id) do update set role = excluded.role;
