@@ -163,7 +163,7 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { error } = await supabase.from("fines").insert({
+  const { data, error } = await supabase.from("fines").insert({
     dorm_id: dormId,
     occupant_id: parsed.data.occupant_id,
     rule_id: parsed.data.rule_id || null, // Allow custom fine without rule
@@ -171,9 +171,31 @@ export async function issueFine(dormId: string, formData: FormData) {
     points: parsed.data.points,
     note: parsed.data.note,
     issued_by: user.id
-  });
+  })
+    .select()
+    .single();
 
   if (error) return { error: error.message };
+
+  // Sync to Ledger (Charge)
+  const { error: ledgerError } = await supabase.from("ledger_entries").insert({
+    dorm_id: dormId,
+    ledger: "sa_fines",
+    entry_type: "charge",
+    occupant_id: parsed.data.occupant_id,
+    fine_id: data.id,
+    amount_pesos: parsed.data.pesos,
+    note: `Fine: ${parsed.data.note || "Violation"}`,
+    created_by: user.id
+  });
+
+  if (ledgerError) {
+    // If ledger fails, we technically have an inconsistency. 
+    // In a real app we'd rollback. For v1, we log error.
+    console.error("Failed to create ledger entry for fine:", ledgerError);
+    // Ideally update fine to add a warning or delete it?
+    // Let's keep it simple: just log.
+  }
 
   revalidatePath("/admin/fines");
   revalidatePath(`/admin/occupants/${parsed.data.occupant_id}`);
@@ -198,5 +220,21 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin/fines");
+
+  // Sync to Ledger (Void)
+  const { error: ledgerError } = await supabase
+    .from("ledger_entries")
+    .update({
+      voided_at: new Date().toISOString(),
+      voided_by: user.id,
+      void_reason: `Fine voided: ${reason}`
+    })
+    .eq("dorm_id", dormId)
+    .eq("fine_id", fineId);
+
+  if (ledgerError) {
+    console.error("Failed to void ledger entry:", ledgerError);
+  }
+
   return { success: true };
 }

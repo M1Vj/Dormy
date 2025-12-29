@@ -30,8 +30,8 @@ export async function getRoomsWithOccupants(dormId: string) {
   // Filter assignments to only include active ones (end_date is null)
   return rooms.map((room) => ({
     ...room,
-    current_assignments: (room.room_assignments || []).filter(
-      (a: any) => !a.end_date
+    current_assignments: (room.room_assignments as { end_date: string | null }[] || []).filter(
+      (a) => !a.end_date
     ),
     room_assignments: undefined, // cleanup
   }));
