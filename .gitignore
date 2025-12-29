@@ -37,3 +37,6 @@ next-env.d.ts
 
 # maba
 /.maba/
+
+# gemini
+.gemini/
