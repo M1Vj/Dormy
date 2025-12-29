@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { getFineRules } from "@/app/actions/fines";
 import { getOccupant } from "@/app/actions/occupants";
+import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
@@ -55,13 +57,12 @@ const getStatusClass = (status?: string | null) => {
   return "border-muted bg-muted text-muted-foreground";
 };
 
-export default async function AdminOccupantProfilePage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { mode?: string };
+export default async function AdminOccupantProfilePage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ mode?: string }>;
 }) {
+  const params = await props.params;
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -102,6 +103,16 @@ export default async function AdminOccupantProfilePage({
     );
   }
 
+  const fineRules = await getFineRules(activeMembership.dorm_id);
+  const occupantOptions = [
+    {
+      id: occupant.id,
+      full_name: occupant.full_name,
+      student_id: occupant.student_id,
+      classification: occupant.classification,
+    },
+  ];
+
   const isEditMode = searchParams.mode === "edit";
 
   const statusLabel = occupant.status
@@ -127,6 +138,15 @@ export default async function AdminOccupantProfilePage({
           </p>
         </div>
         <div className="flex gap-2">
+          {!isEditMode && (
+            <IssueFineDialog
+              dormId={activeMembership.dorm_id}
+              occupants={occupantOptions}
+              rules={fineRules}
+              defaultOccupantId={occupant.id}
+              triggerLabel="Issue fine"
+            />
+          )}
           {!isEditMode && (
             <Button asChild variant="outline">
               <Link href={`/admin/occupants/${occupant.id}?mode=edit`}>Edit</Link>
@@ -234,8 +254,8 @@ export default async function AdminOccupantProfilePage({
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isActive
-                                ? "border-primary/20 bg-primary/10 text-primary"
-                                : "border-muted bg-muted text-muted-foreground"
+                              ? "border-primary/20 bg-primary/10 text-primary"
+                              : "border-muted bg-muted text-muted-foreground"
                               }`}
                           >
                             {isActive ? "Current" : "Ended"}

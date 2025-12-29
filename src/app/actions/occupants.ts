@@ -11,6 +11,19 @@ const occupantSchema = z.object({
   joined_at: z.string().optional(), // Date string
 });
 
+type RoomRef = {
+  id: string;
+  code: string;
+  level: number;
+};
+
+type RoomAssignment = {
+  id: string;
+  start_date: string;
+  end_date: string | null;
+  room?: RoomRef | RoomRef[] | null;
+};
+
 export async function getOccupants(
   dormId: string,
   {
@@ -55,8 +68,9 @@ export async function getOccupants(
   let mapped = data.map((occ) => {
     // Find the active assignment (no end_date)
     // If multiple (shouldn't happen with DB constraint), take the first one
-    const activeAssignment = occ.room_assignments?.find(
-      (a: any) => !a.end_date
+    const assignments = occ.room_assignments as unknown as RoomAssignment[];
+    const activeAssignment = assignments?.find(
+      (a) => !a.end_date
     );
 
     return {
@@ -69,7 +83,7 @@ export async function getOccupants(
   const normalizedRoom = room?.trim().toLowerCase();
   const normalizedLevel = level?.trim();
 
-  const getRoomRef = (assignment?: any) => {
+  const getRoomRef = (assignment?: RoomAssignment | null) => {
     if (!assignment?.room) return null;
     return Array.isArray(assignment.room) ? assignment.room[0] : assignment.room;
   };
@@ -117,7 +131,8 @@ export async function getOccupant(dormId: string, occupantId: string) {
   }
 
   // Sort assignments: Active first, then by end_date desc (most recent history)
-  const sortedAssignments = (data.room_assignments || []).sort((a: any, b: any) => {
+  const assignments = (data.room_assignments || []) as unknown as RoomAssignment[];
+  const sortedAssignments = assignments.sort((a, b) => {
     if (!a.end_date && b.end_date) return -1;
     if (a.end_date && !b.end_date) return 1;
     // Both active or both ended: sort by start_date desc
@@ -127,7 +142,7 @@ export async function getOccupant(dormId: string, occupantId: string) {
   return {
     ...data,
     room_assignments: sortedAssignments,
-    current_room_assignment: sortedAssignments.find((a: any) => !a.end_date) || null,
+    current_room_assignment: sortedAssignments.find((a) => !a.end_date) || null,
   };
 }
 
@@ -184,12 +199,12 @@ export async function updateOccupant(
 
   // Allow partial updates, but validate stricter if needed. 
   // For simpliciy, reusing logic but manually creating object
-  const updates: any = {};
-  if (rawData.full_name) updates.full_name = rawData.full_name;
-  if (rawData.student_id !== undefined) updates.student_id = rawData.student_id || null;
-  if (rawData.classification) updates.classification = rawData.classification;
-  if (rawData.joined_at) updates.joined_at = rawData.joined_at;
-  if (rawData.status) updates.status = rawData.status;
+  const updates: Record<string, string | number | boolean | null> = {};
+  if (rawData.full_name) updates.full_name = rawData.full_name as string;
+  if (rawData.student_id !== undefined) updates.student_id = (rawData.student_id as string) || null;
+  if (rawData.classification) updates.classification = rawData.classification as string;
+  if (rawData.joined_at) updates.joined_at = rawData.joined_at as string;
+  if (rawData.status) updates.status = rawData.status as string;
 
   const { error } = await supabase
     .from("occupants")

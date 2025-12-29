@@ -11,7 +11,7 @@ import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/client";
 
-const roles = [
+export const roles = [
   "admin",
   "student_assistant",
   "treasurer",
@@ -67,7 +67,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient();
-    refresh();
     const { data } = supabase.auth.onAuthStateChange(() => {
       refresh();
     });

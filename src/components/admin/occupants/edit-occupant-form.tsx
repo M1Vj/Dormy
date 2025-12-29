@@ -6,12 +6,20 @@ import { updateOccupant } from "@/app/actions/occupants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+type Occupant = {
+  id: string;
+  full_name: string;
+  student_id?: string | null;
+  classification?: string | null;
+  status?: string | null;
+};
+
 export function EditOccupantForm({
   dormId,
   occupant,
 }: {
   dormId: string;
-  occupant: any;
+  occupant: Occupant;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -47,7 +55,7 @@ export function EditOccupantForm({
         <Input
           id="student_id"
           name="student_id"
-          defaultValue={occupant.student_id}
+          defaultValue={occupant.student_id ?? ""}
         />
       </div>
       <div className="grid gap-2">
@@ -55,7 +63,7 @@ export function EditOccupantForm({
         <Input
           id="classification"
           name="classification"
-          defaultValue={occupant.classification}
+          defaultValue={occupant.classification ?? ""}
           placeholder="e.g. 1st Year, Senior"
         />
       </div>
@@ -63,7 +71,7 @@ export function EditOccupantForm({
         <label htmlFor="status" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Status</label>
         <select
           name="status"
-          defaultValue={occupant.status}
+          defaultValue={occupant.status ?? "active"}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
         >
           <option value="active">Active</option>
