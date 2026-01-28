@@ -45,3 +45,6 @@ next-env.d.ts
 
 # gemini
 .gemini/
+
+# local agent learnings (keep out of repo)
+.learnings/
