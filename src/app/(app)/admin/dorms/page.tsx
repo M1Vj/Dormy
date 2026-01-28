@@ -3,10 +3,26 @@ import { redirect } from "next/navigation";
 import { getAllDorms } from "@/app/actions/dorm";
 import { CreateDormDialog } from "./create-dorm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AdminDormsPage() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

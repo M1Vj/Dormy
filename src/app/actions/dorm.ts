@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUserDorms, setActiveDormId } from "@/lib/dorms";
 
 const dormSchema = z.object({
@@ -32,7 +32,10 @@ export async function getUserDormsAction() {
 }
 
 export async function getAllDorms() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -70,7 +73,10 @@ export async function createDorm(formData: FormData) {
     return { error: "Provide a name and a valid code." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -120,7 +126,10 @@ export async function createDorm(formData: FormData) {
 }
 
 export async function switchDorm(dormId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();

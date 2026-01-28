@@ -83,7 +83,10 @@ export function LedgerTable({ entries }: LedgerTableProps) {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={isPayment ? "success" : "secondary"}>
+                  <Badge 
+                    variant={isPayment ? "default" : "secondary"}
+                    className={isPayment ? "bg-green-600 text-white hover:bg-green-700" : ""}
+                  >
                     {isPayment ? "Payment" : "Charge"}
                   </Badge>
                 </TableCell>

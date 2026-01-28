@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // --- Rules ---
 
@@ -15,7 +15,10 @@ const fineRuleSchema = z.object({
 });
 
 export async function getFineRules(dormId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase
     .from("fine_rules")
     .select("*")
@@ -30,7 +33,10 @@ export async function getFineRules(dormId: string) {
 }
 
 export async function createFineRule(dormId: string, formData: FormData) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const rawData = {
     title: formData.get("title"),
@@ -59,7 +65,10 @@ export async function updateFineRule(
   ruleId: string,
   formData: FormData
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   // Handle checkbox carefully (if present = true, else false? Or just updates?)
   // For strictness, let's assume active is passed as 'true'/'false' string or via checkbox logic
@@ -106,7 +115,10 @@ export async function getFines(
   dormId: string,
   { search, status }: { search?: string; status?: string } = {}
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   let query = supabase
     .from("fines")
     .select(`
@@ -146,7 +158,10 @@ export async function getFines(
 }
 
 export async function issueFine(dormId: string, formData: FormData) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const rawData = {
     occupant_id: formData.get("occupant_id"),
@@ -203,7 +218,10 @@ export async function issueFine(dormId: string, formData: FormData) {
 }
 
 export async function voidFine(dormId: string, fineId: string, reason: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 

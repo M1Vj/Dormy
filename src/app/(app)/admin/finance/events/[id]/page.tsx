@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { CheckCircle, XCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId } from "@/lib/dorms";
 import { getOccupants } from "@/app/actions/occupants";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
@@ -31,7 +31,15 @@ export default async function EventDetailsPage({
     return <div>Dorm not found</div>;
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
 
   // 1. Fetch Event Details
   const { data: event, error: eventError } = await supabase

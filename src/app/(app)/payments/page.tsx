@@ -1,10 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Wallet, AlertCircle, CheckCircle } from "lucide-react";
 
 export default async function PaymentsPage() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return <div>Unauthorized</div>;

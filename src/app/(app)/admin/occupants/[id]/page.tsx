@@ -7,7 +7,7 @@ import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EditOccupantForm } from "@/components/admin/occupants/edit-occupant-form";
 
 type RoomRef = {
@@ -63,7 +63,15 @@ export default async function AdminOccupantProfilePage(props: {
 }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

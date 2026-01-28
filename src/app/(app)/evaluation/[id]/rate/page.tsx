@@ -4,7 +4,7 @@ import {
   getEvaluationMetrics,
 } from "@/app/actions/evaluation";
 import { getActiveDormId } from "@/lib/dorms";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { RatingForm } from "@/components/evaluation/rating-form";
@@ -18,7 +18,15 @@ export default async function RateOccupantPage({ params }: Props) {
   const dormId = await getActiveDormId();
   if (!dormId) return <div>No active dorm selected.</div>;
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return <div>Unauthorized</div>;
 

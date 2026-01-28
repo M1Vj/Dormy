@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   Table,
   TableBody,
@@ -13,7 +13,15 @@ import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { ChargeDialog } from "@/components/finance/charge-dialog";
 
 export default async function MaintenancePage() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
 
   // Fetch occupants and their maintenance balances
   // We can do this efficiently with a query or by fetching all occupants and then aggregate ledger.
@@ -51,8 +59,9 @@ export default async function MaintenancePage() {
       }
     });
 
-    // Room code
-    const roomCode = occ.room_assignments?.[0]?.room?.code || "No Room";
+    // Room code - room_assignments is an array with nested room object
+    const roomAssignments = occ.room_assignments as unknown;
+    const roomCode = (roomAssignments as Array<{ room: { code: string } }>)?.[0]?.room?.code || "No Room";
 
     return {
       ...occ,

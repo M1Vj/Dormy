@@ -70,7 +70,7 @@ export function RankingResults({ cycleId }: Props) {
                 <TableCell className="font-bold">{index + 1}</TableCell>
                 <TableCell>
                   <div className="font-medium">{row.full_name}</div>
-                  {isTop30 && <Badge variant="success" className="text-[10px] h-4 mt-0.5">TOP 30%</Badge>}
+                  {isTop30 && <Badge variant="default" className="text-[10px] h-4 mt-0.5">TOP 30%</Badge>}
                 </TableCell>
                 <TableCell>{row.peer_score ? Number(row.peer_score).toFixed(2) : "N/A"}</TableCell>
                 <TableCell>{Number(row.sa_score).toFixed(2)}</TableCell>

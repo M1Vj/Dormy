@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { EvaluationSubmission, EvaluationSummary } from "@/lib/types/evaluation";
 
 type SubmitEvaluationPayload = {
@@ -117,7 +117,10 @@ const stripUndefined = <T extends Record<string, unknown>>(value: T) => {
 // --- Summary ---
 
 export async function getEvaluationSummary(cycleId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase.rpc("get_evaluation_summary", {
     p_cycle_id: cycleId,
   });
@@ -145,7 +148,10 @@ export async function submitEvaluation(
     return { error: "You cannot evaluate yourself." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -237,7 +243,10 @@ export async function submitEvaluation(
 // --- Evaluation Cycles ---
 
 export async function getEvaluationCycles(dormId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase
     .from("evaluation_cycles")
     .select("*")
@@ -254,7 +263,10 @@ export async function getEvaluationCycles(dormId: string) {
 }
 
 export async function getEvaluationCycle(dormId: string, cycleId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase
     .from("evaluation_cycles")
     .select("*")
@@ -284,7 +296,10 @@ export async function createEvaluationCycle(
     return { error: "Invalid evaluation cycle data." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -327,7 +342,10 @@ export async function updateEvaluationCycle(
     return { error: "No updates provided." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -345,7 +363,10 @@ export async function updateEvaluationCycle(
 }
 
 export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -367,7 +388,10 @@ export async function getEvaluationTemplates(
   dormId: string,
   cycleId?: string
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   let query = supabase
     .from("evaluation_templates")
     .select("*")
@@ -387,7 +411,10 @@ export async function getEvaluationTemplates(
 }
 
 export async function getEvaluationTemplate(dormId: string, templateId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase
     .from("evaluation_templates")
     .select("*")
@@ -415,7 +442,10 @@ export async function createEvaluationTemplate(
     return { error: "Invalid evaluation template data." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -456,7 +486,10 @@ export async function updateTemplate(
     return { error: "No updates provided." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -482,7 +515,10 @@ export async function deleteEvaluationTemplate(
   templateId: string,
   cycleId?: string
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -507,7 +543,10 @@ export async function getEvaluationMetrics(
   dormId: string,
   templateId?: string
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   let query = supabase
     .from("evaluation_metrics")
     .select("*")
@@ -545,7 +584,10 @@ export async function createEvaluationMetric(
     return { error: "Invalid evaluation metric data." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -587,7 +629,10 @@ export async function updateEvaluationMetric(
     return { error: "No updates provided." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -611,7 +656,10 @@ export async function deleteEvaluationMetric(
   metricId: string,
   cycleId?: string
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
@@ -633,7 +681,10 @@ export async function deleteEvaluationMetric(
 // --- Occupant Listing for Raters ---
 
 export async function getOccupantsToRate(dormId: string, currentUserId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   // 1. Get occupant profile for current user
   const { data: self } = await supabase

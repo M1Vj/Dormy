@@ -1,12 +1,20 @@
 import { redirect } from "next/navigation";
 
 import { getActiveDormId } from "@/lib/dorms";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { CreateUserForm } from "./create-user-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function AdminUsersPage() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

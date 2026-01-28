@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const roles = [
   "admin",
@@ -51,7 +51,10 @@ export async function createUser(formData: FormData) {
     return { error: "Check the form inputs and try again." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();

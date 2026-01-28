@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -23,7 +23,10 @@ export async function login(
     return { error: "Enter a valid email and password." };
   }
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
@@ -34,7 +37,10 @@ export async function login(
 }
 
 export async function logout() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   await supabase.auth.signOut();
   redirect("/login");
 }

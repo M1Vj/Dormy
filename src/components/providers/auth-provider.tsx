@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const roles = [
   "admin",
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = async () => {
     setIsLoading(true);
-    const supabase = createClient();
+    const supabase = createSupabaseBrowserClient();
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const supabase = createClient();
+    const supabase = createSupabaseBrowserClient();
     const { data } = supabase.auth.onAuthStateChange(() => {
       refresh();
     });

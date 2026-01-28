@@ -31,10 +31,10 @@ import { createEvaluationMetric } from "@/app/actions/evaluation";
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  description: z.string().default(""),
-  weight_pct: z.coerce.number().min(1, "Min 1%").max(100, "Max 100%"),
-  scale_min: z.coerce.number().default(1),
-  scale_max: z.coerce.number().default(5),
+  description: z.string().optional(),
+  weight_pct: z.number().min(1, "Min 1%").max(100, "Max 100%"),
+  scale_min: z.number().min(1),
+  scale_max: z.number().min(1),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -61,14 +61,18 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
 
   function onSubmit(values: FormValues) {
     startTransition(async () => {
-      const result = await createEvaluationMetric(dormId, {
-        template_id: templateId,
-        name: values.name,
-        description: values.description || null,
-        weight_pct: values.weight_pct,
-        scale_min: values.scale_min,
-        scale_max: values.scale_max,
-      }, cycleId);
+      const result = await createEvaluationMetric(
+        dormId,
+        {
+          template_id: templateId,
+          name: values.name,
+          description: values.description || null,
+          weight_pct: values.weight_pct,
+          scale_min: values.scale_min,
+          scale_max: values.scale_max,
+        },
+        cycleId
+      );
 
       if (result.success) {
         toast.success("Metric added");
@@ -126,19 +130,23 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
               )}
             />
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="weight_pct"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Weight (%)</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="weight_pct"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Weight (%)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      {...field} 
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
               <div className="grid grid-cols-2 gap-2">
                 <FormField
                   control={form.control}
@@ -147,7 +155,11 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
                     <FormItem>
                       <FormLabel>Min</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input 
+                          type="number" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -160,7 +172,11 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
                     <FormItem>
                       <FormLabel>Max</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input 
+                          type="number" 
+                          {...field} 
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

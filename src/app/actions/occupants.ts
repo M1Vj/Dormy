@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const occupantSchema = z.object({
   full_name: z.string().min(2, "Name is required"),
@@ -33,7 +33,10 @@ export async function getOccupants(
     level,
   }: { search?: string; status?: string; room?: string; level?: string } = {}
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   let query = supabase
     .from("occupants")
@@ -108,7 +111,10 @@ export async function getOccupants(
 }
 
 export async function getOccupant(dormId: string, occupantId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const { data, error } = await supabase
     .from("occupants")
@@ -147,7 +153,10 @@ export async function getOccupant(dormId: string, occupantId: string) {
 }
 
 export async function createOccupant(dormId: string, formData: FormData) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const rawData = {
     full_name: formData.get("full_name"),
@@ -186,7 +195,10 @@ export async function updateOccupant(
   occupantId: string,
   formData: FormData
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   // We can reuse the same schema for now, or make partial
   const rawData = {

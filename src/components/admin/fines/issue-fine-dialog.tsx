@@ -3,7 +3,9 @@
 import { useActionState, useId, useMemo, useState } from "react";
 
 import { issueFine } from "@/app/actions/fines";
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+
+type ButtonProps = React.ComponentProps<typeof Button>;
 import { Input } from "@/components/ui/input";
 import {
   Sheet,

@@ -1,30 +1,37 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
-// --- Types ---
-export type LedgerCategory = 'adviser_maintenance' | 'sa_fines' | 'treasurer_events';
-
-export const transactionSchema = z.object({
+const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
   category: z.enum(['adviser_maintenance', 'sa_fines', 'treasurer_events'] as const),
-  amount: z.number().positive(), // Always positive from client
+  amount: z.number().positive(),
   entry_type: z.enum(['charge', 'payment', 'adjustment', 'refund'] as const),
   method: z.string().optional(),
   note: z.string().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
   event_id: z.string().uuid().optional(),
   fine_id: z.string().uuid().optional(),
 });
 
-export type TransactionData = z.infer<typeof transactionSchema>;
+type TransactionData = z.infer<typeof transactionSchema>;
+export type LedgerCategory = 'adviser_maintenance' | 'sa_fines' | 'treasurer_events';
 
 // --- Actions ---
 
 export async function recordTransaction(dormId: string, data: TransactionData) {
-  const supabase = await createClient();
+  const parsed = transactionSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.message };
+  }
+  const tx = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -32,21 +39,21 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   // For now, we rely on RLS, but it's good to have a check here if we knew the user's role.
 
   // Calculate signed amount based on entry type
-  const finalAmount = data.entry_type === 'payment'
-    ? -Math.abs(data.amount)
-    : Math.abs(data.amount);
+  const finalAmount = tx.entry_type === 'payment'
+    ? -Math.abs(tx.amount)
+    : Math.abs(tx.amount);
 
   const { error } = await supabase.from("ledger_entries").insert({
     dorm_id: dormId,
-    ledger: data.category,
-    entry_type: data.entry_type,
-    occupant_id: data.occupant_id,
+    ledger: tx.category,
+    entry_type: tx.entry_type,
+    occupant_id: tx.occupant_id,
     amount_pesos: finalAmount,
-    method: data.method,
-    note: data.note,
-    metadata: data.metadata || {},
-    event_id: data.event_id,
-    fine_id: data.fine_id,
+    method: tx.method,
+    note: tx.note,
+    metadata: tx.metadata || {},
+    event_id: tx.event_id,
+    fine_id: tx.fine_id,
     created_by: user.id
   });
 
@@ -61,7 +68,10 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
 }
 
 export async function getLedgerBalance(dormId: string, occupantId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const { data, error } = await supabase
     .from("ledger_entries")
@@ -94,7 +104,10 @@ export async function getLedgerBalance(dormId: string, occupantId: string) {
 }
 
 export async function getLedgerEntries(dormId: string, occupantId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
   const { data, error } = await supabase
     .from("ledger_entries")
     .select(`

@@ -40,9 +40,9 @@ import { createEvaluationCycle } from "@/app/actions/evaluation";
 const formSchema = z.object({
   school_year: z.string().min(4, "SY is required"),
   semester: z.string().min(1, "Semester is required"),
-  label: z.string().catch(""),
-  counts_for_retention: z.boolean().default(false),
-  is_active: z.boolean().default(false),
+  label: z.string(),
+  counts_for_retention: z.boolean(),
+  is_active: z.boolean(),
 });
 
 type FormValues = z.infer<typeof formSchema>;

@@ -46,7 +46,7 @@ export default async function TemplateTemplatePage({ params }: Props) {
             <h2 className="text-3xl font-bold tracking-tight">
               {template.name}
             </h2>
-            <Badge variant={template.status === 'active' ? 'success' : 'secondary'}>
+            <Badge variant={template.status === 'active' ? 'default' : 'secondary'}>
               {template.status.toUpperCase()}
             </Badge>
           </div>

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { createClient } from "@/lib/supabase/server";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   Table,
   TableBody,
@@ -14,7 +13,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function EventsFinancePage() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
 
   // Fetch events with ledger summary
   // We want to know: Total Charged vs Total Collected per event.

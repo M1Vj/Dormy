@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function getRoomsWithOccupants(dormId: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   // Fetch rooms and all assignments
   // We filter for active assignments in JS to avoid inner-join behavior that excludes empty rooms
@@ -43,7 +46,10 @@ export async function assignOccupant(
   occupantId: string,
   startDate: string = new Date().toISOString().split('T')[0]
 ) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   // 1. Check if occupant has active assignment
   const { data: activeAssignment } = await supabase
@@ -88,7 +94,10 @@ export async function assignOccupant(
 }
 
 export async function removeOccupantFromRoom(assignmentId: string, endDate: string) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
 
   const { error } = await supabase
     .from("room_assignments")

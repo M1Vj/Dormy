@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const DORM_COOKIE = "dorm_id";
 
@@ -19,7 +19,11 @@ export async function setActiveDormId(dormId: string) {
 }
 
 export async function getUserDorms() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return [];
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

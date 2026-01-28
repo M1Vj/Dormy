@@ -43,7 +43,9 @@ export default async function CycleDetailsPage({ params }: Props) {
             {cycle.is_active && (
               <>
                 <span>•</span>
-                <Badge variant="success">Active</Badge>
+                <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  Active
+                </Badge>
               </>
             )}
           </div>
@@ -69,7 +71,7 @@ export default async function CycleDetailsPage({ params }: Props) {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{template.name}</CardTitle>
-                    <Badge variant={template.status === 'active' ? 'success' : 'secondary'}>
+                    <Badge variant={template.status === 'active' ? 'default' : 'secondary'}>
                       {template.status.toUpperCase()}
                     </Badge>
                   </div>

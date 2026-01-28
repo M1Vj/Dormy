@@ -54,7 +54,7 @@ export default async function AdminEvaluationPage() {
                   </TableCell>
                   <TableCell>
                     {cycle.is_active ? (
-                      <Badge variant="success">Active</Badge>
+                      <Badge variant="default">Active</Badge>
                     ) : (
                       <Badge variant="secondary">Inactive</Badge>
                     )}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CheckCircle, Circle, ArrowRight } from "lucide-react";
 import { getOccupantsToRate } from "@/app/actions/evaluation";
 import { getActiveDormId } from "@/lib/dorms";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,15 @@ export default async function OccupantEvaluationPage() {
   const dormId = await getActiveDormId();
   if (!dormId) return <div>No active dorm selected.</div>;
 
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return <div>Unauthorized</div>;
 
@@ -43,7 +51,7 @@ export default async function OccupantEvaluationPage() {
             <CardContent>
               {occupant.is_rated ? (
                 <div className="flex items-center justify-between">
-                  <Badge variant="success">Completed</Badge>
+                  <Badge variant="default">Completed</Badge>
                   <Button variant="ghost" size="sm" disabled>
                     Already Rated
                   </Button>

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getOccupants } from "@/app/actions/occupants";
 import { OccupantTable } from "@/components/admin/occupants/occupant-table";
 import { getActiveDormId } from "@/lib/dorms";
-import { createClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type SearchParams = {
   search?: string | string[];
@@ -24,7 +24,15 @@ export default async function AdminOccupantsPage({
 }: {
   searchParams?: SearchParams;
 }) {
-  const supabase = await createClient();
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

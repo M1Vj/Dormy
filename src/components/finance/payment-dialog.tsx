@@ -35,10 +35,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-import { recordTransaction, LedgerCategory } from "@/app/actions/finance";
+import { recordTransaction } from "@/app/actions/finance";
+import { LedgerCategory } from "@/lib/types/finance";
 
 const formSchema = z.object({
-  amount: z.coerce.number().min(1, "Amount must be greater than 0"),
+  amount: z.number().min(1, "Amount must be greater than 0"),
   method: z.string().min(1, "Method is required"),
   note: z.string().optional(),
 });
@@ -125,7 +126,12 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, trigger }
                 <FormItem>
                   <FormLabel>Amount (₱)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" {...field} />
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      {...field} 
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
