@@ -37,13 +37,7 @@ const formSchema = z.object({
   scale_max: z.coerce.number().default(5),
 });
 
-interface FormValues {
-  name: string;
-  description: string;
-  weight_pct: number;
-  scale_min: number;
-  scale_max: number;
-}
+type FormValues = z.infer<typeof formSchema>;
 
 interface Props {
   dormId: string;
@@ -102,7 +96,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
-              control={form.control as any}
+              control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
@@ -115,7 +109,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
               )}
             />
             <FormField
-              control={form.control as any}
+              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
@@ -133,7 +127,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
             />
             <div className="grid grid-cols-2 gap-4">
               <FormField
-                control={form.control as any}
+                control={form.control}
                 name="weight_pct"
                 render={({ field }) => (
                   <FormItem>
@@ -147,7 +141,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
               />
               <div className="grid grid-cols-2 gap-2">
                 <FormField
-                  control={form.control as any}
+                  control={form.control}
                   name="scale_min"
                   render={({ field }) => (
                     <FormItem>
@@ -160,7 +154,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
                   )}
                 />
                 <FormField
-                  control={form.control as any}
+                  control={form.control}
                   name="scale_max"
                   render={({ field }) => (
                     <FormItem>
