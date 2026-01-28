@@ -19,6 +19,7 @@ import { redirect } from "next/navigation";
 
 export async function AppShell({ children }: PropsWithChildren) {
   const supabase = await createSupabaseServerClient();
+  if (!supabase) redirect("/login");
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
 
@@ -31,7 +32,7 @@ export async function AppShell({ children }: PropsWithChildren) {
   async function signOut() {
     "use server";
     const s = await createSupabaseServerClient();
-    await s.auth.signOut();
+    if (s) await s.auth.signOut();
     redirect("/login");
   }
 
