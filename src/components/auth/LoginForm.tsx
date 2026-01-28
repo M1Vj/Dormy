@@ -10,12 +10,23 @@ import { toast } from "sonner";
 
 export function LoginForm() {
   const router = useRouter();
-  const supabase = createSupabaseBrowserClient();
+  const [supabase] = useState(() => {
+    try {
+      return createSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(formData: FormData) {
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
+
+    if (!supabase) {
+      toast.error("Supabase env is not configured. Copy .env.example → .env.local and set keys.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -24,8 +35,9 @@ export function LoginForm() {
       toast.success("Signed in");
       router.push("/dashboard");
       router.refresh();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to sign in");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to sign in";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

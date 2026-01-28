@@ -12,6 +12,7 @@ export type AppRole =
 
 export async function requireUser() {
   const supabase = await createSupabaseServerClient();
+  if (!supabase) redirect("/login");
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) redirect("/login");
   return data.user;
@@ -20,6 +21,7 @@ export async function requireUser() {
 export async function getMyProfile() {
   const user = await requireUser();
   const supabase = await createSupabaseServerClient();
+  if (!supabase) return null;
   const { data, error } = await supabase
     .from("profiles")
     .select("user_id, dorm_id, role, full_name, student_id")
