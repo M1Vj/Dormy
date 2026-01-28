@@ -22,7 +22,27 @@ export async function middleware(req: NextRequest) {
   });
 
   // Refresh session if needed
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const pathname = req.nextUrl.pathname;
+
+  // Guard private routes
+  if (pathname.startsWith("/dashboard") && !user) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // Keep signed-in users out of /login
+  if (pathname === "/login" && user) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/dashboard";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
 
   return res;
 }
