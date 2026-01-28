@@ -35,8 +35,27 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  // TODO: Check role permissions for the specific ledger category
-  // For now, we rely on RLS, but it's good to have a check here if we knew the user's role.
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
+    adviser_maintenance: ["admin", "adviser", "assistant_adviser"],
+    sa_fines: ["admin", "student_assistant", "adviser", "assistant_adviser"],
+    treasurer_events: ["admin", "treasurer"],
+  };
+
+  const allowed = allowedRolesByLedger[tx.category].includes(membership.role);
+  if (!allowed) {
+    return { error: "You do not have permission to record this transaction." };
+  }
 
   // Calculate signed amount based on entry type
   const finalAmount = tx.entry_type === 'payment'
