@@ -48,3 +48,6 @@ next-env.d.ts
 
 # local agent learnings (keep out of repo)
 .learnings/
+
+# Supabase local dev
+supabase/.temp/
