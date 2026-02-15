@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, ImageIcon, MapPin, Star, Swords } from "lucide-react";
+import { CalendarDays, ImageIcon, MapPin, Star, Swords, Trophy } from "lucide-react";
 import { format, isSameDay, parseISO } from "date-fns";
 
 import {
@@ -96,6 +96,14 @@ export default async function EventDetailPage({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {event.is_competition ? (
+            <Button asChild>
+              <Link href={`/events/${event.id}/competition`}>
+                <Trophy className="mr-2 size-4" />
+                Competition
+              </Link>
+            </Button>
+          ) : null}
           {context.canManageEvents ? (
             <>
               <EventFormDialog
