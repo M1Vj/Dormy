@@ -37,11 +37,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [dormId, setDormId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const refresh = async () => {
     setIsLoading(true);
-    const supabase = createSupabaseBrowserClient();
+    let supabase: ReturnType<typeof createSupabaseBrowserClient>;
+    try {
+      supabase = createSupabaseBrowserClient();
+    } catch {
+      setUser(null);
+      setRole(null);
+      setDormId(null);
+      setIsLoading(false);
+      return;
+    }
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();
@@ -66,7 +75,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+    let supabase: ReturnType<typeof createSupabaseBrowserClient>;
+    try {
+      supabase = createSupabaseBrowserClient();
+    } catch {
+      return;
+    }
     const { data } = supabase.auth.onAuthStateChange(() => {
       refresh();
     });
