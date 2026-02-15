@@ -1,34 +1,52 @@
 # Dormy
 
-Dormitory operations web app for Molave Men's Hall, built with Next.js + Supabase.
+Dormy is a dormitory operations web app for **Visayas State University (VSU) — Molave Men's Hall**. It is built with **Next.js + Supabase** and designed to be **tenant-aware** so it can expand to multi-dorm use later.
 
-## Stack
+## What It Covers (v1)
+
+- Occupant roster and room assignments
+- Fine rules + fines ledger (Student Assistant workflow)
+- Payments and clearance status across separate ledgers:
+  - SA fines
+  - Treasurer event contributions
+  - Adviser maintenance fees
+- Evaluation and ranking (configurable metrics/weights; never allow self-rating)
+- Events calendar + photos + ratings/comments + competition mode (teams/scoring)
+- Cleaning schedule operations (Molave defaults, configurable later)
+- Excel (`.xlsx`) exports
+- AI helpers (Google Gemini) and voice-to-text capture
+
+## Roles & Permissions (v1)
+
+- `admin`: full access; can create `adviser` accounts and manage users
+  - **Important:** `admin` cannot be assigned through the app UI. It must be set in the database.
+- `adviser` / `assistant_adviser`: maintenance ledger and clearance workflows (can provision users, but cannot create `adviser` accounts)
+- `student_assistant`: occupants/rooms, fines, cleaning schedule (can add occupants)
+- `treasurer`: event contributions/collections; clearance-relevant views
+- `event_officer`: events + competition mode
+- `occupant`: read-only self view (balances/clearance), can participate in ratings/evaluation
+
+## Tech Stack
 
 - Next.js 16 (App Router, TypeScript)
 - Supabase (Auth, Postgres, RLS, Storage)
 - shadcn/ui + Radix + Tailwind CSS
 - Sonner, React Hook Form, Zod
 
-## Modules
+## Data Model Notes
 
-- Role-based workspaces: `admin`, `student_assistant`, `treasurer`, `adviser`, `assistant_adviser`, `event_officer`, `occupant`
-- Occupants, rooms, assignments
-- Fines and ledger tracking
-- Payments and clearance flows
-- Evaluation cycles and scoring
-- Events, competition mode, photos, ratings
-- Cleaning schedule operations
-- AI organizer + audit log
-- XLSX exports
+- All dorm-owned tables are scoped by `dorm_id` (tenant-aware).
+- `dorm_memberships` is the source of truth for who has access to which dorm and which `role`.
+- Row Level Security (RLS) is enabled for dorm-scoped data. Server-side privileged actions use `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Prerequisites
 
 - Node.js 20+
 - npm
-- Docker Desktop
+- Docker Desktop (only if you want local Supabase)
 - Supabase CLI
 
-## Local Setup
+## Setup
 
 1. Install dependencies:
 
@@ -36,27 +54,66 @@ Dormitory operations web app for Molave Men's Hall, built with Next.js + Supabas
 npm install
 ```
 
-2. Create env file:
+2. Create your env file:
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Choose a Supabase target:
+### Remote Supabase (hosted, recommended)
 
-- Remote Supabase (hosted): fill `.env.local` with your hosted project URL + keys (see below).
-- Local Supabase: keep `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` and use the keys from `supabase status -o env`.
+1. Set `.env.local`:
 
-4. Start local Supabase:
+- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY=<your anon key>`
+- `SUPABASE_SERVICE_ROLE_KEY=<your service role key>` (server-side only)
+- `GEMINI_API_KEY=<your gemini key>` (server-side only)
+
+2. Link the repo to your Supabase project:
 
 ```bash
-supabase start
+supabase link --project-ref <project-ref> --password <db-password> --yes
 ```
 
-5. Apply migrations + seed local DB:
+3. Push migrations to hosted DB:
 
 ```bash
-supabase db reset --local --yes
+supabase db push --linked --include-all --yes -p <db-password>
+```
+
+4. Seed core data (recommended)
+
+Local development runs `supabase/seed.sql` automatically during `supabase db reset`. For hosted Supabase, run `supabase/seed.sql` in the Supabase Dashboard SQL editor to create:
+
+- the Molave dorm (`molave-mens-hall`)
+- room inventory
+- starter fine rules (optional)
+
+5. Bootstrap the first admin (required)
+
+There is **no public sign-up**. You must:
+
+- Create an auth user in Supabase Auth (Dashboard or service-role tooling).
+- Insert/update `public.profiles` for that `auth.users.id`.
+- Insert/update `public.dorm_memberships` with `role = 'admin'`.
+
+Seed template (replace `<ADMIN_USER_ID>`):
+
+```sql
+with dorm as (
+  select id from public.dorms where slug = 'molave-mens-hall'
+)
+insert into public.profiles (user_id, display_name)
+values ('<ADMIN_USER_ID>'::uuid, 'Dorm Admin')
+on conflict (user_id) do update set display_name = excluded.display_name;
+
+with dorm as (
+  select id from public.dorms where slug = 'molave-mens-hall'
+)
+insert into public.dorm_memberships (dorm_id, user_id, role)
+select dorm.id, '<ADMIN_USER_ID>'::uuid, 'admin'::app_role
+from dorm
+on conflict (dorm_id, user_id) do update set role = excluded.role;
 ```
 
 6. Run the app:
@@ -67,25 +124,27 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Remote Supabase Setup (Hosted)
+### Local Supabase (optional)
 
-1. Link the repository to your Supabase project:
+Local is useful for offline development, but hosted is recommended for team/dev/prod.
 
-```bash
-supabase link --project-ref <project-ref> --password <db-password> --yes
-```
-
-2. Apply migrations to the hosted database:
+1. Start local Supabase:
 
 ```bash
-supabase db push --linked --include-all --yes -p <db-password>
+supabase start
 ```
 
-3. Set `.env.local`:
+2. Reset local DB (migrations + `supabase/seed.sql`):
 
-- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY=<your anon key>`
-- `SUPABASE_SERVICE_ROLE_KEY=<your service role key>`
+```bash
+supabase db reset --local --yes
+```
+
+3. Set `.env.local` using keys from:
+
+```bash
+supabase status -o env
+```
 
 4. Run the app:
 
@@ -93,28 +152,11 @@ supabase db push --linked --include-all --yes -p <db-password>
 npm run dev
 ```
 
-## Demo Account Password Reset
+## Scripts
 
-When seeded demo users already exist, normalize all demo account passwords:
+### Import Occupants From XLSX
 
-```bash
-set -a; source .env.local; set +a
-npm run reset:demo-passwords
-```
-
-Default password: `DormyPass123!` (override with `DORMY_DEMO_PASSWORD`).
-
-Demo emails:
-
-- `admin@dormy.local`
-- `sa@dormy.local`
-- `treasurer@dormy.local`
-- `adviser@dormy.local`
-- `assistant.adviser@dormy.local`
-- `events@dormy.local`
-- `occupant@dormy.local`
-
-## Import Occupants From XLSX
+This imports occupants into the configured Supabase target (remote or local). Keep spreadsheets out of git.
 
 ```bash
 set -a; source .env.local; set +a
@@ -128,6 +170,17 @@ Optional env overrides:
 - `DORMY_OCCUPANT_JOINED_AT` (default: today)
 - `DORMY_OCCUPANT_STATUS` (default: `active`)
 
+### Demo Account Password Reset (local/demo only)
+
+When demo users already exist, normalize all demo passwords:
+
+```bash
+set -a; source .env.local; set +a
+npm run reset:demo-passwords
+```
+
+Default password: `DormyPass123!` (override with `DORMY_DEMO_PASSWORD`).
+
 ## Quality Gates
 
 ```bash
@@ -136,7 +189,7 @@ npm run build
 npm run start
 ```
 
-## Vercel Deployment
+## Deployment (Vercel)
 
 ```bash
 vercel login
@@ -147,7 +200,7 @@ vercel deploy
 vercel deploy --prod
 ```
 
-## Notes
+## Troubleshooting
 
-- The app requires Supabase env vars for auth-enabled runtime paths.
-- Local `supabase/config.toml` and generated artifacts should stay uncommitted.
+- "Invalid login credentials": make sure you are pointing at the expected Supabase project in `.env.local` (remote vs local), and that the auth user exists with a known password.
+- "Supabase env is not configured": copy `.env.example` to `.env.local` and set keys.
