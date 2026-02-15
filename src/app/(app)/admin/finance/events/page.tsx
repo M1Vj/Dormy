@@ -43,7 +43,16 @@ export default async function EventsFinancePage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const canFilterDorm = membership?.role === "admin";
+  const role = membership?.role ?? null;
+  if (!role || !new Set(["admin", "treasurer"]).has(role)) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        You do not have access to this page.
+      </div>
+    );
+  }
+
+  const canFilterDorm = role === "admin";
 
 
   // Fetch events with ledger summary
