@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { CalendarCheck2 } from "lucide-react";
 
 import {
+  getEventDormOptions,
   getEventsOverview,
   getEventViewerContext,
 } from "@/app/actions/events";
+import { EventFormDialog } from "@/components/events/event-form-dialog";
 import { EventsBoard } from "@/components/events/events-board";
 
 export default async function EventsPage() {
@@ -19,7 +21,10 @@ export default async function EventsPage() {
     );
   }
 
-  const events = await getEventsOverview(context.dormId);
+  const [events, dormOptions] = await Promise.all([
+    getEventsOverview(context.dormId),
+    getEventDormOptions(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -30,9 +35,18 @@ export default async function EventsPage() {
             Calendar, event pages, photos, and ratings for your dorm activities.
           </p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
-          <CalendarCheck2 className="size-4 text-emerald-600" />
-          <span>{events.length} total events</span>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+            <CalendarCheck2 className="size-4 text-emerald-600" />
+            <span>{events.length} total events</span>
+          </div>
+          {context.canManageEvents ? (
+            <EventFormDialog
+              mode="create"
+              hostDormId={context.dormId}
+              dormOptions={dormOptions}
+            />
+          ) : null}
         </div>
       </div>
 

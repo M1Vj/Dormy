@@ -33,6 +33,12 @@ export type EventPhoto = {
   url: string | null;
 };
 
+export type EventDormOption = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
 export type EventRating = {
   id: string;
   event_id: string;
@@ -47,6 +53,7 @@ export type EventRating = {
 export type EventDetail = EventSummary & {
   photos: EventPhoto[];
   ratings: EventRating[];
+  participating_dorms: EventDormOption[];
 };
 
 export type EventViewerContext = {
