@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/app/AppShell";
+import { redirect } from "next/navigation";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+export default function DashboardLayout() {
+  redirect("/events");
 }

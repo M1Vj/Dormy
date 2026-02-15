@@ -1,8 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function proxy(req: NextRequest) {
-  const res = NextResponse.next();
+  const res = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -14,32 +18,40 @@ export async function proxy(req: NextRequest) {
         return req.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
+        for (const { name, value, options } of cookiesToSet) {
+          req.cookies.set(name, value);
           res.cookies.set(name, value, options);
-        });
+        }
       },
     },
   });
 
-  // Refresh session if needed
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = req.nextUrl.pathname;
+  const isLoginRoute = pathname === "/login";
+  const isDashboardLegacyRoute =
+    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
-  // Guard private routes
-  if (pathname.startsWith("/dashboard") && !user) {
+  if (!user && !isLoginRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("next", pathname);
+    redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Keep signed-in users out of /login
-  if (pathname === "/login" && user) {
+  if (user && isLoginRoute) {
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
+    redirectUrl.pathname = "/events";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (user && isDashboardLegacyRoute) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/events";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
@@ -48,5 +60,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/login", "/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
