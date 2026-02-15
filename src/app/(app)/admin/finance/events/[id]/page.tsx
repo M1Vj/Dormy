@@ -40,6 +40,29 @@ export default async function EventDetailsPage({
     );
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
+  }
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const role = membership?.role ?? null;
+  if (!role || !new Set(["admin", "treasurer"]).has(role)) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        You do not have access to this page.
+      </div>
+    );
+  }
+
 
   // 1. Fetch Event Details
   const { data: event, error: eventError } = await supabase

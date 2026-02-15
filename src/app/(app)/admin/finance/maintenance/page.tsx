@@ -43,7 +43,16 @@ export default async function MaintenancePage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const canFilterDorm = membership?.role === "admin";
+  const role = membership?.role ?? null;
+  if (!role || !new Set(["admin", "adviser", "assistant_adviser"]).has(role)) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        You do not have access to this page.
+      </div>
+    );
+  }
+
+  const canFilterDorm = role === "admin";
 
 
   // Fetch occupants and their maintenance balances

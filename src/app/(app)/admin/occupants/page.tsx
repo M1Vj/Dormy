@@ -22,8 +22,9 @@ const normalizeParam = (value?: string | string[]) => {
 export default async function AdminOccupantsPage({
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -51,7 +52,10 @@ export default async function AdminOccupantsPage({
     memberships?.find((membership) => membership.dorm_id === activeDormId) ??
     memberships?.[0];
 
-  if (!activeMembership || activeMembership.role !== "admin") {
+  if (
+    !activeMembership ||
+    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
+  ) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -59,10 +63,10 @@ export default async function AdminOccupantsPage({
     );
   }
 
-  const search = normalizeParam(searchParams?.search);
-  const status = normalizeParam(searchParams?.status);
-  const room = normalizeParam(searchParams?.room);
-  const level = normalizeParam(searchParams?.level);
+  const search = normalizeParam(params?.search);
+  const status = normalizeParam(params?.status);
+  const room = normalizeParam(params?.room);
+  const level = normalizeParam(params?.level);
   const trimmedSearch = search?.trim() || undefined;
   const trimmedStatus = status?.trim() || undefined;
   const trimmedRoom = room?.trim() || undefined;

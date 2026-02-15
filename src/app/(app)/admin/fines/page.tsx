@@ -42,7 +42,10 @@ export default async function AdminFinesPage() {
     memberships?.find((membership) => membership.dorm_id === activeDormId) ??
     memberships?.[0];
 
-  if (!activeMembership || activeMembership.role !== "admin") {
+  if (
+    !activeMembership ||
+    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
+  ) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
