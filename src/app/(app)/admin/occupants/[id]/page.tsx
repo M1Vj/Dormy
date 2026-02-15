@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { getFineRules } from "@/app/actions/fines";
 import { getOccupant } from "@/app/actions/occupants";
 import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveDormId } from "@/lib/dorms";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EditOccupantForm } from "@/components/admin/occupants/edit-occupant-form";
 
@@ -133,6 +134,7 @@ export default async function AdminOccupantProfilePage(props: {
       ? "-"
       : `Level ${currentRoomRef.level}`;
   const assignments = (occupant.room_assignments as RoomAssignment[]) ?? [];
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6">
@@ -159,6 +161,18 @@ export default async function AdminOccupantProfilePage(props: {
             <Button asChild variant="outline">
               <Link href={`/admin/occupants/${occupant.id}?mode=edit`}>Edit</Link>
             </Button>
+          )}
+          {!isEditMode && (
+            <ExportXlsxDialog
+              report="occupant-statement"
+              title="Export Occupant Statement"
+              description="Download balances and transaction history for this occupant."
+              defaultDormId={activeMembership.dorm_id}
+              dormOptions={dormOptions}
+              includeDormSelector
+              defaultParams={{ occupant_id: occupant.id }}
+              triggerLabel="Export statement"
+            />
           )}
           <Button asChild variant="secondary">
             <Link href="/admin/occupants">Back to occupants</Link>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import {
   Table,
   TableBody,
@@ -13,6 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function EventsFinancePage() {
+  const activeDormId = await getActiveDormId();
+  if (!activeDormId) {
+    return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -21,6 +28,22 @@ export default async function EventsFinancePage() {
       </div>
     );
   }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
+  }
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", activeDormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const canFilterDorm = membership?.role === "admin";
 
 
   // Fetch events with ledger summary
@@ -32,6 +55,7 @@ export default async function EventsFinancePage() {
   const { data: events, error: eventsError } = await supabase
     .from("events")
     .select("id, title, starts_at, is_competition")
+    .eq("dorm_id", activeDormId)
     .order("starts_at", { ascending: false });
 
   if (eventsError) return <div>Error loading events</div>;
@@ -39,6 +63,7 @@ export default async function EventsFinancePage() {
   const { data: entries, error: entriesError } = await supabase
     .from("ledger_entries")
     .select("id, event_id, amount_pesos, ledger, entry_type, voided_at")
+    .eq("dorm_id", activeDormId)
     .eq("ledger", "treasurer_events")
     .is("voided_at", null);
 
@@ -70,11 +95,20 @@ export default async function EventsFinancePage() {
   // Calculate totals
   const totalCollected = eventStats.reduce((acc, curr) => acc + curr.collected, 0);
   const totalPending = eventStats.reduce((acc, curr) => acc + (curr.charged - curr.collected), 0);
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-medium">Events Ledger</h3>
+        <ExportXlsxDialog
+          report="event-contributions"
+          title="Export Event Contributions"
+          description="Download per-event contribution summary and detailed entries."
+          defaultDormId={activeDormId}
+          dormOptions={dormOptions}
+          includeDormSelector={canFilterDorm}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
