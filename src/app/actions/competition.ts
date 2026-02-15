@@ -31,6 +31,39 @@ const removeMemberSchema = z.object({
   member_id: z.string().uuid(),
 });
 
+const categorySchema = z.object({
+  event_id: z.string().uuid(),
+  name: z.string().trim().min(2).max(80),
+  max_points: z.number().min(0).nullable(),
+  sort_order: z.number().int().min(0).default(0),
+});
+
+const updateCategorySchema = z.object({
+  event_id: z.string().uuid(),
+  category_id: z.string().uuid(),
+  name: z.string().trim().min(2).max(80),
+  max_points: z.number().min(0).nullable(),
+  sort_order: z.number().int().min(0).default(0),
+});
+
+const deleteCategorySchema = z.object({
+  event_id: z.string().uuid(),
+  category_id: z.string().uuid(),
+});
+
+const scoreSchema = z.object({
+  event_id: z.string().uuid(),
+  team_id: z.string().uuid(),
+  category_id: z.string().uuid().nullable(),
+  points: z.number().min(0).max(100000),
+});
+
+const manualRankSchema = z.object({
+  event_id: z.string().uuid(),
+  team_id: z.string().uuid(),
+  manual_rank_override: z.number().int().min(1).nullable(),
+});
+
 type EventRow = {
   id: string;
   title: string;
@@ -470,5 +503,218 @@ export async function removeCompetitionMember(formData: FormData) {
   }
 
   revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  return { success: true };
+}
+
+export async function createCompetitionCategory(formData: FormData) {
+  const maxPointsRaw = String(formData.get("max_points") ?? "").trim();
+  const sortOrderRaw = String(formData.get("sort_order") ?? "").trim();
+
+  const parsed = categorySchema.safeParse({
+    event_id: formData.get("event_id"),
+    name: formData.get("name"),
+    max_points: maxPointsRaw ? Number(maxPointsRaw) : null,
+    sort_order: sortOrderRaw ? Number(sortOrderRaw) : 0,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid category data." };
+  }
+
+  const manager = await requireCompetitionManager(parsed.data.event_id);
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const { error } = await manager.supabase.from("event_score_categories").insert({
+    dorm_id: manager.context.dormId,
+    event_id: parsed.data.event_id,
+    name: parsed.data.name,
+    max_points: parsed.data.max_points,
+    sort_order: parsed.data.sort_order,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  return { success: true };
+}
+
+export async function updateCompetitionCategory(formData: FormData) {
+  const maxPointsRaw = String(formData.get("max_points") ?? "").trim();
+  const sortOrderRaw = String(formData.get("sort_order") ?? "").trim();
+
+  const parsed = updateCategorySchema.safeParse({
+    event_id: formData.get("event_id"),
+    category_id: formData.get("category_id"),
+    name: formData.get("name"),
+    max_points: maxPointsRaw ? Number(maxPointsRaw) : null,
+    sort_order: sortOrderRaw ? Number(sortOrderRaw) : 0,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid category update." };
+  }
+
+  const manager = await requireCompetitionManager(parsed.data.event_id);
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const { error } = await manager.supabase
+    .from("event_score_categories")
+    .update({
+      name: parsed.data.name,
+      max_points: parsed.data.max_points,
+      sort_order: parsed.data.sort_order,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.category_id)
+    .eq("event_id", parsed.data.event_id)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  return { success: true };
+}
+
+export async function deleteCompetitionCategory(formData: FormData) {
+  const parsed = deleteCategorySchema.safeParse({
+    event_id: formData.get("event_id"),
+    category_id: formData.get("category_id"),
+  });
+  if (!parsed.success) {
+    return { error: "Invalid category reference." };
+  }
+
+  const manager = await requireCompetitionManager(parsed.data.event_id);
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const { error } = await manager.supabase
+    .from("event_score_categories")
+    .delete()
+    .eq("id", parsed.data.category_id)
+    .eq("event_id", parsed.data.event_id)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  return { success: true };
+}
+
+export async function upsertCompetitionScore(formData: FormData) {
+  const pointsRaw = String(formData.get("points") ?? "").trim();
+  const categoryRaw = String(formData.get("category_id") ?? "").trim();
+  const parsed = scoreSchema.safeParse({
+    event_id: formData.get("event_id"),
+    team_id: formData.get("team_id"),
+    category_id: categoryRaw || null,
+    points: Number(pointsRaw),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid score value." };
+  }
+
+  const manager = await requireCompetitionManager(parsed.data.event_id);
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  let query = manager.supabase
+    .from("event_scores")
+    .select("id")
+    .eq("event_id", parsed.data.event_id)
+    .eq("team_id", parsed.data.team_id)
+    .eq("dorm_id", manager.context.dormId);
+
+  query = parsed.data.category_id
+    ? query.eq("category_id", parsed.data.category_id)
+    : query.is("category_id", null);
+
+  const { data: existing, error: existingError } = await query.maybeSingle();
+  if (existingError) {
+    return { error: existingError.message };
+  }
+
+  if (existing?.id) {
+    const { error: updateError } = await manager.supabase
+      .from("event_scores")
+      .update({
+        points: parsed.data.points,
+        updated_at: new Date().toISOString(),
+        recorded_by: manager.context.userId,
+      })
+      .eq("id", existing.id)
+      .eq("dorm_id", manager.context.dormId);
+
+    if (updateError) {
+      return { error: updateError.message };
+    }
+  } else {
+    const { error: insertError } = await manager.supabase.from("event_scores").insert({
+      dorm_id: manager.context.dormId,
+      event_id: parsed.data.event_id,
+      team_id: parsed.data.team_id,
+      category_id: parsed.data.category_id,
+      points: parsed.data.points,
+      recorded_by: manager.context.userId,
+    });
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  return { success: true };
+}
+
+export async function setCompetitionManualRank(formData: FormData) {
+  const rankRaw = String(formData.get("manual_rank_override") ?? "").trim();
+  const parsed = manualRankSchema.safeParse({
+    event_id: formData.get("event_id"),
+    team_id: formData.get("team_id"),
+    manual_rank_override: rankRaw ? Number(rankRaw) : null,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid manual rank value." };
+  }
+
+  const manager = await requireCompetitionManager(parsed.data.event_id);
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const { error } = await manager.supabase
+    .from("event_teams")
+    .update({
+      manual_rank_override: parsed.data.manual_rank_override,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.team_id)
+    .eq("event_id", parsed.data.event_id)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }

@@ -47,7 +47,8 @@ export function CompetitionWorkspace({
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setErrorMessage("");
 
     startTransition(async () => {
@@ -56,7 +57,7 @@ export function CompetitionWorkspace({
         setErrorMessage(result.error);
         return;
       }
-      event.currentTarget.reset();
+      form.reset();
       router.refresh();
     });
   };
@@ -97,7 +98,8 @@ export function CompetitionWorkspace({
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     formData.set("event_id", eventId);
     formData.set("team_id", teamId);
     setErrorMessage("");
@@ -108,7 +110,7 @@ export function CompetitionWorkspace({
         setErrorMessage(result.error);
         return;
       }
-      event.currentTarget.reset();
+      form.reset();
       router.refresh();
     });
   };
