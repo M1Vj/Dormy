@@ -11,8 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { ChargeDialog } from "@/components/finance/charge-dialog";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 
 export default async function MaintenancePage() {
+  const activeDormId = await getActiveDormId();
+  if (!activeDormId) {
+    return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -21,6 +28,22 @@ export default async function MaintenancePage() {
       </div>
     );
   }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
+  }
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", activeDormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const canFilterDorm = membership?.role === "admin";
 
 
   // Fetch occupants and their maintenance balances
@@ -37,9 +60,10 @@ export default async function MaintenancePage() {
       id,
       dorm_id,
       full_name,
-      room_assignments(room(code)),
+      room_assignments(room:rooms(code)),
       ledger_entries!left(amount_pesos, ledger, voided_at)
     `)
+    .eq("dorm_id", activeDormId)
     .eq("status", "active")
     .order("full_name");
 
@@ -74,12 +98,21 @@ export default async function MaintenancePage() {
   rows.sort((a, b) => b.balance - a.balance);
 
   const totalCollectible = rows.reduce((sum, r) => sum + (r.balance > 0 ? r.balance : 0), 0);
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-medium">Maintenance Ledger</h3>
         <div className="flex gap-2">
+          <ExportXlsxDialog
+            report="maintenance-ledger"
+            title="Export Maintenance Ledger"
+            description="Download maintenance balances and ledger entries."
+            defaultDormId={activeDormId}
+            dormOptions={dormOptions}
+            includeDormSelector={canFilterDorm}
+          />
           <Button variant="outline" disabled>Bulk Charge (Soon)</Button>
         </div>
       </div>
@@ -117,12 +150,12 @@ export default async function MaintenancePage() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <ChargeDialog
-                      dormId={occupants[0]?.dorm_id || ""} // Fallback if list empty
+                      dormId={activeDormId}
                       occupantId={row.id}
                       category="adviser_maintenance"
                     />
                     <PaymentDialog
-                      dormId={occupants[0]?.dorm_id || ""}
+                      dormId={activeDormId}
                       occupantId={row.id}
                       category="adviser_maintenance"
                     />

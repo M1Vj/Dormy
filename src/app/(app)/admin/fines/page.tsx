@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getFineRules, getFines } from "@/app/actions/fines";
 import { getOccupants } from "@/app/actions/occupants";
 import { FinesLedger } from "@/components/admin/fines/fines-ledger";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { RulesTable } from "@/components/admin/fines/rules-table";
 import {
   Tabs,
@@ -10,7 +11,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { getActiveDormId } from "@/lib/dorms";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AdminFinesPage() {
@@ -54,14 +55,25 @@ export default async function AdminFinesPage() {
     getFines(activeMembership.dorm_id),
     getOccupants(activeMembership.dorm_id, { status: "active" }),
   ]);
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Fines</h1>
-        <p className="text-sm text-muted-foreground">
-          Track violations, issue fines, and maintain rules.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Fines</h1>
+          <p className="text-sm text-muted-foreground">
+            Track violations, issue fines, and maintain rules.
+          </p>
+        </div>
+        <ExportXlsxDialog
+          report="fines-ledger"
+          title="Export Fines Ledger"
+          description="Download fines data with current date-range and dorm filters."
+          defaultDormId={activeMembership.dorm_id}
+          dormOptions={dormOptions}
+          includeDormSelector
+        />
       </div>
 
       <Tabs defaultValue="ledger">
