@@ -42,7 +42,10 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Fill `.env.local` with your Supabase values.
+3. Choose a Supabase target:
+
+- Remote Supabase (hosted): fill `.env.local` with your hosted project URL + keys (see below).
+- Local Supabase: keep `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` and use the keys from `supabase status -o env`.
 
 4. Start local Supabase:
 
@@ -63,6 +66,32 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+## Remote Supabase Setup (Hosted)
+
+1. Link the repository to your Supabase project:
+
+```bash
+supabase link --project-ref <project-ref> --password <db-password> --yes
+```
+
+2. Apply migrations to the hosted database:
+
+```bash
+supabase db push --linked --include-all --yes -p <db-password>
+```
+
+3. Set `.env.local`:
+
+- `NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY=<your anon key>`
+- `SUPABASE_SERVICE_ROLE_KEY=<your service role key>`
+
+4. Run the app:
+
+```bash
+npm run dev
+```
 
 ## Demo Account Password Reset
 
