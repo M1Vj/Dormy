@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { logAuditEvent } from "@/lib/audit/log";
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
@@ -79,6 +80,25 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   if (error) {
     console.error("Ledger error:", error);
     return { error: error.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.transaction_recorded",
+      entityType: "ledger_entry",
+      metadata: {
+        ledger: tx.category,
+        entry_type: tx.entry_type,
+        occupant_id: tx.occupant_id,
+        event_id: tx.event_id ?? null,
+        fine_id: tx.fine_id ?? null,
+        amount_pesos: finalAmount,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for finance transaction:", auditError);
   }
 
   revalidatePath("/admin/finance");

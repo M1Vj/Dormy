@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { EvaluationSubmission, EvaluationSummary } from "@/lib/types/evaluation";
 
@@ -466,6 +467,24 @@ export async function createEvaluationTemplate(
     return { error: error?.message ?? "Failed to create evaluation template." };
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_created",
+      entityType: "evaluation_template",
+      entityId: template.id,
+      metadata: {
+        cycle_id: template.cycle_id,
+        name: parsed.data.name,
+        status: parsed.data.status,
+        rater_group_weights: parsed.data.rater_group_weights ?? {},
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template creation:", auditError);
+  }
+
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${template.cycle_id}`);
   return { success: true, id: template.id };
@@ -505,6 +524,19 @@ export async function updateTemplate(
     return { error: error?.message ?? "Failed to update evaluation template." };
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_updated",
+      entityType: "evaluation_template",
+      entityId: templateId,
+      metadata: updates,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template update:", auditError);
+  }
+
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${updated.cycle_id}`);
   return { success: true };
@@ -529,6 +561,21 @@ export async function deleteEvaluationTemplate(
     .eq("id", templateId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_deleted",
+      entityType: "evaluation_template",
+      entityId: templateId,
+      metadata: {
+        cycle_id: cycleId ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template deletion:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   if (cycleId) {

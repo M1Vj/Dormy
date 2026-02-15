@@ -60,6 +60,16 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Audit logs</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href="/admin/audit">Open audit trail</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

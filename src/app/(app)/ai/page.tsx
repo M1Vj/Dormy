@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getAiWorkspaceData, getFinanceInsights } from "@/app/actions/ai";
+import { getAiWorkspaceData } from "@/app/actions/ai";
 import { AiOrganizerWorkspace } from "@/components/ai/ai-organizer-workspace";
 
 export default async function AiPage() {
@@ -11,8 +11,6 @@ export default async function AiPage() {
     }
     return <div className="p-6 text-sm text-muted-foreground">{workspace.error}</div>;
   }
-
-  const insights = await getFinanceInsights();
 
   return (
     <div className="space-y-6">
@@ -26,7 +24,7 @@ export default async function AiPage() {
       <AiOrganizerWorkspace
         events={workspace.events}
         recentConcepts={workspace.recentConcepts}
-        initialInsights={"error" in insights ? null : insights}
+        initialInsights={null}
       />
     </div>
   );
