@@ -158,6 +158,29 @@ export async function createOccupant(dormId: string, formData: FormData) {
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be logged in to add occupants." };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    membershipError ||
+    !membership ||
+    !new Set(["admin", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to add occupants." };
+  }
+
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),

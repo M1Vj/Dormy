@@ -1,8 +1,10 @@
 import Link from "next/link";
 
+import { createOccupant } from "@/app/actions/occupants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CreateOccupantForm } from "./create-occupant-form";
 
 type RoomRef = {
   id: string;
@@ -25,6 +27,7 @@ export type OccupantRow = {
 };
 
 type OccupantTableProps = {
+  dormId: string;
   occupants: OccupantRow[];
   filters?: {
     search?: string;
@@ -69,7 +72,8 @@ const getStatusClass = (status?: string | null) => {
   return "border-muted bg-muted text-muted-foreground";
 };
 
-export function OccupantTable({ occupants, filters }: OccupantTableProps) {
+export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps) {
+  const createOccupantAction = createOccupant.bind(null, dormId);
   const hasFilters =
     Boolean(filters?.search) ||
     Boolean(filters?.status) ||
@@ -83,9 +87,13 @@ export function OccupantTable({ occupants, filters }: OccupantTableProps) {
           <div>
             <CardTitle className="text-base">Occupant roster</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Search by name or student ID and filter by status, room, or level.
+              Add occupants, search by name or student ID, and filter by status, room, or level.
             </p>
           </div>
+          <CreateOccupantForm action={createOccupantAction} />
+        </div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div />
           <form className="flex flex-wrap items-center gap-2" method="GET">
             <Input
               className="w-48"

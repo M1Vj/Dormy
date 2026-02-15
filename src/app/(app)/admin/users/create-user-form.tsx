@@ -15,8 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-const roleOptions = [
-  { value: "admin", label: "Admin" },
+const baseRoleOptions = [
   { value: "student_assistant", label: "Student Assistant" },
   { value: "treasurer", label: "Treasurer" },
   { value: "adviser", label: "Adviser" },
@@ -25,6 +24,8 @@ const roleOptions = [
   { value: "occupant", label: "Occupant" },
 ];
 
+type ProvisionerRole = "admin" | "adviser";
+
 type DormOption = {
   id: string;
   name: string;
@@ -32,7 +33,18 @@ type DormOption = {
 
 const initialState = { error: "", success: false };
 
-export function CreateUserForm({ dorms }: { dorms: DormOption[] }) {
+export function CreateUserForm({
+  dorms,
+  provisionerRole,
+}: {
+  dorms: DormOption[];
+  provisionerRole: ProvisionerRole;
+}) {
+  const roleOptions =
+    provisionerRole === "admin"
+      ? baseRoleOptions
+      : baseRoleOptions.filter((role) => role.value !== "adviser");
+
   const [state, formAction, isPending] = useActionState(
     async (previousState: typeof initialState, formData: FormData) => {
       const result = await createUser(formData);
@@ -91,7 +103,7 @@ export function CreateUserForm({ dorms }: { dorms: DormOption[] }) {
               id="role"
               name="role"
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              defaultValue={roleOptions[0].value}
+              defaultValue={roleOptions[0]?.value}
             >
               {roleOptions.map((role) => (
                 <option key={role.value} value={role.value}>

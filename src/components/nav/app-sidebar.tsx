@@ -58,7 +58,7 @@ export function AppSidebar() {
     }
 
     if (item.url === "/admin") {
-      return role === "admin"
+      return role === "admin" || role === "adviser"
     }
 
     if (item.url === "/ai") {

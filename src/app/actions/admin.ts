@@ -7,8 +7,7 @@ import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const roles = [
-  "admin",
+const assignableRoles = [
   "student_assistant",
   "treasurer",
   "adviser",
@@ -17,12 +16,14 @@ const roles = [
   "event_officer",
 ] as const;
 
+const provisioningRoles = ["admin", "adviser"] as const;
+
 const createUserSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(roles),
+  role: z.enum(assignableRoles),
   dormId: z.string().uuid(),
 });
 
@@ -71,8 +72,18 @@ export async function createUser(formData: FormData) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (membershipError || membership?.role !== "admin") {
+  if (
+    membershipError ||
+    !membership?.role ||
+    !provisioningRoles.includes(
+      membership.role as (typeof provisioningRoles)[number]
+    )
+  ) {
     return { error: "You do not have permission to create users." };
+  }
+
+  if (membership.role === "adviser" && parsed.data.role === "adviser") {
+    return { error: "Only admins can create adviser accounts." };
   }
 
   const adminClient = createAdminClient();

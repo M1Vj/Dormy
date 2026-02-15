@@ -33,7 +33,10 @@ export default async function AdminUsersPage() {
     memberships?.find((membership) => membership.dorm_id === activeDormId) ??
     memberships?.[0];
 
-  if (!activeMembership || activeMembership.role !== "admin") {
+  if (
+    !activeMembership ||
+    !new Set(["admin", "adviser"]).has(activeMembership.role)
+  ) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -61,7 +64,10 @@ export default async function AdminUsersPage() {
             Create accounts and assign roles for this dorm.
           </p>
         </div>
-        <CreateUserForm dorms={dorms ?? []} />
+        <CreateUserForm
+          dorms={dorms ?? []}
+          provisionerRole={activeMembership.role as "admin" | "adviser"}
+        />
       </div>
       <Card>
         <CardHeader>
