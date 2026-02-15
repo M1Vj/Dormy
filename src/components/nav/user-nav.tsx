@@ -13,9 +13,11 @@ import { Button } from "@/components/ui/button"
 import { LogOut, Settings, User } from "lucide-react"
 import { logout } from "@/app/actions/auth"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useMounted } from "@/hooks/use-mounted"
 
 export function UserNav() {
   const { user } = useAuth()
+  const mounted = useMounted()
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) || "User"
   const email = user?.email ?? "user@example.com"
@@ -25,6 +27,17 @@ export function UserNav() {
     .join("")
     .slice(0, 2)
     .toUpperCase()
+
+  if (!mounted) {
+    return (
+      <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Avatar className="h-8 w-8">
+          <AvatarImage src="" alt="User" />
+          <AvatarFallback>U</AvatarFallback>
+        </Avatar>
+      </Button>
+    )
+  }
 
   return (
     <DropdownMenu>

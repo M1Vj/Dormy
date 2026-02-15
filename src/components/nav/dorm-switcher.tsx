@@ -10,9 +10,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDorm } from "@/components/providers/dorm-provider";
+import { useMounted } from "@/hooks/use-mounted";
 
 export function DormSwitcher() {
   const { activeDorm, dorms, isSwitching, switchDorm } = useDorm();
+  const mounted = useMounted();
+
+  if (!mounted) {
+    return (
+      <Button variant="ghost" className="justify-between px-2">
+        <span className="truncate">{activeDorm?.name ?? "Select dorm"}</span>
+        <ChevronDown className="ml-2 h-4 w-4" />
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>
