@@ -29,7 +29,7 @@ export default async function Page() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!membership || membership.role !== "admin") {
+  if (!membership || !new Set(["admin", "adviser"]).has(membership.role)) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -50,26 +50,30 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Dorms</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/admin/dorms">Manage dorms</Link>
-          </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Audit logs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/admin/audit">Open audit trail</Link>
-          </Button>
-        </CardContent>
-      </Card>
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dorms</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/admin/dorms">Manage dorms</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Audit logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/admin/audit">Open audit trail</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

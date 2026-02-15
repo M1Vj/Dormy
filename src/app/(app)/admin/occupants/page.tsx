@@ -88,6 +88,7 @@ export default async function AdminOccupantsPage({
         </p>
       </div>
       <OccupantTable
+        dormId={activeMembership.dorm_id}
         occupants={occupants}
         filters={{
           search: trimmedSearch,
