@@ -6,6 +6,7 @@ import {
   Calendar,
   FileText,
   Home,
+  Sparkles,
   Settings,
   Shield,
   Users,
@@ -33,6 +34,7 @@ const items = [
   { title: "Payments", url: "/payments", icon: Wallet },
   { title: "Evaluation", url: "/evaluation", icon: Shield },
   { title: "Events", url: "/events", icon: Calendar },
+  { title: "AI", url: "/ai", icon: Sparkles },
   { title: "Admin", url: "/admin", icon: Settings },
 ]
 
@@ -41,6 +43,14 @@ export function AppSidebar() {
   const { role } = useAuth()
 
   const occupantRoutes = new Set(["/events", "/payments", "/fines", "/evaluation"])
+  const aiRoles = new Set([
+    "admin",
+    "event_officer",
+    "student_assistant",
+    "treasurer",
+    "adviser",
+    "assistant_adviser",
+  ])
   const visibleItems = items.filter((item) => {
     if (role === "occupant") {
       return occupantRoutes.has(item.url)
@@ -48,6 +58,10 @@ export function AppSidebar() {
 
     if (item.url === "/admin") {
       return role === "admin"
+    }
+
+    if (item.url === "/ai") {
+      return role ? aiRoles.has(role) : false
     }
 
     return true
