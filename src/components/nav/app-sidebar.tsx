@@ -40,7 +40,7 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { role } = useAuth()
 
-  const occupantRoutes = new Set(["/payments", "/fines", "/evaluation"])
+  const occupantRoutes = new Set(["/events", "/payments", "/fines", "/evaluation"])
   const visibleItems = items.filter((item) => {
     if (role === "occupant") {
       return occupantRoutes.has(item.url)
