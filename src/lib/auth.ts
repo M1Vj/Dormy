@@ -8,7 +8,8 @@ export type AppRole =
   | "assistant_adviser"
   | "student_assistant"
   | "treasurer"
-  | "occupant";
+  | "occupant"
+  | "event_officer";
 
 export async function requireUser() {
   const supabase = await createSupabaseServerClient();
