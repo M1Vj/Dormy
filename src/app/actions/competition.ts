@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   CompetitionCategory,
@@ -538,6 +539,23 @@ export async function createCompetitionCategory(formData: FormData) {
     return { error: error.message };
   }
 
+  try {
+    await logAuditEvent({
+      dormId: manager.context.dormId,
+      actorUserId: manager.context.userId,
+      action: "competition.category_created",
+      entityType: "event_score_category",
+      metadata: {
+        event_id: parsed.data.event_id,
+        name: parsed.data.name,
+        max_points: parsed.data.max_points,
+        sort_order: parsed.data.sort_order,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for category creation:", auditError);
+  }
+
   revalidatePath(`/events/${parsed.data.event_id}/competition`);
   revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
@@ -580,6 +598,24 @@ export async function updateCompetitionCategory(formData: FormData) {
     return { error: error.message };
   }
 
+  try {
+    await logAuditEvent({
+      dormId: manager.context.dormId,
+      actorUserId: manager.context.userId,
+      action: "competition.category_updated",
+      entityType: "event_score_category",
+      entityId: parsed.data.category_id,
+      metadata: {
+        event_id: parsed.data.event_id,
+        name: parsed.data.name,
+        max_points: parsed.data.max_points,
+        sort_order: parsed.data.sort_order,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for category update:", auditError);
+  }
+
   revalidatePath(`/events/${parsed.data.event_id}/competition`);
   revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
@@ -608,6 +644,21 @@ export async function deleteCompetitionCategory(formData: FormData) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId: manager.context.dormId,
+      actorUserId: manager.context.userId,
+      action: "competition.category_deleted",
+      entityType: "event_score_category",
+      entityId: parsed.data.category_id,
+      metadata: {
+        event_id: parsed.data.event_id,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for category delete:", auditError);
   }
 
   revalidatePath(`/events/${parsed.data.event_id}/competition`);
@@ -679,6 +730,24 @@ export async function upsertCompetitionScore(formData: FormData) {
     }
   }
 
+  try {
+    await logAuditEvent({
+      dormId: manager.context.dormId,
+      actorUserId: manager.context.userId,
+      action: existing?.id ? "competition.score_updated" : "competition.score_created",
+      entityType: "event_score",
+      entityId: existing?.id ?? null,
+      metadata: {
+        event_id: parsed.data.event_id,
+        team_id: parsed.data.team_id,
+        category_id: parsed.data.category_id,
+        points: parsed.data.points,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for score upsert:", auditError);
+  }
+
   revalidatePath(`/events/${parsed.data.event_id}/competition`);
   revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
@@ -712,6 +781,22 @@ export async function setCompetitionManualRank(formData: FormData) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId: manager.context.dormId,
+      actorUserId: manager.context.userId,
+      action: "competition.manual_rank_set",
+      entityType: "event_team",
+      entityId: parsed.data.team_id,
+      metadata: {
+        event_id: parsed.data.event_id,
+        manual_rank_override: parsed.data.manual_rank_override,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for manual rank update:", auditError);
   }
 
   revalidatePath(`/events/${parsed.data.event_id}/competition`);

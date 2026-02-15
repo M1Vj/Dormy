@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const roles = [
@@ -109,6 +110,23 @@ export async function createUser(formData: FormData) {
   if (membershipInsertError) {
     await adminClient.auth.admin.deleteUser(created.user.id);
     return { error: membershipInsertError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId: parsed.data.dormId,
+      actorUserId: user.id,
+      action: "admin.user_provisioned",
+      entityType: "dorm_membership",
+      entityId: null,
+      metadata: {
+        target_user_id: created.user.id,
+        target_email: parsed.data.email,
+        target_role: parsed.data.role,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to write audit event for user provisioning:", error);
   }
 
   revalidatePath("/admin/users");

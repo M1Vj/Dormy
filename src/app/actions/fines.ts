@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // --- Rules ---
@@ -37,6 +38,9 @@ export async function createFineRule(dormId: string, formData: FormData) {
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const rawData = {
     title: formData.get("title"),
@@ -56,6 +60,23 @@ export async function createFineRule(dormId: string, formData: FormData) {
 
   if (error) return { error: error.message };
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user?.id ?? null,
+      action: "fines.rule_created",
+      entityType: "fine_rule",
+      metadata: {
+        title: parsed.data.title,
+        severity: parsed.data.severity,
+        default_pesos: parsed.data.default_pesos,
+        default_points: parsed.data.default_points,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine rule creation:", auditError);
+  }
+
   revalidatePath("/admin/fines");
   return { success: true };
 }
@@ -69,6 +90,9 @@ export async function updateFineRule(
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Handle checkbox carefully (if present = true, else false? Or just updates?)
   // For strictness, let's assume active is passed as 'true'/'false' string or via checkbox logic
@@ -96,6 +120,19 @@ export async function updateFineRule(
     .eq("id", ruleId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user?.id ?? null,
+      action: "fines.rule_updated",
+      entityType: "fine_rule",
+      entityId: ruleId,
+      metadata: parsed.data,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine rule update:", auditError);
+  }
 
   revalidatePath("/admin/fines");
   return { success: true };
@@ -212,6 +249,24 @@ export async function issueFine(dormId: string, formData: FormData) {
     // Let's keep it simple: just log.
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "fines.issued",
+      entityType: "fine",
+      entityId: data.id,
+      metadata: {
+        occupant_id: parsed.data.occupant_id,
+        rule_id: parsed.data.rule_id ?? null,
+        pesos: parsed.data.pesos,
+        points: parsed.data.points,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine issuance:", auditError);
+  }
+
   revalidatePath("/admin/fines");
   revalidatePath(`/admin/occupants/${parsed.data.occupant_id}`);
   return { success: true };
@@ -252,6 +307,21 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
 
   if (ledgerError) {
     console.error("Failed to void ledger entry:", ledgerError);
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "fines.voided",
+      entityType: "fine",
+      entityId: fineId,
+      metadata: {
+        reason,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine void:", auditError);
   }
 
   return { success: true };
