@@ -1,16 +1,37 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   DormRole,
   EventDetail,
+  EventDormOption,
   EventRating,
   EventSummary,
   EventViewerContext,
 } from "@/lib/types/events";
 
 const EVENT_MANAGER_ROLES = new Set<DormRole>(["admin", "event_officer"]);
+const VALID_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+
+const eventInputSchema = z.object({
+  title: z.string().trim().min(2, "Title is required.").max(120),
+  description: z.string().trim().max(5000).nullable(),
+  location: z.string().trim().max(250).nullable(),
+  starts_at: z.string().nullable(),
+  ends_at: z.string().nullable(),
+  is_competition: z.boolean(),
+  participating_dorm_ids: z.array(z.string().uuid()).default([]),
+});
 
 type MembershipRow = {
   dorm_id: string;
@@ -55,18 +76,30 @@ type EventPhotoRow = {
   created_at: string;
 };
 
-function normalizeOccupant(occupant: EventRatingRow["occupant"]) {
-  if (!occupant) {
+type ParticipatingDormRow = {
+  dorm:
+    | {
+        id: string;
+        name: string;
+        slug: string;
+      }
+    | {
+        id: string;
+        name: string;
+        slug: string;
+      }[]
+    | null;
+};
+
+function normalizeFromJoin<T>(value: T | T[] | null): T | null {
+  if (!value) {
     return null;
   }
-  if (Array.isArray(occupant)) {
-    return occupant[0] ?? null;
-  }
-  return occupant;
+  return Array.isArray(value) ? value[0] ?? null : value;
 }
 
 function mapRatingRow(row: EventRatingRow): EventRating {
-  const occupant = normalizeOccupant(row.occupant);
+  const occupant = normalizeFromJoin(row.occupant);
   return {
     id: row.id,
     event_id: row.event_id,
@@ -116,6 +149,111 @@ function withSummaries(
   });
 }
 
+function parseDateInput(value: FormDataEntryValue | null) {
+  if (!value) {
+    return null;
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return null;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return "INVALID_DATE";
+  }
+  return parsed.toISOString();
+}
+
+function parseEventInput(formData: FormData) {
+  const startsAt = parseDateInput(formData.get("starts_at"));
+  const endsAt = parseDateInput(formData.get("ends_at"));
+
+  if (startsAt === "INVALID_DATE" || endsAt === "INVALID_DATE") {
+    return { error: "Provide valid date and time values." } as const;
+  }
+
+  if (startsAt && endsAt && new Date(endsAt) < new Date(startsAt)) {
+    return { error: "Event end time cannot be earlier than start time." } as const;
+  }
+
+  const parsed = eventInputSchema.safeParse({
+    title: formData.get("title"),
+    description: String(formData.get("description") ?? "").trim() || null,
+    location: String(formData.get("location") ?? "").trim() || null,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    is_competition: formData.get("is_competition") === "on",
+    participating_dorm_ids: formData
+      .getAll("participating_dorm_ids")
+      .map((value) => String(value)),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid event data." } as const;
+  }
+
+  return { data: parsed.data } as const;
+}
+
+async function requireManagerContext() {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return { error: context.error } as const;
+  }
+  if (!context.canManageEvents) {
+    return { error: "You do not have permission to manage events." } as const;
+  }
+  return { context } as const;
+}
+
+async function syncParticipatingDorms(
+  eventId: string,
+  hostDormId: string,
+  dormIds: string[]
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." } as const;
+  }
+
+  const normalizedIds = [...new Set(dormIds.filter((id) => id !== hostDormId))];
+
+  const { error: deleteError } = await supabase
+    .from("event_participating_dorms")
+    .delete()
+    .eq("event_id", eventId);
+
+  if (deleteError && deleteError.code !== "42P01") {
+    return { error: deleteError.message } as const;
+  }
+
+  if (!normalizedIds.length) {
+    return { success: true } as const;
+  }
+
+  const { error: insertError } = await supabase
+    .from("event_participating_dorms")
+    .insert(
+      normalizedIds.map((dormId) => ({
+        event_id: eventId,
+        dorm_id: dormId,
+      }))
+    );
+
+  if (insertError) {
+    if (insertError.code === "42P01") {
+      return {
+        error:
+          "Database migration for event participants is missing. Run migrations and retry.",
+      } as const;
+    }
+    return { error: insertError.message } as const;
+  }
+
+  return { success: true } as const;
+}
+
 export async function getEventViewerContext(
   preferredDormId?: string
 ): Promise<EventViewerContext | { error: string }> {
@@ -154,6 +292,44 @@ export async function getEventViewerContext(
   };
 }
 
+export async function getEventDormOptions(): Promise<EventDormOption[]> {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return [];
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("dorm_memberships")
+    .select("dorm:dorms(id, name, slug)")
+    .eq("user_id", context.userId);
+
+  if (error) {
+    return [];
+  }
+
+  const options: EventDormOption[] = [];
+  for (const row of data ?? []) {
+    const dorm = normalizeFromJoin(
+      (row as { dorm: ParticipatingDormRow["dorm"] }).dorm
+    );
+    if (!dorm) {
+      continue;
+    }
+    options.push({
+      id: dorm.id,
+      name: dorm.name,
+      slug: dorm.slug,
+    });
+  }
+
+  return [...new Map(options.map((option) => [option.id, option])).values()];
+}
+
 export async function getEventsOverview(dormId: string): Promise<EventSummary[]> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -184,7 +360,9 @@ export async function getEventsOverview(dormId: string): Promise<EventSummary[]>
     await Promise.all([
       supabase
         .from("event_ratings")
-        .select("id, event_id, rating, comment, created_at, occupant_id, occupant:occupants(full_name, student_id)")
+        .select(
+          "id, event_id, rating, comment, created_at, occupant_id, occupant:occupants(full_name, student_id)"
+        )
         .eq("dorm_id", dormId)
         .in("event_id", eventIds),
       supabase
@@ -234,21 +412,30 @@ export async function getEventDetail(
     return null;
   }
 
-  const [{ data: ratingRows, error: ratingsError }, { data: photoRows, error: photosError }] =
-    await Promise.all([
-      supabase
-        .from("event_ratings")
-        .select("id, event_id, rating, comment, created_at, occupant_id, occupant:occupants(full_name, student_id)")
-        .eq("dorm_id", dormId)
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("event_photos")
-        .select("id, event_id, storage_path, created_at")
-        .eq("dorm_id", dormId)
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: ratingRows, error: ratingsError },
+    { data: photoRows, error: photosError },
+    { data: participatingDormRows, error: participatingDormsError },
+  ] = await Promise.all([
+    supabase
+      .from("event_ratings")
+      .select(
+        "id, event_id, rating, comment, created_at, occupant_id, occupant:occupants(full_name, student_id)"
+      )
+      .eq("dorm_id", dormId)
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("event_photos")
+      .select("id, event_id, storage_path, created_at")
+      .eq("dorm_id", dormId)
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("event_participating_dorms")
+      .select("dorm:dorms(id, name, slug)")
+      .eq("event_id", eventId),
+  ]);
 
   if (ratingsError) {
     throw new Error(ratingsError.message);
@@ -258,16 +445,341 @@ export async function getEventDetail(
     throw new Error(photosError.message);
   }
 
+  if (participatingDormsError && participatingDormsError.code !== "42P01") {
+    throw new Error(participatingDormsError.message);
+  }
+
   const ratings = ((ratingRows ?? []) as EventRatingRow[]).map(mapRatingRow);
   const photos = (photoRows ?? []) as EventPhotoRow[];
   const [summary] = withSummaries([eventRow as EventRow], ratings, photos);
+
+  const participatingDorms: EventDormOption[] = (participatingDormRows ?? [])
+    .map(
+      (row) =>
+        normalizeFromJoin((row as { dorm: ParticipatingDormRow["dorm"] }).dorm)
+    )
+    .filter((row): row is EventDormOption => Boolean(row))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+    }));
 
   return {
     ...summary,
     ratings,
     photos: photos.map((photo) => ({
       ...photo,
-      url: null,
+      url: supabase.storage.from("event-photos").getPublicUrl(photo.storage_path)
+        .data.publicUrl,
     })),
+    participating_dorms: participatingDorms,
   };
+}
+
+export async function createEvent(formData: FormData) {
+  const manager = await requireManagerContext();
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const parsed = parseEventInput(formData);
+  if ("error" in parsed) {
+    return { error: parsed.error };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: event, error } = await supabase
+    .from("events")
+    .insert({
+      dorm_id: manager.context.dormId,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      location: parsed.data.location,
+      starts_at: parsed.data.starts_at,
+      ends_at: parsed.data.ends_at,
+      is_competition: parsed.data.is_competition,
+      created_by: manager.context.userId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !event) {
+    return { error: error?.message ?? "Failed to create event." };
+  }
+
+  const participatingDormResult = await syncParticipatingDorms(
+    event.id,
+    manager.context.dormId,
+    parsed.data.participating_dorm_ids
+  );
+  if ("error" in participatingDormResult) {
+    return { error: participatingDormResult.error };
+  }
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${event.id}`);
+  revalidatePath("/admin/finance/events");
+
+  return { success: true, eventId: event.id };
+}
+
+export async function updateEvent(formData: FormData) {
+  const manager = await requireManagerContext();
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  if (!eventId) {
+    return { error: "Event ID is required." };
+  }
+
+  const parsed = parseEventInput(formData);
+  if ("error" in parsed) {
+    return { error: parsed.error };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: existingEvent } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("dorm_id", manager.context.dormId)
+    .maybeSingle();
+
+  if (!existingEvent) {
+    return { error: "Event not found." };
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .update({
+      title: parsed.data.title,
+      description: parsed.data.description,
+      location: parsed.data.location,
+      starts_at: parsed.data.starts_at,
+      ends_at: parsed.data.ends_at,
+      is_competition: parsed.data.is_competition,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  const participatingDormResult = await syncParticipatingDorms(
+    eventId,
+    manager.context.dormId,
+    parsed.data.participating_dorm_ids
+  );
+  if ("error" in participatingDormResult) {
+    return { error: participatingDormResult.error };
+  }
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/admin/finance/events");
+
+  return { success: true };
+}
+
+export async function deleteEvent(formData: FormData) {
+  const manager = await requireManagerContext();
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  if (!eventId) {
+    return { error: "Event ID is required." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("dorm_id", manager.context.dormId)
+    .maybeSingle();
+
+  if (!event) {
+    return { error: "Event not found." };
+  }
+
+  const { data: photos } = await supabase
+    .from("event_photos")
+    .select("storage_path")
+    .eq("event_id", eventId)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (photos?.length) {
+    await supabase.storage
+      .from("event-photos")
+      .remove(photos.map((photo) => photo.storage_path));
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", eventId)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/admin/finance/events");
+
+  return { success: true };
+}
+
+export async function uploadEventPhoto(formData: FormData) {
+  const manager = await requireManagerContext();
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  if (!eventId) {
+    return { error: "Event ID is required." };
+  }
+
+  const photoEntry = formData.get("photo");
+  if (!(photoEntry instanceof File)) {
+    return { error: "Choose an image to upload." };
+  }
+
+  if (!photoEntry.size) {
+    return { error: "Uploaded file is empty." };
+  }
+
+  if (photoEntry.size > MAX_UPLOAD_SIZE_BYTES) {
+    return { error: "Image is too large. Maximum size is 10 MB." };
+  }
+
+  if (!VALID_IMAGE_MIME_TYPES.has(photoEntry.type)) {
+    return { error: "Unsupported image type." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("dorm_id", manager.context.dormId)
+    .maybeSingle();
+
+  if (!event) {
+    return { error: "Event not found." };
+  }
+
+  const extension =
+    photoEntry.name.split(".").pop()?.toLowerCase() ||
+    photoEntry.type.split("/")[1] ||
+    "jpg";
+  const sanitizedExtension = extension.replace(/[^a-z0-9]/g, "");
+  const storagePath = `${manager.context.dormId}/${eventId}/${crypto.randomUUID()}.${sanitizedExtension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("event-photos")
+    .upload(storagePath, photoEntry, {
+      upsert: false,
+      contentType: photoEntry.type,
+    });
+
+  if (uploadError) {
+    return { error: uploadError.message };
+  }
+
+  const { error: insertError } = await supabase.from("event_photos").insert({
+    dorm_id: manager.context.dormId,
+    event_id: eventId,
+    storage_path: storagePath,
+    uploaded_by: manager.context.userId,
+  });
+
+  if (insertError) {
+    await supabase.storage.from("event-photos").remove([storagePath]);
+    return { error: insertError.message };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+
+  return { success: true };
+}
+
+export async function deleteEventPhoto(formData: FormData) {
+  const manager = await requireManagerContext();
+  if ("error" in manager) {
+    return { error: manager.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  const photoId = String(formData.get("photo_id") ?? "").trim();
+  if (!eventId || !photoId) {
+    return { error: "Photo reference is incomplete." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: photo } = await supabase
+    .from("event_photos")
+    .select("id, storage_path")
+    .eq("id", photoId)
+    .eq("event_id", eventId)
+    .eq("dorm_id", manager.context.dormId)
+    .maybeSingle();
+
+  if (!photo) {
+    return { error: "Photo not found." };
+  }
+
+  const { error: removeStorageError } = await supabase.storage
+    .from("event-photos")
+    .remove([photo.storage_path]);
+
+  if (removeStorageError) {
+    return { error: removeStorageError.message };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("event_photos")
+    .delete()
+    .eq("id", photoId)
+    .eq("event_id", eventId)
+    .eq("dorm_id", manager.context.dormId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+
+  return { success: true };
 }

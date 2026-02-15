@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, ImageIcon, MapPin, Star } from "lucide-react";
+import { CalendarDays, ImageIcon, MapPin, Star, Swords } from "lucide-react";
 import { format, isSameDay, parseISO } from "date-fns";
 
-import { getEventDetail, getEventViewerContext } from "@/app/actions/events";
+import {
+  getEventDetail,
+  getEventDormOptions,
+  getEventViewerContext,
+} from "@/app/actions/events";
+import { DeleteEventButton } from "@/components/events/delete-event-button";
+import { EventFormDialog } from "@/components/events/event-form-dialog";
+import { EventPhotoManager } from "@/components/events/event-photo-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +57,10 @@ export default async function EventDetailPage({
     return <div className="p-6 text-sm text-muted-foreground">{context.error}</div>;
   }
 
-  const event = await getEventDetail(context.dormId, id);
+  const [event, dormOptions] = await Promise.all([
+    getEventDetail(context.dormId, id),
+    context.canManageEvents ? getEventDormOptions() : Promise.resolve([]),
+  ]);
   if (!event) {
     notFound();
   }
@@ -62,14 +72,44 @@ export default async function EventDetailPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{event.title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{event.title}</h1>
+            {event.is_competition ? (
+              <Badge variant="secondary" className="gap-1">
+                <Swords className="size-3.5" />
+                Competition
+              </Badge>
+            ) : null}
+          </div>
           <p className="max-w-3xl text-sm text-muted-foreground">
             {event.description?.trim() || "No event description yet."}
           </p>
+          {event.participating_dorms.length ? (
+            <div className="flex flex-wrap gap-2">
+              {event.participating_dorms.map((dorm) => (
+                <Badge key={dorm.id} variant="outline">
+                  {dorm.name}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
-        <Button asChild variant="outline">
-          <Link href="/events">Back to events</Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {context.canManageEvents ? (
+            <>
+              <EventFormDialog
+                mode="edit"
+                event={event}
+                hostDormId={context.dormId}
+                dormOptions={dormOptions}
+              />
+              <DeleteEventButton eventId={event.id} />
+            </>
+          ) : null}
+          <Button asChild variant="outline">
+            <Link href="/events">Back to events</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -115,22 +155,15 @@ export default async function EventDetailPage({
               Photo Gallery
             </CardTitle>
             <CardDescription>
-              Photos are available after event officers upload media for this event.
+              Event officers and admins can upload photos for this event.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {event.photos.length ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {event.photos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="aspect-square rounded-lg border border-dashed bg-muted/40"
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No photos uploaded yet.</p>
-            )}
+            <EventPhotoManager
+              eventId={event.id}
+              canManage={context.canManageEvents}
+              photos={event.photos}
+            />
           </CardContent>
         </Card>
 
