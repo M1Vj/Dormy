@@ -11,6 +11,7 @@ import {
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { EventFormDialog } from "@/components/events/event-form-dialog";
 import { EventPhotoManager } from "@/components/events/event-photo-manager";
+import { EventRatingPanel } from "@/components/events/event-rating-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +59,7 @@ export default async function EventDetailPage({
   }
 
   const [event, dormOptions] = await Promise.all([
-    getEventDetail(context.dormId, id),
+    getEventDetail(context.dormId, id, context.userId),
     context.canManageEvents ? getEventDormOptions() : Promise.resolve([]),
   ]);
   if (!event) {
@@ -171,32 +172,17 @@ export default async function EventDetailPage({
           <CardHeader>
             <CardTitle className="text-base">Recent Ratings & Comments</CardTitle>
             <CardDescription>
-              Rating and comment submission tools are available in the next Events Core step.
+              Occupants can submit ratings and comments. Event officers/admin can moderate entries.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {event.ratings.length ? (
-              event.ratings.slice(0, 6).map((rating) => (
-                <div key={rating.id} className="rounded-lg border p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">
-                      {rating.occupant_name || "Dorm occupant"}
-                    </p>
-                    <Badge variant="secondary" className="gap-1">
-                      <Star className="size-3.5 text-amber-500" />
-                      {rating.rating}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {rating.comment?.trim() || "No comment left."}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No ratings submitted for this event yet.
-              </p>
-            )}
+            <EventRatingPanel
+              eventId={event.id}
+              ratings={event.ratings}
+              viewerRating={event.viewer_rating}
+              canModerate={context.canManageEvents}
+              canRate={event.viewer_can_rate}
+            />
           </CardContent>
         </Card>
       </div>

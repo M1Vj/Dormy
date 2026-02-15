@@ -207,6 +207,26 @@ async function requireManagerContext() {
   return { context } as const;
 }
 
+async function getViewerOccupantId(dormId: string, userId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." } as const;
+  }
+
+  const { data: occupant, error } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message } as const;
+  }
+
+  return { occupantId: occupant?.id ?? null } as const;
+}
+
 async function syncParticipatingDorms(
   eventId: string,
   hostDormId: string,
@@ -388,7 +408,8 @@ export async function getEventsOverview(dormId: string): Promise<EventSummary[]>
 
 export async function getEventDetail(
   dormId: string,
-  eventId: string
+  eventId: string,
+  viewerUserId?: string
 ): Promise<EventDetail | null> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -452,6 +473,23 @@ export async function getEventDetail(
   const ratings = ((ratingRows ?? []) as EventRatingRow[]).map(mapRatingRow);
   const photos = (photoRows ?? []) as EventPhotoRow[];
   const [summary] = withSummaries([eventRow as EventRow], ratings, photos);
+  let viewerRating: EventRating | null = null;
+  let viewerCanRate = false;
+
+  if (viewerUserId) {
+    const { data: viewerOccupant } = await supabase
+      .from("occupants")
+      .select("id")
+      .eq("dorm_id", dormId)
+      .eq("user_id", viewerUserId)
+      .maybeSingle();
+
+    if (viewerOccupant?.id) {
+      viewerCanRate = true;
+      viewerRating =
+        ratings.find((rating) => rating.occupant_id === viewerOccupant.id) ?? null;
+    }
+  }
 
   const participatingDorms: EventDormOption[] = (participatingDormRows ?? [])
     .map(
@@ -474,6 +512,8 @@ export async function getEventDetail(
         .data.publicUrl,
     })),
     participating_dorms: participatingDorms,
+    viewer_rating: viewerRating,
+    viewer_can_rate: viewerCanRate,
   };
 }
 
@@ -646,6 +686,135 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/events");
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/admin/finance/events");
+
+  return { success: true };
+}
+
+export async function upsertEventRating(formData: FormData) {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return { error: context.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  const ratingValue = Number(formData.get("rating"));
+  const comment = String(formData.get("comment") ?? "").trim();
+
+  if (!eventId) {
+    return { error: "Event ID is required." };
+  }
+
+  if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+    return { error: "Select a rating between 1 and 5." };
+  }
+
+  if (comment.length > 1500) {
+    return { error: "Comment is too long." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("dorm_id", context.dormId)
+    .maybeSingle();
+
+  if (!event) {
+    return { error: "Event not found." };
+  }
+
+  const occupantResult = await getViewerOccupantId(context.dormId, context.userId);
+  if ("error" in occupantResult) {
+    return { error: occupantResult.error };
+  }
+  if (!occupantResult.occupantId) {
+    return {
+      error:
+        "Your account is not linked to an occupant profile. Contact staff for account mapping.",
+    };
+  }
+
+  const { error } = await supabase.from("event_ratings").upsert(
+    {
+      dorm_id: context.dormId,
+      event_id: eventId,
+      occupant_id: occupantResult.occupantId,
+      rating: ratingValue,
+      comment: comment || null,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "event_id,occupant_id",
+    }
+  );
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+
+  return { success: true };
+}
+
+export async function deleteEventRating(formData: FormData) {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return { error: context.error };
+  }
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  const ratingId = String(formData.get("rating_id") ?? "").trim();
+  if (!eventId || !ratingId) {
+    return { error: "Rating reference is incomplete." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: rating } = await supabase
+    .from("event_ratings")
+    .select("id, dorm_id, event_id, occupant_id")
+    .eq("id", ratingId)
+    .eq("event_id", eventId)
+    .eq("dorm_id", context.dormId)
+    .maybeSingle();
+
+  if (!rating) {
+    return { error: "Rating not found." };
+  }
+
+  if (!context.canManageEvents) {
+    const occupantResult = await getViewerOccupantId(context.dormId, context.userId);
+    if ("error" in occupantResult) {
+      return { error: occupantResult.error };
+    }
+    if (!occupantResult.occupantId || occupantResult.occupantId !== rating.occupant_id) {
+      return { error: "You can only remove your own rating." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("event_ratings")
+    .delete()
+    .eq("id", ratingId)
+    .eq("event_id", eventId)
+    .eq("dorm_id", context.dormId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
 
   return { success: true };
 }

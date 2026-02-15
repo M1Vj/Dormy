@@ -54,6 +54,8 @@ export type EventDetail = EventSummary & {
   photos: EventPhoto[];
   ratings: EventRating[];
   participating_dorms: EventDormOption[];
+  viewer_rating: EventRating | null;
+  viewer_can_rate: boolean;
 };
 
 export type EventViewerContext = {
