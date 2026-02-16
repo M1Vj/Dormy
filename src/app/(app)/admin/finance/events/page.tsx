@@ -3,6 +3,7 @@ import { format } from "date-fns";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import {
   Table,
@@ -97,6 +98,12 @@ export default async function EventsFinancePage({
   }
 
   const canFilterDorm = role === "admin";
+  const semesterResult = await ensureActiveSemesterId(activeDormId, supabase);
+  if ("error" in semesterResult) {
+    return <div className="p-6 text-sm text-destructive">{semesterResult.error}</div>;
+  }
+
+  const activeSemester = await getActiveSemester(activeDormId, supabase);
 
   const [{ data: events, error: eventsError }, { data: entries, error: entriesError }, dormOptions] =
     await Promise.all([
@@ -104,6 +111,7 @@ export default async function EventsFinancePage({
         .from("events")
         .select("id, title, starts_at, is_competition")
         .eq("dorm_id", activeDormId)
+        .eq("semester_id", semesterResult.semesterId)
         .order("starts_at", { ascending: false }),
       supabase
         .from("ledger_entries")
@@ -170,6 +178,9 @@ export default async function EventsFinancePage({
           <p className="text-sm text-muted-foreground">
             Track event charges, collections, and remaining balances.
           </p>
+          {activeSemester ? (
+            <p className="text-xs text-muted-foreground">Active semester: {activeSemester.label}</p>
+          ) : null}
         </div>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
           <form className="flex w-full gap-2" method="GET">

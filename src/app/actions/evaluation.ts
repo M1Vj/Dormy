@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { EvaluationSubmission, EvaluationSummary } from "@/lib/types/evaluation";
 
@@ -248,10 +249,18 @@ export async function getEvaluationCycles(dormId: string) {
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    console.error("Failed to resolve active semester for evaluation cycles:", semesterResult.error);
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("evaluation_cycles")
     .select("*")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .order("is_active", { ascending: false })
     .order("school_year", { ascending: false })
     .order("semester", { ascending: false });
@@ -304,10 +313,16 @@ export async function createEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error };
+  }
+
   const { data: cycle, error } = await supabase
     .from("evaluation_cycles")
     .insert({
       dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
       school_year: parsed.data.school_year,
       semester: parsed.data.semester,
       label: parsed.data.label,
@@ -733,6 +748,11 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return [];
+  }
+
   // 1. Get occupant profile for current user
   const { data: self } = await supabase
     .from("occupants")
@@ -748,6 +768,7 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
     .from("evaluation_cycles")
     .select("id")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .eq("is_active", true)
     .single();
 

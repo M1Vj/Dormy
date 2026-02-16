@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -159,6 +160,13 @@ export default async function EventDetailsPage({
     );
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return <div className="p-6 text-sm text-destructive">{semesterResult.error}</div>;
+  }
+
+  const activeSemester = await getActiveSemester(dormId, supabase);
+
   const [{ data: event, error: eventError }, occupants, { data: entries, error: entriesError }] =
     await Promise.all([
       supabase
@@ -166,6 +174,7 @@ export default async function EventDetailsPage({
         .select("id, title, starts_at, description")
         .eq("id", eventId)
         .eq("dorm_id", dormId)
+        .eq("semester_id", semesterResult.semesterId)
         .maybeSingle(),
       getOccupants(dormId, { status: "active" }),
       supabase
@@ -274,6 +283,9 @@ export default async function EventDetailsPage({
             <p className="text-sm text-muted-foreground">
               {event.starts_at ? format(new Date(event.starts_at), "MMMM d, yyyy") : "No date"}
             </p>
+            {activeSemester ? (
+              <p className="text-xs text-muted-foreground">{activeSemester.label}</p>
+            ) : null}
           </div>
         </div>
         <EventPayableDialog

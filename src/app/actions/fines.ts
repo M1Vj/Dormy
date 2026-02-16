@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // --- Rules ---
@@ -175,6 +176,13 @@ export async function getFines(
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    console.error("Failed to resolve active semester for fines:", semesterResult.error);
+    return [];
+  }
+
   let query = supabase
     .from("fines")
     .select(`
@@ -184,6 +192,7 @@ export async function getFines(
       issuer:issued_by(display_name)
     `)
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .order("issued_at", { ascending: false });
 
   if (status === "voided") {
@@ -243,8 +252,14 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error };
+  }
+
   const { data, error } = await supabase.from("fines").insert({
     dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
     occupant_id: parsed.data.occupant_id,
     rule_id: parsed.data.rule_id || null, // Allow custom fine without rule
     pesos: parsed.data.pesos,

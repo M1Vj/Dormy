@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 
@@ -161,11 +162,17 @@ export async function createEventPayableBatch(
     return { error: "Only treasurer and admin can create payable events." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error };
+  }
+
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("id, title")
     .eq("id", parsed.data.event_id)
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .maybeSingle();
 
   if (eventError || !event) {
