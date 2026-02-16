@@ -10,18 +10,9 @@ import {
 import type { User } from "@supabase/supabase-js";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { roles, type AppRole } from "@/lib/roles";
 
-export const roles = [
-  "admin",
-  "student_assistant",
-  "treasurer",
-  "adviser",
-  "assistant_adviser",
-  "occupant",
-  "event_officer",
-] as const;
-
-export type AppRole = (typeof roles)[number];
+export { roles };
 
 interface AuthContextValue {
   user: User | null;

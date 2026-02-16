@@ -3,6 +3,7 @@ import Link from "next/link"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
+import { HeaderRoleChip } from "@/components/nav/header-role-chip"
 import { UserNav } from "@/components/nav/user-nav"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { DormProvider } from "@/components/providers/dorm-provider"
@@ -40,6 +41,7 @@ export default async function AppLayout({
                   />
                   <span className="font-semibold">Dormy</span>
                 </Link>
+                <HeaderRoleChip />
               </div>
               <div className="flex items-center gap-2">
                 <ModeToggle />
