@@ -111,7 +111,15 @@ const getIssuerName = (issuer?: FineIssuer | FineIssuer[] | null) => {
   return issuerRef?.display_name?.trim() || "-";
 };
 
-function VoidFineDialog({ dormId, fineId }: { dormId: string; fineId: string }) {
+function VoidFineDialog({
+  dormId,
+  fineId,
+  buttonClassName,
+}: {
+  dormId: string;
+  fineId: string;
+  buttonClassName?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     async (previousState: typeof initialState, formData: FormData) => {
       const reason = formData.get("reason");
@@ -130,7 +138,7 @@ function VoidFineDialog({ dormId, fineId }: { dormId: string; fineId: string }) 
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button size="sm" variant="destructive">
+        <Button size="sm" variant="destructive" className={buttonClassName}>
           Void
         </Button>
       </SheetTrigger>
@@ -180,7 +188,78 @@ export function FinesLedger({ dormId, fines, rules, occupants }: FinesLedgerProp
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden">
+          {fines.length === 0 ? (
+            <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+              No fines issued yet.
+            </div>
+          ) : (
+            fines.map((fine) => {
+              const roomCode = getRoomCode(fine.occupant);
+              const issuedAt = fine.issued_at ?? fine.created_at;
+              const isVoided = Boolean(fine.voided_at);
+
+              return (
+                <div key={fine.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{getOccupantName(fine.occupant)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {roomCode ? `Room ${roomCode}` : "No room"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                        isVoided
+                          ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      }`}
+                    >
+                      {isVoided ? "Voided" : "Active"}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs">
+                    <p>
+                      <span className="text-muted-foreground">Rule:</span>{" "}
+                      {getRuleLabel(fine.rule)}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Amount:</span>{" "}
+                      {formatNumber(fine.pesos)} pesos · {formatNumber(fine.points)} points
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Issued:</span>{" "}
+                      {formatDate(issuedAt)} · {getIssuerName(fine.issuer)}
+                    </p>
+                    {fine.note ? (
+                      <p>
+                        <span className="text-muted-foreground">Note:</span>{" "}
+                        {fine.note}
+                      </p>
+                    ) : null}
+                    {isVoided && fine.void_reason ? (
+                      <p>
+                        <span className="text-muted-foreground">Void reason:</span>{" "}
+                        {fine.void_reason}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-3">
+                    {isVoided ? (
+                      <Button size="sm" variant="ghost" disabled className="w-full">
+                        Voided
+                      </Button>
+                    ) : (
+                      <VoidFineDialog dormId={dormId} fineId={fine.id} buttonClassName="w-full" />
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr className="border-b">

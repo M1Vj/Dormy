@@ -29,35 +29,35 @@ export function CreateOccupantForm({
   );
 
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <div className="space-y-1">
+    <form action={formAction} className="grid w-full gap-2 sm:flex sm:flex-wrap sm:items-end">
+      <div className="w-full space-y-1 sm:w-auto">
         <label className="text-xs text-muted-foreground" htmlFor="full_name">
           Full name
         </label>
-        <Input id="full_name" name="full_name" required className="w-52" />
+        <Input id="full_name" name="full_name" required className="w-full sm:w-52" />
       </div>
-      <div className="space-y-1">
+      <div className="w-full space-y-1 sm:w-auto">
         <label className="text-xs text-muted-foreground" htmlFor="student_id">
           Student ID
         </label>
-        <Input id="student_id" name="student_id" className="w-36" />
+        <Input id="student_id" name="student_id" className="w-full sm:w-36" />
       </div>
-      <div className="space-y-1">
+      <div className="w-full space-y-1 sm:w-auto">
         <label
           className="text-xs text-muted-foreground"
           htmlFor="classification"
         >
           Classification
         </label>
-        <Input id="classification" name="classification" className="w-40" />
+        <Input id="classification" name="classification" className="w-full sm:w-40" />
       </div>
-      <div className="space-y-1">
+      <div className="w-full space-y-1 sm:w-auto">
         <label className="text-xs text-muted-foreground" htmlFor="joined_at">
           Joined date
         </label>
-        <Input id="joined_at" name="joined_at" type="date" className="w-40" />
+        <Input id="joined_at" name="joined_at" type="date" className="w-full sm:w-40" />
       </div>
-      <Button type="submit" size="sm" disabled={isPending}>
+      <Button type="submit" size="sm" disabled={isPending} className="w-full sm:w-auto">
         {isPending ? "Adding..." : "Add occupant"}
       </Button>
       {state.error ? (
