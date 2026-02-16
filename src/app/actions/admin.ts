@@ -87,27 +87,19 @@ export async function createUser(formData: FormData) {
   }
 
   const adminClient = createAdminClient();
+  const displayName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
   const { data: created, error: createError } =
     await adminClient.auth.admin.createUser({
       email: parsed.data.email,
       password: parsed.data.password,
       email_confirm: true,
+      user_metadata: {
+        full_name: displayName,
+      },
     });
 
   if (createError || !created.user) {
     return { error: createError?.message ?? "Failed to create user." };
-  }
-
-  const displayName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
-
-  const { error: profileError } = await adminClient.from("profiles").insert({
-    user_id: created.user.id,
-    display_name: displayName,
-  });
-
-  if (profileError) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
-    return { error: profileError.message };
   }
 
   const { error: membershipInsertError } = await adminClient
