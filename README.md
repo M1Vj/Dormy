@@ -163,11 +163,26 @@ set -a; source .env.local; set +a
 npm run import:occupants:xlsx -- /absolute/path/to/occupants.xlsx
 ```
 
+If your main workbook lists BigBrods separately (common in Molave), pass the BigBrods room assignment workbook as a second argument:
+
+```bash
+set -a; source .env.local; set +a
+npm run import:occupants:xlsx -- /absolute/path/to/occupants.xlsx /absolute/path/to/bigbrods-room-assignments.xlsx
+```
+
+Notes:
+
+- The import script seeds Molave room inventory if rooms are missing (room codes `1-3`, `4a/4b`, `5-9`, `10a/10b`).
+- The script will fail if any occupant is missing a room assignment, to avoid partially-assigned rosters.
+
 Optional env overrides:
 
 - `DORMY_DORM_SLUG` (default: `molave-mens-hall`)
 - `DORMY_OCCUPANT_SHEET` (default: `ALPHABETICAL`)
+- `DORMY_OCCUPANT_BY_ROOM_SHEET` (default: `BY ROOM`)
+- `DORMY_BIGBRODS_ROOM_SHEET` (default: first sheet in the BigBrods workbook)
 - `DORMY_OCCUPANT_JOINED_AT` (default: today)
+- `DORMY_ROOM_ASSIGNMENT_START_DATE` (default: `DORMY_OCCUPANT_JOINED_AT`)
 - `DORMY_OCCUPANT_STATUS` (default: `active`)
 
 ### Demo Account Password Reset (local/demo only)
