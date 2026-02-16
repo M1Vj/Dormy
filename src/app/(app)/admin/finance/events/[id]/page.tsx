@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
+import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,12 +48,15 @@ type OccupantRow = {
 type EntryRow = {
   occupant_id?: string | null;
   amount_pesos?: number | string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type OccupantWithStatus = OccupantRow & {
   paid: number;
   charged: number;
   status: "paid" | "partial" | "unpaid";
+  deadline: string | null;
+  overdue: boolean;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -94,6 +98,17 @@ function StatusBadge({ status }: { status: OccupantWithStatus["status"] }) {
       Unpaid
     </Badge>
   );
+}
+
+function parseDeadline(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
 }
 
 export default async function EventDetailsPage({
@@ -155,7 +170,7 @@ export default async function EventDetailsPage({
       getOccupants(dormId, { status: "active" }),
       supabase
         .from("ledger_entries")
-        .select("occupant_id, amount_pesos")
+        .select("occupant_id, amount_pesos, metadata")
         .eq("dorm_id", dormId)
         .eq("ledger", "treasurer_events")
         .eq("event_id", eventId)
@@ -172,9 +187,13 @@ export default async function EventDetailsPage({
 
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const entryRows = (entries ?? []) as EntryRow[];
+  const nowIso = new Date().toISOString();
 
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
+    const chargeEntries = occupantEntries.filter(
+      (entry) => Number(entry.amount_pesos ?? 0) > 0
+    );
 
     const paid = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
@@ -195,11 +214,25 @@ export default async function EventDetailsPage({
       status = "paid";
     }
 
+    const deadline = chargeEntries
+      .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
+
+    const overdue =
+      deadline !== null &&
+      deadline < nowIso &&
+      charged > 0 &&
+      paid < charged;
+
     return {
       ...occupant,
       paid,
       charged,
       status,
+      deadline,
+      overdue,
     };
   });
 
@@ -219,6 +252,13 @@ export default async function EventDetailsPage({
   const totalExpected = occupantStatus.reduce((acc, curr) => acc + curr.charged, 0);
   const payersCount = occupantStatus.filter((occupant) => occupant.paid > 0).length;
   const participationRate = occupantRows.length > 0 ? (payersCount / occupantRows.length) * 100 : 0;
+  const overdueCount = occupantStatus.filter((occupant) => occupant.overdue).length;
+  const eventDeadline =
+    entryRows
+      .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
 
   return (
     <div className="space-y-6">
@@ -236,9 +276,14 @@ export default async function EventDetailsPage({
             </p>
           </div>
         </div>
+        <EventPayableDialog
+          dormId={dormId}
+          eventId={eventId}
+          trigger={<Button>Create payable event</Button>}
+        />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Collected</CardTitle>
@@ -270,6 +315,19 @@ export default async function EventDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">{filteredOccupants.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Payable Deadline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-base font-semibold">
+              {eventDeadline ? format(new Date(eventDeadline), "MMM d, yyyy h:mm a") : "Not set"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {overdueCount} overdue occupant{overdueCount === 1 ? "" : "s"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -328,11 +386,32 @@ export default async function EventDetailsPage({
                           {occupant.student_id ? ` · ${occupant.student_id}` : ""}
                         </p>
                       </div>
-                      <StatusBadge status={occupant.status} />
+                      <div className="flex flex-col items-end gap-1">
+                        <StatusBadge status={occupant.status} />
+                        {occupant.overdue ? (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Overdue
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Charged</span>
+                      <span className="font-mono">
+                        {occupant.charged > 0 ? `₱${occupant.charged.toFixed(2)}` : "-"}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Paid</span>
                       <span className="font-mono">{occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Deadline</span>
+                      <span>
+                        {occupant.deadline
+                          ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
+                          : "Not set"}
+                      </span>
                     </div>
                     <PaymentDialog
                       dormId={dormId}
@@ -357,8 +436,10 @@ export default async function EventDetailsPage({
                 <TableRow>
                   <TableHead>Occupant</TableHead>
                   <TableHead>Room</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Charged</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Deadline</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -370,11 +451,26 @@ export default async function EventDetailsPage({
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
                     </TableCell>
                     <TableCell>{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
-                    <TableCell className="text-center">
-                      <StatusBadge status={occupant.status} />
+                    <TableCell className="text-right font-mono">
+                      {occupant.charged > 0 ? `₱${occupant.charged.toFixed(2)}` : "-"}
                     </TableCell>
                     <TableCell className="text-right font-mono">
                       {occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {occupant.deadline
+                        ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
+                        : "Not set"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <StatusBadge status={occupant.status} />
+                        {occupant.overdue ? (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Overdue
+                          </Badge>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <PaymentDialog
@@ -393,7 +489,7 @@ export default async function EventDetailsPage({
                 ))}
                 {filteredOccupants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       No occupants found.
                     </TableCell>
                   </TableRow>
