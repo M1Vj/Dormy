@@ -74,6 +74,19 @@ export default async function Page() {
           </CardContent>
         </Card>
       ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Semesters and turnover</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Group events, fines, cleaning, and evaluations by semester while keeping occupants and money persistent.
+          </p>
+          <Button asChild>
+            <Link href="/admin/terms">Open semester management</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

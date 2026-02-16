@@ -71,6 +71,14 @@ create index if not exists cleaning_exceptions_dorm_semester_idx
 create index if not exists evaluation_cycles_dorm_semester_idx
   on public.evaluation_cycles (dorm_id, semester_id, created_at desc);
 
+drop index if exists public.cleaning_weeks_dorm_week_start_unique;
+create unique index if not exists cleaning_weeks_dorm_semester_week_start_unique
+  on public.cleaning_weeks (dorm_id, semester_id, week_start);
+
+drop index if exists public.cleaning_exceptions_dorm_date_unique;
+create unique index if not exists cleaning_exceptions_dorm_semester_date_unique
+  on public.cleaning_exceptions (dorm_id, semester_id, date);
+
 do $$
 begin
   if not exists (
