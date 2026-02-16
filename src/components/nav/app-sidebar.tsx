@@ -28,7 +28,7 @@ import { DormSwitcher } from "@/components/nav/dorm-switcher"
 
 // Menu items.
 const items = [
-  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Home", url: "/home", icon: Home },
   { title: "Occupants", url: "/occupants", icon: Users },
   { title: "Fines", url: "/fines", icon: FileText },
   { title: "Payments", url: "/payments", icon: Wallet },
@@ -43,7 +43,14 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { role } = useAuth()
 
-  const occupantRoutes = new Set(["/events", "/payments", "/fines", "/evaluation", "/cleaning"])
+  const occupantRoutes = new Set([
+    "/home",
+    "/events",
+    "/payments",
+    "/fines",
+    "/evaluation",
+    "/cleaning",
+  ])
   const aiRoles = new Set([
     "admin",
     "officer",

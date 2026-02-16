@@ -30,7 +30,7 @@ export default async function AppLayout({
             <header className="flex h-16 items-center justify-between border-b px-4">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
-                <Link href="/" className="flex items-center gap-2">
+                <Link href="/home" className="flex items-center gap-2">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-muted/35">
                     <Image
                       src="/brand/dormy-house.png"

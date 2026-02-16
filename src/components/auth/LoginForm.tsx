@@ -33,7 +33,7 @@ export function LoginForm() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       toast.success("Signed in");
-      router.push("/events");
+      router.push("/home");
       router.refresh();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to sign in";
