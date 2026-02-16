@@ -5,7 +5,7 @@ export const roles = [
   "adviser",
   "assistant_adviser",
   "occupant",
-  "event_officer",
+  "officer",
 ] as const;
 
 export type AppRole = (typeof roles)[number];
@@ -17,7 +17,7 @@ const roleLabelMap: Record<AppRole, string> = {
   adviser: "Adviser",
   assistant_adviser: "Assistant Adviser",
   occupant: "Occupant",
-  event_officer: "Event Officer",
+  officer: "Officer",
 };
 
 const roleSummaryMap: Record<AppRole, string> = {
@@ -27,7 +27,7 @@ const roleSummaryMap: Record<AppRole, string> = {
   adviser: "Oversees adviser workflows, including maintenance and delegated account setup.",
   assistant_adviser: "Supports maintenance and adviser-assigned dorm operations.",
   occupant: "Can view personal ledgers, schedules, evaluations, and shared announcements.",
-  event_officer: "Focuses on event planning, execution, and event records.",
+  officer: "Focuses on event planning, execution, and event records.",
 };
 
 export function getRoleLabel(role: AppRole | null | undefined) {

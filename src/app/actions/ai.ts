@@ -11,7 +11,7 @@ import type { AiConceptRecord, EventConceptDraft, FinanceInsights } from "@/lib/
 
 const AI_ALLOWED_ROLES: DormRole[] = [
   "admin",
-  "event_officer",
+  "officer",
   "student_assistant",
   "treasurer",
   "adviser",

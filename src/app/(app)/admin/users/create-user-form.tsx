@@ -20,7 +20,7 @@ const baseRoleOptions = [
   { value: "treasurer", label: "Treasurer" },
   { value: "adviser", label: "Adviser" },
   { value: "assistant_adviser", label: "Assistant Adviser" },
-  { value: "event_officer", label: "Event Officer" },
+  { value: "officer", label: "Officer" },
   { value: "occupant", label: "Occupant" },
 ];
 
@@ -59,7 +59,7 @@ export function CreateUserForm({
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button>Create User</Button>
+        <Button suppressHydrationWarning>Create User</Button>
       </SheetTrigger>
       <SheetContent className="sm:max-w-lg">
         <SheetHeader>

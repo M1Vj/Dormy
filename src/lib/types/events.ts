@@ -5,7 +5,7 @@ export const dormRoles = [
   "student_assistant",
   "treasurer",
   "occupant",
-  "event_officer",
+  "officer",
 ] as const;
 
 export type DormRole = (typeof dormRoles)[number];

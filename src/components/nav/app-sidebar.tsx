@@ -46,7 +46,7 @@ export function AppSidebar() {
   const occupantRoutes = new Set(["/events", "/payments", "/fines", "/evaluation", "/cleaning"])
   const aiRoles = new Set([
     "admin",
-    "event_officer",
+    "officer",
     "student_assistant",
     "treasurer",
     "adviser",

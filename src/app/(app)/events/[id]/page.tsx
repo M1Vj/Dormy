@@ -164,7 +164,7 @@ export default async function EventDetailPage({
               Photo Gallery
             </CardTitle>
             <CardDescription>
-              Event officers and admins can upload photos for this event.
+              Officers and admins can upload photos for this event.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -180,7 +180,7 @@ export default async function EventDetailPage({
           <CardHeader>
             <CardTitle className="text-base">Recent Ratings & Comments</CardTitle>
             <CardDescription>
-              Occupants can submit ratings and comments. Event officers/admin can moderate entries.
+              Occupants can submit ratings and comments. Officers/admin can moderate entries.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

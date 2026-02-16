@@ -14,7 +14,7 @@ import type {
   EventViewerContext,
 } from "@/lib/types/events";
 
-const EVENT_MANAGER_ROLES = new Set<DormRole>(["admin", "event_officer"]);
+const EVENT_MANAGER_ROLES = new Set<DormRole>(["admin", "officer"]);
 const VALID_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
