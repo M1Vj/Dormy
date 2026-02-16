@@ -1,3 +1,5 @@
+import Image from "next/image"
+import Link from "next/link"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -25,9 +27,19 @@ export default async function AppLayout({
           <AppSidebar />
           <main className="w-full">
             <header className="flex h-16 items-center justify-between border-b px-4">
-              <div className="flex items-center">
+              <div className="flex items-center gap-3">
                 <SidebarTrigger />
-                <span className="ml-4 font-semibold">Dormy</span>
+                <Link href="/" className="flex items-center gap-2">
+                  <Image
+                    src="/brand/dormy-house.png"
+                    alt=""
+                    width={28}
+                    height={28}
+                    className="h-7 w-7"
+                    priority
+                  />
+                  <span className="font-semibold">Dormy</span>
+                </Link>
               </div>
               <div className="flex items-center gap-2">
                 <ModeToggle />
