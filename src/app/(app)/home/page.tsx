@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import { CalendarDays, ClipboardList, FileText, Shield, Wallet } from "lucide-react";
 
+import { getDormAnnouncements } from "@/app/actions/announcements";
 import { getCleaningSnapshot } from "@/app/actions/cleaning";
 import { getEventsOverview } from "@/app/actions/events";
 import { getFineRules } from "@/app/actions/fines";
@@ -128,6 +129,8 @@ export default async function HomePage() {
     occupant ? getLedgerBalance(dormId, occupant.id) : Promise.resolve(null),
     occupant ? getLedgerEntries(dormId, occupant.id) : Promise.resolve([]),
   ]);
+
+  const { announcements } = await getDormAnnouncements(dormId, { limit: 3 });
 
   const now = new Date();
   const upcomingEvents = events
@@ -413,6 +416,56 @@ export default async function HomePage() {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Announcements</CardTitle>
+            <CardDescription>Shared dorm updates visible to your role.</CardDescription>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/home/announcements">View all</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {announcements.length ? (
+            <div className="space-y-2">
+              {announcements.map((announcement) => {
+                const preview =
+                  announcement.body.length > 220
+                    ? `${announcement.body.slice(0, 220).trim()}…`
+                    : announcement.body;
+                return (
+                  <div key={announcement.id} className="rounded-lg border p-3 text-sm">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{announcement.title}</div>
+                        <div className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
+                          {preview}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-xs text-muted-foreground">
+                        {announcement.starts_at
+                          ? format(new Date(announcement.starts_at), "MMM d, yyyy")
+                          : ""}
+                      </div>
+                    </div>
+                    {announcement.visibility === "staff" ? (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Visibility: <span className="font-medium">staff</span>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+              No announcements yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -486,4 +539,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
