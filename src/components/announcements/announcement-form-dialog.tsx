@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Megaphone, PencilLine } from "lucide-react";
 
@@ -22,12 +22,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 type FormState = {
   error: string;
-  success: boolean;
 };
 
 const initialState: FormState = {
   error: "",
-  success: false,
 };
 
 function toDateTimeLocal(value: string | null | undefined) {
@@ -56,6 +54,7 @@ export function AnnouncementFormDialog({
   trigger?: React.ReactNode;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
 
   const action =
     mode === "create"
@@ -66,17 +65,18 @@ export function AnnouncementFormDialog({
     async (_previousState: FormState, formData: FormData) => {
       const result = await action(formData);
       if (result?.error) {
-        return { error: result.error, success: false };
+        return { error: result.error };
       }
 
+      setOpen(false);
       router.refresh();
-      return { error: "", success: true };
+      return initialState;
     },
     initialState
   );
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ? (
           trigger
@@ -170,7 +170,6 @@ export function AnnouncementFormDialog({
           </div>
 
           {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-          {state.success ? <p className="text-sm text-emerald-600">Saved.</p> : null}
 
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
@@ -182,4 +181,3 @@ export function AnnouncementFormDialog({
     </Dialog>
   );
 }
-
