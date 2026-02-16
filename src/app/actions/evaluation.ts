@@ -237,6 +237,24 @@ export async function submitEvaluation(
     return { error: scoresError.message };
   }
 
+  try {
+    await logAuditEvent({
+      dormId: rater.dorm_id,
+      actorUserId: auth.user.id,
+      action: "evaluation.submission_created",
+      entityType: "evaluation_submission",
+      entityId: submission.id,
+      metadata: {
+        template_id: parsed.data.templateId,
+        rater_occupant_id: parsed.data.raterId,
+        ratee_occupant_id: parsed.data.rateeId,
+        metric_scores_count: metricScores.length,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation submission:", auditError);
+  }
+
   revalidatePath("/evaluation");
   revalidatePath("/admin/evaluation");
   return { success: true };
@@ -336,6 +354,26 @@ export async function createEvaluationCycle(
     return { error: error?.message ?? "Failed to create evaluation cycle." };
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_created",
+      entityType: "evaluation_cycle",
+      entityId: cycle.id,
+      metadata: {
+        semester_id: semesterResult.semesterId,
+        school_year: parsed.data.school_year,
+        semester: parsed.data.semester,
+        label: parsed.data.label,
+        counts_for_retention: parsed.data.counts_for_retention ?? false,
+        is_active: parsed.data.is_active ?? false,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle creation:", auditError);
+  }
+
   revalidatePath("/admin/evaluation");
   return { success: true, id: cycle.id };
 }
@@ -365,6 +403,17 @@ export async function updateEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: currentCycle, error: currentCycleError } = await supabase
+    .from("evaluation_cycles")
+    .select("id, school_year, semester, label, counts_for_retention, is_active")
+    .eq("dorm_id", dormId)
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (currentCycleError || !currentCycle) {
+    return { error: currentCycleError?.message ?? "Evaluation cycle not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_cycles")
     .update(updates)
@@ -372,6 +421,22 @@ export async function updateEvaluationCycle(
     .eq("id", cycleId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_updated",
+      entityType: "evaluation_cycle",
+      entityId: cycleId,
+      metadata: {
+        previous: currentCycle,
+        updates,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle update:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${cycleId}`);
@@ -386,6 +451,17 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: cycle, error: cycleError } = await supabase
+    .from("evaluation_cycles")
+    .select("id, school_year, semester, label, counts_for_retention, is_active")
+    .eq("dorm_id", dormId)
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (cycleError || !cycle) {
+    return { error: cycleError?.message ?? "Evaluation cycle not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_cycles")
     .delete()
@@ -393,6 +469,19 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
     .eq("id", cycleId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_deleted",
+      entityType: "evaluation_cycle",
+      entityId: cycleId,
+      metadata: cycle,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle deletion:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   return { success: true };
@@ -653,7 +742,7 @@ export async function createEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
-  const { error } = await supabase.from("evaluation_metrics").insert({
+  const { data: metric, error } = await supabase.from("evaluation_metrics").insert({
     dorm_id: dormId,
     template_id: parsed.data.template_id,
     name: parsed.data.name,
@@ -662,10 +751,25 @@ export async function createEvaluationMetric(
     scale_min: parsed.data.scale_min,
     scale_max: parsed.data.scale_max,
     sort_order: parsed.data.sort_order,
-  });
+  })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !metric) {
+    return { error: error?.message ?? "Failed to create evaluation metric." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_created",
+      entityType: "evaluation_metric",
+      entityId: metric.id,
+      metadata: parsed.data,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric creation:", auditError);
   }
 
   if (cycleId) {
@@ -698,6 +802,17 @@ export async function updateEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: currentMetric, error: currentMetricError } = await supabase
+    .from("evaluation_metrics")
+    .select("id, template_id, name, description, weight_pct, scale_min, scale_max, sort_order")
+    .eq("dorm_id", dormId)
+    .eq("id", metricId)
+    .maybeSingle();
+
+  if (currentMetricError || !currentMetric) {
+    return { error: currentMetricError?.message ?? "Evaluation metric not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_metrics")
     .update(updates)
@@ -705,6 +820,22 @@ export async function updateEvaluationMetric(
     .eq("id", metricId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_updated",
+      entityType: "evaluation_metric",
+      entityId: metricId,
+      metadata: {
+        previous: currentMetric,
+        updates,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric update:", auditError);
+  }
 
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
@@ -725,6 +856,17 @@ export async function deleteEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: metric, error: metricError } = await supabase
+    .from("evaluation_metrics")
+    .select("id, template_id, name, description, weight_pct, scale_min, scale_max, sort_order")
+    .eq("dorm_id", dormId)
+    .eq("id", metricId)
+    .maybeSingle();
+
+  if (metricError || !metric) {
+    return { error: metricError?.message ?? "Evaluation metric not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_metrics")
     .delete()
@@ -732,6 +874,19 @@ export async function deleteEvaluationMetric(
     .eq("id", metricId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_deleted",
+      entityType: "evaluation_metric",
+      entityId: metricId,
+      metadata: metric,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric deletion:", auditError);
+  }
 
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
