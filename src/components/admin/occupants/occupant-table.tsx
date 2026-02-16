@@ -94,21 +94,21 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
         </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div />
-          <form className="flex flex-wrap items-center gap-2" method="GET">
+          <form className="grid w-full gap-2 sm:flex sm:flex-wrap sm:items-center" method="GET">
             <Input
-              className="w-48"
+              className="w-full sm:w-48"
               name="search"
               placeholder="Search name or ID"
               defaultValue={filters?.search ?? ""}
             />
             <Input
-              className="w-36"
+              className="w-full sm:w-36"
               name="room"
               placeholder="Room code"
               defaultValue={filters?.room ?? ""}
             />
             <Input
-              className="w-28"
+              className="w-full sm:w-28"
               name="level"
               placeholder="Level"
               type="number"
@@ -117,7 +117,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
             />
             <select
               name="status"
-              className="h-9 w-40 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-40"
               defaultValue={filters?.status ?? ""}
             >
               {statusOptions.map((option) => (
@@ -126,11 +126,11 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                 </option>
               ))}
             </select>
-            <Button type="submit" size="sm" variant="secondary">
+            <Button type="submit" size="sm" variant="secondary" className="w-full sm:w-auto">
               Filter
             </Button>
             {hasFilters ? (
-              <Button asChild type="button" size="sm" variant="ghost">
+              <Button asChild type="button" size="sm" variant="ghost" className="w-full sm:w-auto">
                 <Link href="/admin/occupants">Reset</Link>
               </Button>
             ) : null}
@@ -138,7 +138,69 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden">
+          {occupants.length === 0 ? (
+            <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+              No occupants match this filter.
+            </div>
+          ) : (
+            occupants.map((occupant) => {
+              const roomCode = getRoomCode(occupant.current_room_assignment);
+              const statusLabel = occupant.status
+                ? occupant.status.replace(/_/g, " ")
+                : "unknown";
+
+              return (
+                <div key={occupant.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">{occupant.full_name ?? "Unnamed occupant"}</p>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${getStatusClass(
+                        occupant.status
+                      )}`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Classification</p>
+                      <p>{occupant.classification ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Student ID</p>
+                      <p>{occupant.student_id ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Room</p>
+                      <p>{roomCode ?? "Unassigned"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Joined</p>
+                      <p>{formatDate(occupant.joined_at)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button asChild size="sm" variant="ghost" className="w-full">
+                      <Link href={`/admin/occupants/${occupant.id}`}>
+                        View
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm" variant="ghost" className="w-full">
+                      <Link
+                        href={`/admin/occupants/${occupant.id}?mode=edit`}
+                      >
+                        Edit
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr className="border-b">
