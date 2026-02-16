@@ -53,11 +53,6 @@ function parseDeadline(value: unknown) {
 }
 
 export default async function HomePage() {
-  const dormId = await getActiveDormId();
-  if (!dormId) {
-    return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
-  }
-
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -75,25 +70,30 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  const [{ data: dorm }, { data: membership }] = await Promise.all([
-    supabase.from("dorms").select("name").eq("id", dormId).maybeSingle(),
-    supabase
-      .from("dorm_memberships")
-      .select("role")
-      .eq("dorm_id", dormId)
-      .eq("user_id", user.id)
-      .maybeSingle(),
-  ]);
+  const activeDormId = await getActiveDormId();
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("dorm_id, role, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
 
-  const role = membership?.role ?? null;
+  const resolvedMembership =
+    memberships?.find((membership) => membership.dorm_id === activeDormId) ??
+    memberships?.[0] ??
+    null;
 
-  if (!role) {
-    return (
-      <div className="p-6 text-sm text-muted-foreground">
-        No dorm membership found for this account.
-      </div>
-    );
+  if (!resolvedMembership?.dorm_id || !resolvedMembership.role) {
+    redirect("/join");
   }
+
+  const dormId = resolvedMembership.dorm_id;
+  const role = resolvedMembership.role;
+
+  const { data: dorm } = await supabase
+    .from("dorms")
+    .select("name")
+    .eq("id", dormId)
+    .maybeSingle();
 
   const [semester, occupant] = await Promise.all([
     getActiveSemester(dormId, supabase),
