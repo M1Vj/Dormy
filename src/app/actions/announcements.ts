@@ -1,0 +1,368 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { logAuditEvent } from "@/lib/audit/log";
+import { ensureActiveSemesterId } from "@/lib/semesters";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const STAFF_ROLES = new Set([
+  "admin",
+  "adviser",
+  "assistant_adviser",
+  "student_assistant",
+  "treasurer",
+  "officer",
+]);
+
+const visibilitySchema = z.enum(["members", "staff"]);
+
+const announcementSchema = z.object({
+  title: z.string().trim().min(2, "Title is required.").max(140),
+  body: z.string().trim().min(2, "Body is required.").max(8000),
+  visibility: visibilitySchema.default("members"),
+  pinned: z.boolean().default(false),
+  starts_at: z.string().datetime().nullable().optional(),
+  expires_at: z.string().datetime().nullable().optional(),
+});
+
+function parseCheckbox(value: FormDataEntryValue | null) {
+  return value === "on" || value === "true" || value === "1";
+}
+
+function parseDateTimeInput(value: FormDataEntryValue | null) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "INVALID_DATE" as const;
+  return parsed.toISOString();
+}
+
+export type DormAnnouncement = {
+  id: string;
+  dorm_id: string;
+  semester_id: string | null;
+  title: string;
+  body: string;
+  visibility: "members" | "staff";
+  pinned: boolean;
+  starts_at: string;
+  expires_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getDormAnnouncements(
+  dormId: string,
+  options: { limit?: number } = {}
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { announcements: [] as DormAnnouncement[], error: "" };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { announcements: [] as DormAnnouncement[], error: semesterResult.error ?? "Failed to load semester." };
+  }
+
+  const query = supabase
+    .from("dorm_announcements")
+    .select(
+      "id, dorm_id, semester_id, title, body, visibility, pinned, starts_at, expires_at, created_by, created_at, updated_at"
+    )
+    .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
+    .order("pinned", { ascending: false })
+    .order("starts_at", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const { data, error } = options.limit ? await query.limit(options.limit) : await query;
+
+  if (error) {
+    return { announcements: [] as DormAnnouncement[], error: error.message };
+  }
+
+  return { announcements: (data ?? []) as DormAnnouncement[], error: "" };
+}
+
+export async function createAnnouncement(dormId: string, formData: FormData) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  if (!STAFF_ROLES.has(membership.role)) {
+    return { error: "You do not have permission to create announcements." };
+  }
+
+  const startsAt = parseDateTimeInput(formData.get("starts_at"));
+  const expiresAt = parseDateTimeInput(formData.get("expires_at"));
+  if (startsAt === "INVALID_DATE" || expiresAt === "INVALID_DATE") {
+    return { error: "Provide valid date and time values." };
+  }
+
+  const parsed = announcementSchema.safeParse({
+    title: formData.get("title"),
+    body: formData.get("body"),
+    visibility: formData.get("visibility"),
+    pinned: parseCheckbox(formData.get("pinned")),
+    starts_at: startsAt,
+    expires_at: expiresAt,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid announcement input." };
+  }
+
+  if (parsed.data.starts_at && parsed.data.expires_at) {
+    if (new Date(parsed.data.expires_at) <= new Date(parsed.data.starts_at)) {
+      return { error: "Expiry must be after the publish time." };
+    }
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
+  const payload: Record<string, unknown> = {
+    dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
+    title: parsed.data.title,
+    body: parsed.data.body,
+    visibility: parsed.data.visibility,
+    pinned: parsed.data.pinned,
+    expires_at: parsed.data.expires_at ?? null,
+    created_by: user.id,
+  };
+
+  if (parsed.data.starts_at) {
+    payload.starts_at = parsed.data.starts_at;
+  }
+
+  const { data, error } = await supabase
+    .from("dorm_announcements")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? "Failed to create announcement." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "announcements.created",
+      entityType: "announcement",
+      entityId: data.id,
+      metadata: {
+        title: parsed.data.title,
+        visibility: parsed.data.visibility,
+        pinned: parsed.data.pinned,
+        starts_at: parsed.data.starts_at ?? null,
+        expires_at: parsed.data.expires_at ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for announcement create:", auditError);
+  }
+
+  revalidatePath("/home");
+  revalidatePath("/home/announcements");
+
+  return { success: true };
+}
+
+export async function updateAnnouncement(
+  dormId: string,
+  announcementId: string,
+  formData: FormData
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  if (!STAFF_ROLES.has(membership.role)) {
+    return { error: "You do not have permission to update announcements." };
+  }
+
+  const startsAt = parseDateTimeInput(formData.get("starts_at"));
+  const expiresAt = parseDateTimeInput(formData.get("expires_at"));
+  if (startsAt === "INVALID_DATE" || expiresAt === "INVALID_DATE") {
+    return { error: "Provide valid date and time values." };
+  }
+
+  const parsed = announcementSchema.safeParse({
+    title: formData.get("title"),
+    body: formData.get("body"),
+    visibility: formData.get("visibility"),
+    pinned: parseCheckbox(formData.get("pinned")),
+    starts_at: startsAt,
+    expires_at: expiresAt,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid announcement input." };
+  }
+
+  if (parsed.data.starts_at && parsed.data.expires_at) {
+    if (new Date(parsed.data.expires_at) <= new Date(parsed.data.starts_at)) {
+      return { error: "Expiry must be after the publish time." };
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("dorm_announcements")
+    .update({
+      title: parsed.data.title,
+      body: parsed.data.body,
+      visibility: parsed.data.visibility,
+      pinned: parsed.data.pinned,
+      starts_at: parsed.data.starts_at ?? nowIso,
+      expires_at: parsed.data.expires_at ?? null,
+      updated_at: nowIso,
+    })
+    .eq("dorm_id", dormId)
+    .eq("id", announcementId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "announcements.updated",
+      entityType: "announcement",
+      entityId: announcementId,
+      metadata: {
+        title: parsed.data.title,
+        visibility: parsed.data.visibility,
+        pinned: parsed.data.pinned,
+        starts_at: parsed.data.starts_at ?? null,
+        expires_at: parsed.data.expires_at ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for announcement update:", auditError);
+  }
+
+  revalidatePath("/home");
+  revalidatePath("/home/announcements");
+
+  return { success: true };
+}
+
+export async function deleteAnnouncement(dormId: string, announcementId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  if (!STAFF_ROLES.has(membership.role)) {
+    return { error: "You do not have permission to delete announcements." };
+  }
+
+  const { data: existing } = await supabase
+    .from("dorm_announcements")
+    .select("id, title, visibility, pinned")
+    .eq("dorm_id", dormId)
+    .eq("id", announcementId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("dorm_announcements")
+    .delete()
+    .eq("dorm_id", dormId)
+    .eq("id", announcementId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "announcements.deleted",
+      entityType: "announcement",
+      entityId: announcementId,
+      metadata: {
+        title: existing?.title ?? null,
+        visibility: existing?.visibility ?? null,
+        pinned: existing?.pinned ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for announcement delete:", auditError);
+  }
+
+  revalidatePath("/home");
+  revalidatePath("/home/announcements");
+
+  return { success: true };
+}
+
