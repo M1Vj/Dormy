@@ -111,9 +111,9 @@ export default async function MaintenancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-xl font-medium">Maintenance Ledger</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <ExportXlsxDialog
             report="maintenance-ledger"
             title="Export Maintenance Ledger"
@@ -122,7 +122,7 @@ export default async function MaintenancePage() {
             dormOptions={dormOptions}
             includeDormSelector={canFilterDorm}
           />
-          <Button variant="outline" disabled>Bulk Charge (Soon)</Button>
+          <Button variant="outline" disabled className="w-full sm:w-auto">Bulk Charge (Soon)</Button>
         </div>
       </div>
 
@@ -138,7 +138,60 @@ export default async function MaintenancePage() {
         </Card>
       </div>
 
-      <div className="rounded-md border">
+      <div className="space-y-3 md:hidden">
+        {rows.map((row) => (
+          <Card key={row.id}>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{row.full_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {row.roomCode === "No Room" ? "No room assigned" : `Room ${row.roomCode}`}
+                  </p>
+                </div>
+                <p
+                  className={`text-right text-sm font-semibold ${
+                    row.balance > 0 ? "text-red-600" : "text-green-600"
+                  }`}
+                >
+                  ₱{row.balance.toFixed(2)}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <ChargeDialog
+                  dormId={activeDormId}
+                  occupantId={row.id}
+                  category="adviser_maintenance"
+                  trigger={
+                    <Button variant="outline" size="sm" className="w-full">
+                      Charge
+                    </Button>
+                  }
+                />
+                <PaymentDialog
+                  dormId={activeDormId}
+                  occupantId={row.id}
+                  category="adviser_maintenance"
+                  trigger={
+                    <Button variant="outline" size="sm" className="w-full">
+                      Pay
+                    </Button>
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {rows.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              No occupants found.
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+
+      <div className="hidden rounded-md border md:block">
         <Table>
           <TableHeader>
             <TableRow>
