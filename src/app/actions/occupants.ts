@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const occupantStatusSchema = z.enum(["active", "left", "removed"]);
@@ -25,6 +26,43 @@ type RoomAssignment = {
   end_date: string | null;
   room?: RoomRef | RoomRef[] | null;
 };
+
+const OCCUPANT_AUDIT_FIELDS = [
+  "full_name",
+  "student_id",
+  "classification",
+  "joined_at",
+  "status",
+  "home_address",
+  "birthdate",
+  "contact_mobile",
+  "contact_email",
+  "emergency_contact_name",
+  "emergency_contact_mobile",
+  "emergency_contact_relationship",
+] as const;
+
+function normalizeAuditValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  return String(value);
+}
+
+function getChangedOccupantFields(
+  previous: Record<string, unknown>,
+  updates: Record<string, unknown>
+) {
+  return OCCUPANT_AUDIT_FIELDS.filter((field) => {
+    if (!(field in updates)) {
+      return false;
+    }
+    return normalizeAuditValue(previous[field]) !== normalizeAuditValue(updates[field]);
+  });
+}
 
 export async function getOccupants(
   dormId: string,
@@ -203,7 +241,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
     return { error: "Invalid data" };
   }
 
-  const { error } = await supabase
+  const { data: createdOccupant, error } = await supabase
     .from("occupants")
     .insert({
       dorm_id: dormId,
@@ -227,10 +265,31 @@ export async function createOccupant(dormId: string, formData: FormData) {
         ? rawData.emergency_contact_relationship.trim()
         : null,
       status: "active"
-    });
+    })
+    .select("id, full_name, student_id, classification, joined_at, status")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !createdOccupant) {
+    return { error: error?.message ?? "Failed to create occupant." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "occupants.created",
+      entityType: "occupant",
+      entityId: createdOccupant.id,
+      metadata: {
+        full_name: createdOccupant.full_name,
+        student_id: createdOccupant.student_id,
+        classification: createdOccupant.classification,
+        joined_at: createdOccupant.joined_at,
+        status: createdOccupant.status,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for occupant creation:", auditError);
   }
 
   revalidatePath("/occupants");
@@ -271,7 +330,19 @@ export async function updateOccupant(
     return { error: "You do not have permission to update occupants." };
   }
 
-  // We can reuse the same schema for now, or make partial
+  const { data: previousOccupant, error: previousOccupantError } = await supabase
+    .from("occupants")
+    .select(
+      "id, full_name, student_id, classification, joined_at, status, home_address, birthdate, contact_mobile, contact_email, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship"
+    )
+    .eq("dorm_id", dormId)
+    .eq("id", occupantId)
+    .maybeSingle();
+
+  if (previousOccupantError || !previousOccupant) {
+    return { error: previousOccupantError?.message ?? "Occupant not found." };
+  }
+
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),
@@ -322,6 +393,37 @@ export async function updateOccupant(
 
   if (error) {
     return { error: error.message };
+  }
+
+  const changedFields = getChangedOccupantFields(previousOccupant, updates);
+  const previousStatus =
+    typeof previousOccupant.status === "string" ? previousOccupant.status : null;
+  const updatedStatus = typeof updates.status === "string" ? updates.status : previousStatus;
+
+  if (changedFields.length > 0) {
+    let action = "occupants.updated";
+    if (updatedStatus === "removed" && previousStatus !== "removed") {
+      action = "occupants.deleted";
+    } else if (updatedStatus === "left" && previousStatus !== "left") {
+      action = "occupants.marked_left";
+    }
+
+    try {
+      await logAuditEvent({
+        dormId,
+        actorUserId: user.id,
+        action,
+        entityType: "occupant",
+        entityId: occupantId,
+        metadata: {
+          changed_fields: changedFields,
+          previous_status: previousStatus,
+          new_status: updatedStatus,
+        },
+      });
+    } catch (auditError) {
+      console.error("Failed to write audit event for occupant update:", auditError);
+    }
   }
 
   revalidatePath("/occupants");
