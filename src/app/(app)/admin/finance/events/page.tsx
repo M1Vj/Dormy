@@ -30,6 +30,7 @@ type EventRow = {
 type LedgerEntry = {
   event_id?: string | null;
   amount_pesos?: number | string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -37,6 +38,17 @@ const normalizeParam = (value?: string | string[]) => {
     return value.length ? value[0] : undefined;
   }
   return value;
+};
+
+const parseDeadline = (value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
 };
 
 export default async function EventsFinancePage({
@@ -95,7 +107,7 @@ export default async function EventsFinancePage({
         .order("starts_at", { ascending: false }),
       supabase
         .from("ledger_entries")
-        .select("id, event_id, amount_pesos, ledger, voided_at")
+        .select("id, event_id, amount_pesos, ledger, voided_at, metadata")
         .eq("dorm_id", activeDormId)
         .eq("ledger", "treasurer_events")
         .is("voided_at", null),
@@ -125,12 +137,19 @@ export default async function EventsFinancePage({
         const amount = Number(entry.amount_pesos ?? 0);
         return amount > 0 ? sum + amount : sum;
       }, 0);
+      const deadline =
+        eventEntries
+          .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .at(-1) ?? null;
 
       return {
         ...event,
         collected,
         charged,
         balance: charged - collected,
+        deadline,
       };
     })
     .filter((event) => {
@@ -247,6 +266,10 @@ export default async function EventsFinancePage({
                     </p>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Deadline:{" "}
+                  {event.deadline ? format(new Date(event.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                </p>
                 <Button asChild size="sm" className="w-full">
                   <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
                 </Button>
@@ -265,6 +288,7 @@ export default async function EventsFinancePage({
               <TableHead className="text-right">Charged</TableHead>
               <TableHead className="text-right">Collected</TableHead>
               <TableHead className="text-right">Balance</TableHead>
+              <TableHead className="text-right">Deadline</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -284,6 +308,9 @@ export default async function EventsFinancePage({
                 >
                   ₱{event.balance.toFixed(2)}
                 </TableCell>
+                <TableCell className="text-right text-xs">
+                  {event.deadline ? format(new Date(event.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" asChild>
                     <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
@@ -293,7 +320,7 @@ export default async function EventsFinancePage({
             ))}
             {eventStats.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No events found.
                 </TableCell>
               </TableRow>
