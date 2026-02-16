@@ -46,13 +46,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { user: authUser },
     } = await supabase.auth.getUser();
 
-    setUser(authUser ?? null);
+      setUser(authUser ?? null);
 
     if (authUser) {
       const { data: membership } = await supabase
         .from("dorm_memberships")
         .select("role, dorm_id")
         .eq("user_id", authUser.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       setRole((membership?.role as AppRole) ?? null);
