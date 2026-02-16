@@ -130,15 +130,15 @@ export default async function PaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Payments & Clearance</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Payments & Clearance</h1>
         {isCleared ? (
-          <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-100 px-4 py-2 font-medium text-green-700">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-green-200 bg-green-100 px-4 py-2 font-medium text-green-700">
             <CheckCircle className="h-5 w-5" />
             <span>Cleared</span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-full border border-red-200 bg-red-100 px-4 py-2 font-medium text-red-700">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-red-200 bg-red-100 px-4 py-2 font-medium text-red-700">
             <AlertCircle className="h-5 w-5" />
             <span>Not Cleared</span>
           </div>
@@ -190,7 +190,52 @@ export default async function PaymentsPage() {
           <CardDescription>All transactions recorded for your account.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-md border">
+          <div className="space-y-3 md:hidden">
+            {entries?.map((entry) => {
+              const isPayment = Number(entry.amount_pesos) < 0;
+              let desc = entry.note || entry.entry_type;
+              if (entry.fine) {
+                const ruleTitle = entry.fine.rule?.title;
+                desc = ruleTitle ? `Fine: ${ruleTitle}` : entry.note || "Fine Violation";
+              }
+              if (entry.event) {
+                desc = `Event: ${entry.event.title}`;
+              }
+
+              return (
+                <div key={entry.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{desc}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(entry.posted_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <p
+                      className={`text-sm font-semibold ${
+                        isPayment || entry.amount_pesos < 0 ? "text-green-600" : "text-foreground"
+                      }`}
+                    >
+                      ₱{Number(entry.amount_pesos).toFixed(2)}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs capitalize text-muted-foreground">
+                    {entry.ledger
+                      .replace("adviser_", "")
+                      .replace("sa_", "")
+                      .replace("treasurer_", "")}
+                  </p>
+                </div>
+              );
+            })}
+            {!entries || entries.length === 0 ? (
+              <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No transactions found.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-md border md:block">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr className="border-b">
@@ -228,7 +273,7 @@ export default async function PaymentsPage() {
                           isPayment || entry.amount_pesos < 0 ? "text-green-600" : ""
                         }`}
                       >
-                        {Number(entry.amount_pesos).toFixed(2)}
+                        ₱{Number(entry.amount_pesos).toFixed(2)}
                       </td>
                     </tr>
                   );
