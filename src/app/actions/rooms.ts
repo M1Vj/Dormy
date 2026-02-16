@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function getRoomsWithOccupants(dormId: string) {
@@ -51,19 +52,76 @@ export async function assignOccupant(
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    membershipError ||
+    !membership ||
+    !new Set(["admin", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to assign occupants." };
+  }
+
+  const [{ data: occupant, error: occupantError }, { data: targetRoom, error: roomError }] =
+    await Promise.all([
+      supabase
+        .from("occupants")
+        .select("id, full_name")
+        .eq("dorm_id", dormId)
+        .eq("id", occupantId)
+        .maybeSingle(),
+      supabase
+        .from("rooms")
+        .select("id, code")
+        .eq("dorm_id", dormId)
+        .eq("id", roomId)
+        .maybeSingle(),
+    ]);
+
+  if (occupantError || !occupant) {
+    return { error: occupantError?.message ?? "Occupant not found." };
+  }
+
+  if (roomError || !targetRoom) {
+    return { error: roomError?.message ?? "Room not found." };
+  }
+
   // 1. Check if occupant has active assignment
   const { data: activeAssignment } = await supabase
     .from("room_assignments")
     .select("id, room_id")
+    .eq("dorm_id", dormId)
     .eq("occupant_id", occupantId)
     .is("end_date", null)
-    .single();
+    .maybeSingle();
+
+  let previousRoomCode: string | null = null;
 
   if (activeAssignment) {
     // If already in this room, do nothing or return message
     if (activeAssignment.room_id === roomId) {
       return { error: "Occupant is already assigned to this room." };
     }
+
+    const { data: previousRoom } = await supabase
+      .from("rooms")
+      .select("code")
+      .eq("dorm_id", dormId)
+      .eq("id", activeAssignment.room_id)
+      .maybeSingle();
+    previousRoomCode = previousRoom?.code ?? null;
 
     // Close old assignment
     const { error: closeError } = await supabase
@@ -75,21 +133,45 @@ export async function assignOccupant(
   }
 
   // 2. Create new assignment
-  const { error: assignError } = await supabase
+  const { data: createdAssignment, error: assignError } = await supabase
     .from("room_assignments")
     .insert({
       dorm_id: dormId,
       room_id: roomId,
       occupant_id: occupantId,
       start_date: startDate,
-    });
+    })
+    .select("id")
+    .single();
 
-  if (assignError) {
-    return { error: assignError.message };
+  if (assignError || !createdAssignment) {
+    return { error: assignError?.message ?? "Failed to assign occupant." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: activeAssignment ? "rooms.assignment_transferred" : "rooms.assignment_set",
+      entityType: "room_assignment",
+      entityId: createdAssignment.id,
+      metadata: {
+        occupant_id: occupant.id,
+        occupant_name: occupant.full_name,
+        room_id: targetRoom.id,
+        room_code: targetRoom.code,
+        start_date: startDate,
+        previous_room_id: activeAssignment?.room_id ?? null,
+        previous_room_code: previousRoomCode,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for room assignment:", auditError);
   }
 
   revalidatePath("/admin/rooms");
   revalidatePath("/admin/occupants");
+  revalidatePath(`/admin/occupants/${occupantId}`);
   return { success: true };
 }
 
@@ -99,6 +181,38 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("room_assignments")
+    .select("id, dorm_id, occupant_id, room_id, start_date, end_date, occupant:occupants(full_name), room:rooms(code)")
+    .eq("id", assignmentId)
+    .maybeSingle();
+
+  if (assignmentError || !assignment) {
+    return { error: assignmentError?.message ?? "Room assignment not found." };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", assignment.dorm_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    membershipError ||
+    !membership ||
+    !new Set(["admin", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to remove assignments." };
+  }
+
   const { error } = await supabase
     .from("room_assignments")
     .update({ end_date: endDate })
@@ -106,7 +220,33 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
 
   if (error) return { error: error.message };
 
+  const occupant = Array.isArray(assignment.occupant)
+    ? assignment.occupant[0]
+    : assignment.occupant;
+  const room = Array.isArray(assignment.room) ? assignment.room[0] : assignment.room;
+
+  try {
+    await logAuditEvent({
+      dormId: assignment.dorm_id,
+      actorUserId: user.id,
+      action: "rooms.assignment_removed",
+      entityType: "room_assignment",
+      entityId: assignmentId,
+      metadata: {
+        occupant_id: assignment.occupant_id,
+        occupant_name: occupant?.full_name ?? null,
+        room_id: assignment.room_id,
+        room_code: room?.code ?? null,
+        start_date: assignment.start_date,
+        end_date: endDate,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for room assignment removal:", auditError);
+  }
+
   revalidatePath("/admin/rooms");
   revalidatePath("/admin/occupants");
+  revalidatePath(`/admin/occupants/${assignment.occupant_id}`);
   return { success: true };
 }
