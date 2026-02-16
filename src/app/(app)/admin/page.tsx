@@ -87,6 +87,21 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Overrides</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Handle exceptional corrections across occupants, fines, payments, cleaning, events, and evaluation with required reasons.
+            </p>
+            <Button asChild>
+              <Link href="/admin/overrides">Open override center</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
