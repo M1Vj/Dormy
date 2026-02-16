@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { voidFine } from "@/app/actions/fines";
@@ -10,6 +11,7 @@ import {
 } from "@/components/admin/fines/issue-fine-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -62,6 +64,10 @@ type FinesLedgerProps = {
   fines: FineRow[];
   rules: FineRuleOption[];
   occupants: OccupantOption[];
+  filters?: {
+    search?: string;
+    status?: string;
+  };
 };
 
 const initialState = { error: "", success: false };
@@ -173,7 +179,9 @@ function VoidFineDialog({
   );
 }
 
-export function FinesLedger({ dormId, fines, rules, occupants }: FinesLedgerProps) {
+export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesLedgerProps) {
+  const hasFilters = Boolean(filters?.search) || Boolean(filters?.status);
+
   return (
     <Card>
       <CardHeader className="space-y-4">
@@ -186,6 +194,30 @@ export function FinesLedger({ dormId, fines, rules, occupants }: FinesLedgerProp
           </div>
           <IssueFineDialog dormId={dormId} rules={rules} occupants={occupants} />
         </div>
+        <form className="grid gap-2 sm:grid-cols-[1fr_170px_auto_auto] sm:items-center" method="GET">
+          <Input
+            name="search"
+            placeholder="Search occupant, rule, or note"
+            defaultValue={filters?.search ?? ""}
+          />
+          <select
+            name="status"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            defaultValue={filters?.status ?? ""}
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="voided">Voided</option>
+          </select>
+          <Button type="submit" variant="secondary" size="sm">
+            Filter
+          </Button>
+          {hasFilters ? (
+            <Button asChild type="button" variant="ghost" size="sm">
+              <Link href="/admin/fines">Reset</Link>
+            </Button>
+          ) : null}
+        </form>
       </CardHeader>
       <CardContent>
         <div className="space-y-3 md:hidden">

@@ -14,7 +14,27 @@ import {
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function AdminFinesPage() {
+type SearchParams = {
+  search?: string | string[];
+  status?: string | string[];
+};
+
+const normalizeParam = (value?: string | string[]) => {
+  if (Array.isArray(value)) {
+    return value.length ? value[0] : undefined;
+  }
+  return value;
+};
+
+export default async function AdminFinesPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const search = normalizeParam(params?.search)?.trim() || "";
+  const status = normalizeParam(params?.status)?.trim() || "";
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -55,7 +75,10 @@ export default async function AdminFinesPage() {
 
   const [rules, fines, occupants] = await Promise.all([
     getFineRules(activeMembership.dorm_id),
-    getFines(activeMembership.dorm_id),
+    getFines(activeMembership.dorm_id, {
+      search: search || undefined,
+      status: status || undefined,
+    }),
     getOccupants(activeMembership.dorm_id, { status: "active" }),
   ]);
   const dormOptions = await getUserDorms();
@@ -90,6 +113,10 @@ export default async function AdminFinesPage() {
             fines={fines}
             rules={rules}
             occupants={occupants}
+            filters={{
+              search,
+              status,
+            }}
           />
         </TabsContent>
         <TabsContent value="rules">
