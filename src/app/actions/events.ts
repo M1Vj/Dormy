@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { logAuditEvent } from "@/lib/audit/log";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -194,6 +195,28 @@ function parseEventInput(formData: FormData) {
   }
 
   return { data: parsed.data } as const;
+}
+
+async function safeLogEventAudit(input: {
+  dormId: string;
+  actorUserId: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  try {
+    await logAuditEvent({
+      dormId: input.dormId,
+      actorUserId: input.actorUserId,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId ?? null,
+      metadata: input.metadata ?? {},
+    });
+  } catch (error) {
+    console.error(`Failed to write audit event for ${input.action}:`, error);
+  }
 }
 
 async function requireManagerContext() {
@@ -565,6 +588,22 @@ export async function createEvent(formData: FormData) {
   revalidatePath(`/events/${event.id}`);
   revalidatePath("/admin/finance/events");
 
+  await safeLogEventAudit({
+    dormId: manager.context.dormId,
+    actorUserId: manager.context.userId,
+    action: "events.created",
+    entityType: "event",
+    entityId: event.id,
+    metadata: {
+      title: parsed.data.title,
+      starts_at: parsed.data.starts_at,
+      ends_at: parsed.data.ends_at,
+      location: parsed.data.location,
+      is_competition: parsed.data.is_competition,
+      participating_dorm_count: parsed.data.participating_dorm_ids.length,
+    },
+  });
+
   return { success: true, eventId: event.id };
 }
 
@@ -591,7 +630,7 @@ export async function updateEvent(formData: FormData) {
 
   const { data: existingEvent } = await supabase
     .from("events")
-    .select("id")
+    .select("id, title, starts_at, ends_at, location, description, is_competition")
     .eq("id", eventId)
     .eq("dorm_id", manager.context.dormId)
     .maybeSingle();
@@ -631,6 +670,27 @@ export async function updateEvent(formData: FormData) {
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/admin/finance/events");
 
+  const changedFields = [
+    existingEvent.title !== parsed.data.title ? "title" : null,
+    existingEvent.description !== parsed.data.description ? "description" : null,
+    existingEvent.location !== parsed.data.location ? "location" : null,
+    existingEvent.starts_at !== parsed.data.starts_at ? "starts_at" : null,
+    existingEvent.ends_at !== parsed.data.ends_at ? "ends_at" : null,
+    existingEvent.is_competition !== parsed.data.is_competition ? "is_competition" : null,
+  ].filter((field): field is string => Boolean(field));
+
+  await safeLogEventAudit({
+    dormId: manager.context.dormId,
+    actorUserId: manager.context.userId,
+    action: "events.updated",
+    entityType: "event",
+    entityId: eventId,
+    metadata: {
+      changed_fields: changedFields,
+      participating_dorm_count: parsed.data.participating_dorm_ids.length,
+    },
+  });
+
   return { success: true };
 }
 
@@ -652,7 +712,7 @@ export async function deleteEvent(formData: FormData) {
 
   const { data: event } = await supabase
     .from("events")
-    .select("id")
+    .select("id, title, is_competition")
     .eq("id", eventId)
     .eq("dorm_id", manager.context.dormId)
     .maybeSingle();
@@ -686,6 +746,19 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/events");
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/admin/finance/events");
+
+  await safeLogEventAudit({
+    dormId: manager.context.dormId,
+    actorUserId: manager.context.userId,
+    action: "events.deleted",
+    entityType: "event",
+    entityId: eventId,
+    metadata: {
+      title: event.title,
+      is_competition: event.is_competition,
+      deleted_photo_count: photos?.length ?? 0,
+    },
+  });
 
   return { success: true };
 }
@@ -739,26 +812,44 @@ export async function upsertEventRating(formData: FormData) {
     };
   }
 
-  const { error } = await supabase.from("event_ratings").upsert(
-    {
-      dorm_id: context.dormId,
-      event_id: eventId,
-      occupant_id: occupantResult.occupantId,
-      rating: ratingValue,
-      comment: comment || null,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "event_id,occupant_id",
-    }
-  );
+  const { data: upsertedRating, error } = await supabase
+    .from("event_ratings")
+    .upsert(
+      {
+        dorm_id: context.dormId,
+        event_id: eventId,
+        occupant_id: occupantResult.occupantId,
+        rating: ratingValue,
+        comment: comment || null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "event_id,occupant_id",
+      }
+    )
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !upsertedRating) {
+    return { error: error?.message ?? "Failed to submit rating." };
   }
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
+
+  await safeLogEventAudit({
+    dormId: context.dormId,
+    actorUserId: context.userId,
+    action: "events.rating_upserted",
+    entityType: "event_rating",
+    entityId: upsertedRating.id,
+    metadata: {
+      event_id: eventId,
+      occupant_id: occupantResult.occupantId,
+      rating: ratingValue,
+      has_comment: Boolean(comment),
+    },
+  });
 
   return { success: true };
 }
@@ -815,6 +906,19 @@ export async function deleteEventRating(formData: FormData) {
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
+
+  await safeLogEventAudit({
+    dormId: context.dormId,
+    actorUserId: context.userId,
+    action: "events.rating_deleted",
+    entityType: "event_rating",
+    entityId: ratingId,
+    metadata: {
+      event_id: eventId,
+      occupant_id: rating.occupant_id,
+      deleted_by_manager: context.canManageEvents,
+    },
+  });
 
   return { success: true };
 }
@@ -881,20 +985,38 @@ export async function uploadEventPhoto(formData: FormData) {
     return { error: uploadError.message };
   }
 
-  const { error: insertError } = await supabase.from("event_photos").insert({
-    dorm_id: manager.context.dormId,
-    event_id: eventId,
-    storage_path: storagePath,
-    uploaded_by: manager.context.userId,
-  });
+  const { data: createdPhoto, error: insertError } = await supabase
+    .from("event_photos")
+    .insert({
+      dorm_id: manager.context.dormId,
+      event_id: eventId,
+      storage_path: storagePath,
+      uploaded_by: manager.context.userId,
+    })
+    .select("id")
+    .single();
 
-  if (insertError) {
+  if (insertError || !createdPhoto) {
     await supabase.storage.from("event-photos").remove([storagePath]);
-    return { error: insertError.message };
+    return { error: insertError?.message ?? "Failed to save photo record." };
   }
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
+
+  await safeLogEventAudit({
+    dormId: manager.context.dormId,
+    actorUserId: manager.context.userId,
+    action: "events.photo_uploaded",
+    entityType: "event_photo",
+    entityId: createdPhoto.id,
+    metadata: {
+      event_id: eventId,
+      storage_path: storagePath,
+      content_type: photoEntry.type,
+      size_bytes: photoEntry.size,
+    },
+  });
 
   return { success: true };
 }
@@ -949,6 +1071,18 @@ export async function deleteEventPhoto(formData: FormData) {
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
+
+  await safeLogEventAudit({
+    dormId: manager.context.dormId,
+    actorUserId: manager.context.userId,
+    action: "events.photo_deleted",
+    entityType: "event_photo",
+    entityId: photoId,
+    metadata: {
+      event_id: eventId,
+      storage_path: photo.storage_path,
+    },
+  });
 
   return { success: true };
 }
