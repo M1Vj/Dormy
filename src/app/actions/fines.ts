@@ -112,6 +112,16 @@ export async function updateFineRule(
   const parsed = fineRuleSchema.partial().safeParse(rawData);
   if (!parsed.success) return { error: "Invalid data" };
 
+  const { data: existingRule, error: existingRuleError } = await supabase
+    .from("fine_rules")
+    .select("id, active")
+    .eq("dorm_id", dormId)
+    .eq("id", ruleId)
+    .maybeSingle();
+
+  if (existingRuleError || !existingRule) {
+    return { error: existingRuleError?.message ?? "Fine rule not found." };
+  }
 
   const { error } = await supabase
     .from("fine_rules")
@@ -121,11 +131,20 @@ export async function updateFineRule(
 
   if (error) return { error: error.message };
 
+  const updatedActive =
+    typeof parsed.data.active === "boolean" ? parsed.data.active : existingRule.active;
+  const action =
+    updatedActive === false && existingRule.active !== false
+      ? "fines.rule_deleted"
+      : updatedActive === true && existingRule.active === false
+        ? "fines.rule_restored"
+        : "fines.rule_updated";
+
   try {
     await logAuditEvent({
       dormId,
       actorUserId: user?.id ?? null,
-      action: "fines.rule_updated",
+      action,
       entityType: "fine_rule",
       entityId: ruleId,
       metadata: parsed.data,
