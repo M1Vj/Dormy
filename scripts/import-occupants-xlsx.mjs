@@ -1,3 +1,5 @@
+import "./load-env.mjs";
+
 import fs from "node:fs";
 import XLSX from "xlsx";
 import { createClient } from "@supabase/supabase-js";
