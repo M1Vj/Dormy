@@ -22,8 +22,8 @@ Dormy is a dormitory operations web app for **Visayas State University (VSU) —
   - **Important:** `admin` cannot be assigned through the app UI. It must be set in the database.
 - `adviser` / `assistant_adviser`: maintenance ledger and clearance workflows (can provision users, but cannot create `adviser` accounts)
 - `student_assistant`: occupants/rooms, fines, cleaning schedule (can add occupants)
-- `treasurer`: event contributions/collections; clearance-relevant views
-- `event_officer`: events + competition mode
+- `treasurer`: creates payable event contributions with deadlines, records paid users, and handles clearance-relevant finance views
+- `officer`: creates/manages events and competition workflows
 - `occupant`: read-only self view (balances/clearance), can participate in ratings/evaluation
 
 ## Tech Stack

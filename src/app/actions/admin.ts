@@ -13,7 +13,7 @@ const assignableRoles = [
   "adviser",
   "assistant_adviser",
   "occupant",
-  "event_officer",
+  "officer",
 ] as const;
 
 const provisioningRoles = ["admin", "adviser"] as const;
