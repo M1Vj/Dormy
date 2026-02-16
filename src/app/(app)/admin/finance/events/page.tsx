@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
+import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import {
   Table,
   TableBody,
@@ -100,7 +101,11 @@ export default async function EventsFinancePage({
   const canFilterDorm = role === "admin";
   const semesterResult = await ensureActiveSemesterId(activeDormId, supabase);
   if ("error" in semesterResult) {
-    return <div className="p-6 text-sm text-destructive">{semesterResult.error}</div>;
+    return (
+      <div className="p-6 text-sm text-destructive">
+        {semesterResult.error ?? "Failed to resolve active semester."}
+      </div>
+    );
   }
 
   const activeSemester = await getActiveSemester(activeDormId, supabase);
@@ -207,6 +212,7 @@ export default async function EventsFinancePage({
             dormOptions={dormOptions}
             includeDormSelector={canFilterDorm}
           />
+          <LedgerOverwriteDialog dormId={activeDormId} />
         </div>
       </div>
 

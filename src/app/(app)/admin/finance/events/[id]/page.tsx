@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
 import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
+import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -162,7 +163,11 @@ export default async function EventDetailsPage({
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
-    return <div className="p-6 text-sm text-destructive">{semesterResult.error}</div>;
+    return (
+      <div className="p-6 text-sm text-destructive">
+        {semesterResult.error ?? "Failed to resolve active semester."}
+      </div>
+    );
   }
 
   const activeSemester = await getActiveSemester(dormId, supabase);
@@ -288,11 +293,14 @@ export default async function EventDetailsPage({
             ) : null}
           </div>
         </div>
-        <EventPayableDialog
-          dormId={dormId}
-          eventId={eventId}
-          trigger={<Button>Create payable event</Button>}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <LedgerOverwriteDialog dormId={dormId} />
+          <EventPayableDialog
+            dormId={dormId}
+            eventId={eventId}
+            trigger={<Button>Create payable event</Button>}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

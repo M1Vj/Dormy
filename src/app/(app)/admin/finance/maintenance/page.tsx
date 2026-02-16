@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ChargeDialog } from "@/components/finance/charge-dialog";
+import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
@@ -208,6 +209,7 @@ export default async function MaintenancePage({
             dormOptions={dormOptions}
             includeDormSelector={canFilterDorm}
           />
+          <LedgerOverwriteDialog dormId={activeDormId} />
         </div>
       </div>
 
