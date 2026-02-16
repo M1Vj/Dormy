@@ -14,9 +14,10 @@ import { LogOut, Settings, User } from "lucide-react"
 import { logout } from "@/app/actions/auth"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useMounted } from "@/hooks/use-mounted"
+import { getRoleLabel, getRoleSummary } from "@/lib/roles"
 
 export function UserNav() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const mounted = useMounted()
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) || "User"
@@ -54,8 +55,21 @@ export function UserNav() {
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">{email}</p>
+            {role ? (
+              <p className="text-xs leading-none text-muted-foreground">
+                {getRoleLabel(role)}
+              </p>
+            ) : null}
           </div>
         </DropdownMenuLabel>
+        {role ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="font-normal">
+              <p className="text-xs text-muted-foreground">{getRoleSummary(role)}</p>
+            </DropdownMenuLabel>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <User className="mr-2 h-4 w-4" />
