@@ -1,16 +1,31 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import dynamic from "next/dynamic";
 import { format } from "date-fns";
 import { ArrowLeft, Pin, ShieldAlert } from "lucide-react";
 
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import type { DormAnnouncement } from "@/app/actions/announcements";
-import { AnnouncementFormDialog } from "@/components/announcements/announcement-form-dialog";
 import { DeleteAnnouncementButton } from "@/components/announcements/delete-announcement-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const AnnouncementFormDialog = dynamic(
+  () =>
+    import("@/components/announcements/announcement-form-dialog").then(
+      (mod) => mod.AnnouncementFormDialog
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <Button disabled>
+        <span className="opacity-70">New announcement</span>
+      </Button>
+    ),
+  }
+);
 
 const STAFF_ROLES = new Set([
   "admin",
@@ -172,4 +187,3 @@ export default async function AnnouncementsPage() {
     </div>
   );
 }
-
