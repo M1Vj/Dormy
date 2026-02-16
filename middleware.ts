@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-export async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const res = NextResponse.next({
     request: {
       headers: req.headers,
@@ -32,10 +32,11 @@ export async function proxy(req: NextRequest) {
 
   const pathname = req.nextUrl.pathname;
   const isLoginRoute = pathname === "/login";
+  const isAuthCallbackRoute = pathname === "/auth/callback";
   const isDashboardLegacyRoute =
     pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
-  if (!user && !isLoginRoute) {
+  if (!user && !isLoginRoute && !isAuthCallbackRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
@@ -44,14 +45,14 @@ export async function proxy(req: NextRequest) {
 
   if (user && isLoginRoute) {
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/events";
+    redirectUrl.pathname = "/home";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
 
   if (user && isDashboardLegacyRoute) {
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/events";
+    redirectUrl.pathname = "/home";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
@@ -62,3 +63,4 @@ export async function proxy(req: NextRequest) {
 export const config = {
   matcher: ["/login", "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
+
