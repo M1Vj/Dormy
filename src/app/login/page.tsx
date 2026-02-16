@@ -45,7 +45,7 @@ export default function LoginPage() {
               />
             </div>
             <p className="mt-4 text-center text-sm text-muted-foreground">
-              Sign in to continue with your assigned dorm role.
+              Sign in to continue. New users can request dorm access after signing in.
             </p>
             <p className="mt-1 text-center text-xs text-muted-foreground/90">
               Accounts: Student Assistant, Treasurer, Adviser, Occupant, Admin
