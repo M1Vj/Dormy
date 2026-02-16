@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
+import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUserDorms, setActiveDormId } from "@/lib/dorms";
 
@@ -119,6 +120,22 @@ export async function createDorm(formData: FormData) {
 
   if (membershipError) {
     return { error: membershipError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId: dorm.id,
+      actorUserId: user.id,
+      action: "dorm.created",
+      entityType: "dorm",
+      entityId: dorm.id,
+      metadata: {
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for dorm creation:", auditError);
   }
 
   revalidatePath("/admin/dorms");

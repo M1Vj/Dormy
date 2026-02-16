@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
 import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   CleaningArea,
@@ -86,6 +87,7 @@ type CleaningAreaRow = {
 type CleaningWeekRow = {
   id: string;
   dorm_id: string;
+  semester_id: string | null;
   week_start: string;
   rest_level: number | null;
   created_at: string;
@@ -103,6 +105,7 @@ type CleaningRoomRow = {
 type CleaningExceptionRow = {
   id: string;
   dorm_id: string;
+  semester_id: string | null;
   date: string;
   reason: string | null;
   created_at: string;
@@ -334,7 +337,7 @@ async function getViewerContext() {
   return { supabase, viewer } as const;
 }
 
-async function getWeekByStart(dormId: string, weekStart: string) {
+async function getWeekByStart(dormId: string, weekStart: string, semesterId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." } as const;
@@ -342,8 +345,9 @@ async function getWeekByStart(dormId: string, weekStart: string) {
 
   const { data: week, error } = await supabase
     .from("cleaning_weeks")
-    .select("id, dorm_id, week_start, rest_level, created_at, updated_at")
+    .select("id, dorm_id, semester_id, week_start, rest_level, created_at, updated_at")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterId)
     .eq("week_start", weekStart)
     .maybeSingle();
 
@@ -357,7 +361,8 @@ async function getWeekByStart(dormId: string, weekStart: string) {
 async function ensureWeekRecord(
   dormId: string,
   weekStart: string,
-  requestedRestLevel?: number | null
+  requestedRestLevel: number | null | undefined,
+  semesterId: string
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -366,8 +371,9 @@ async function ensureWeekRecord(
 
   const { data: existingWeek, error: existingError } = await supabase
     .from("cleaning_weeks")
-    .select("id, dorm_id, week_start, rest_level, created_at, updated_at")
+    .select("id, dorm_id, semester_id, week_start, rest_level, created_at, updated_at")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterId)
     .eq("week_start", weekStart)
     .maybeSingle();
 
@@ -416,6 +422,7 @@ async function ensureWeekRecord(
       .from("cleaning_weeks")
       .select("rest_level")
       .eq("dorm_id", dormId)
+      .eq("semester_id", semesterId)
       .lt("week_start", weekStart)
       .order("week_start", { ascending: false })
       .limit(1)
@@ -432,10 +439,11 @@ async function ensureWeekRecord(
     .from("cleaning_weeks")
     .insert({
       dorm_id: dormId,
+      semester_id: semesterId,
       week_start: weekStart,
       rest_level: restLevelToUse,
     })
-    .select("id, dorm_id, week_start, rest_level, created_at, updated_at")
+    .select("id, dorm_id, semester_id, week_start, rest_level, created_at, updated_at")
     .single();
 
   if (createError) {
@@ -488,14 +496,28 @@ export async function getCleaningSnapshot(
     return { error: "Invalid week start value." };
   }
 
-  const weekResult = await getWeekByStart(viewer.dormId, selectedWeekStart);
+  const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
+  const weekResult = await getWeekByStart(
+    viewer.dormId,
+    selectedWeekStart,
+    semesterResult.semesterId
+  );
   if ("error" in weekResult) {
     return { error: weekResult.error ?? "Failed to load week data." };
   }
 
   let weekRow = weekResult.week;
   if (!weekRow && viewer.canManage) {
-    const ensured = await ensureWeekRecord(viewer.dormId, selectedWeekStart);
+    const ensured = await ensureWeekRecord(
+      viewer.dormId,
+      selectedWeekStart,
+      undefined,
+      semesterResult.semesterId
+    );
     if ("error" in ensured) {
       return { error: ensured.error ?? "Failed to create cleaning week." };
     }
@@ -577,8 +599,9 @@ export async function getCleaningSnapshot(
 
   const exceptionsResult = await supabase
     .from("cleaning_exceptions")
-    .select("id, dorm_id, date, reason, created_at, updated_at")
+    .select("id, dorm_id, semester_id, date, reason, created_at, updated_at")
     .eq("dorm_id", viewer.dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .gte("date", weekStartForExceptionQuery)
     .lte("date", weekEnd)
     .order("date", { ascending: true });
@@ -873,10 +896,16 @@ export async function upsertCleaningWeek(formData: FormData) {
     return { error: "Invalid week start value." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const ensured = await ensureWeekRecord(
     viewer.dormId,
     weekStart,
-    parsed.data.rest_level ?? null
+    parsed.data.rest_level ?? null,
+    semesterResult.semesterId
   );
 
   if ("error" in ensured) {
@@ -936,10 +965,16 @@ export async function setCleaningRoomAssignment(formData: FormData) {
     return { error: "Invalid week start value." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const ensuredWeek = await ensureWeekRecord(
     viewer.dormId,
     weekStart,
-    parsed.data.rest_level ?? null
+    parsed.data.rest_level ?? null,
+    semesterResult.semesterId
   );
 
   if ("error" in ensuredWeek) {
@@ -1063,10 +1098,16 @@ export async function generateCleaningAssignments(formData: FormData) {
     return { error: "Invalid week start value." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const ensuredWeek = await ensureWeekRecord(
     viewer.dormId,
     weekStart,
-    parsed.data.rest_level ?? null
+    parsed.data.rest_level ?? null,
+    semesterResult.semesterId
   );
 
   if ("error" in ensuredWeek) {
@@ -1224,16 +1265,22 @@ export async function createCleaningException(formData: FormData) {
 
   const isoDate = toIsoDate(date);
 
+  const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data: exceptionRow, error } = await supabase
     .from("cleaning_exceptions")
     .upsert(
       {
         dorm_id: viewer.dormId,
+        semester_id: semesterResult.semesterId,
         date: isoDate,
         reason: parsed.data.reason,
       },
       {
-        onConflict: "dorm_id,date",
+        onConflict: "dorm_id,semester_id,date",
       }
     )
     .select("id")

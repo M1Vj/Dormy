@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
 import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   DormRole,
@@ -379,12 +380,18 @@ export async function getEventsOverview(dormId: string): Promise<EventSummary[]>
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    throw new Error(semesterResult.error ?? "Failed to resolve active semester.");
+  }
+
   const { data: eventRows, error: eventsError } = await supabase
     .from("events")
     .select(
       "id, dorm_id, title, description, location, starts_at, ends_at, is_competition, created_at"
     )
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .order("starts_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 
@@ -439,12 +446,18 @@ export async function getEventDetail(
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    throw new Error(semesterResult.error ?? "Failed to resolve active semester.");
+  }
+
   const { data: eventRow, error: eventError } = await supabase
     .from("events")
     .select(
       "id, dorm_id, title, description, location, starts_at, ends_at, is_competition, created_at"
     )
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .eq("id", eventId)
     .maybeSingle();
 
@@ -556,10 +569,16 @@ export async function createEvent(formData: FormData) {
     return { error: "Supabase is not configured for this environment." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data: event, error } = await supabase
     .from("events")
     .insert({
       dorm_id: manager.context.dormId,
+      semester_id: semesterResult.semesterId,
       title: parsed.data.title,
       description: parsed.data.description,
       location: parsed.data.location,
@@ -628,11 +647,17 @@ export async function updateEvent(formData: FormData) {
     return { error: "Supabase is not configured for this environment." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data: existingEvent } = await supabase
     .from("events")
     .select("id, title, starts_at, ends_at, location, description, is_competition")
     .eq("id", eventId)
     .eq("dorm_id", manager.context.dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .maybeSingle();
 
   if (!existingEvent) {
@@ -710,11 +735,17 @@ export async function deleteEvent(formData: FormData) {
     return { error: "Supabase is not configured for this environment." };
   }
 
+  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data: event } = await supabase
     .from("events")
     .select("id, title, is_competition")
     .eq("id", eventId)
     .eq("dorm_id", manager.context.dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .maybeSingle();
 
   if (!event) {

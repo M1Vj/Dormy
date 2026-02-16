@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
 import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
+import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -159,6 +161,17 @@ export default async function EventDetailsPage({
     );
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return (
+      <div className="p-6 text-sm text-destructive">
+        {semesterResult.error ?? "Failed to resolve active semester."}
+      </div>
+    );
+  }
+
+  const activeSemester = await getActiveSemester(dormId, supabase);
+
   const [{ data: event, error: eventError }, occupants, { data: entries, error: entriesError }] =
     await Promise.all([
       supabase
@@ -166,6 +179,7 @@ export default async function EventDetailsPage({
         .select("id, title, starts_at, description")
         .eq("id", eventId)
         .eq("dorm_id", dormId)
+        .eq("semester_id", semesterResult.semesterId)
         .maybeSingle(),
       getOccupants(dormId, { status: "active" }),
       supabase
@@ -274,13 +288,19 @@ export default async function EventDetailsPage({
             <p className="text-sm text-muted-foreground">
               {event.starts_at ? format(new Date(event.starts_at), "MMMM d, yyyy") : "No date"}
             </p>
+            {activeSemester ? (
+              <p className="text-xs text-muted-foreground">{activeSemester.label}</p>
+            ) : null}
           </div>
         </div>
-        <EventPayableDialog
-          dormId={dormId}
-          eventId={eventId}
-          trigger={<Button>Create payable event</Button>}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <LedgerOverwriteDialog dormId={dormId} />
+          <EventPayableDialog
+            dormId={dormId}
+            eventId={eventId}
+            trigger={<Button>Create payable event</Button>}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
