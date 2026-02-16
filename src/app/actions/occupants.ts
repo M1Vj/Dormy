@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const occupantStatusSchema = z.enum(["active", "left", "removed"]);
+
 const occupantSchema = z.object({
   full_name: z.string().min(2, "Name is required"),
   student_id: z.string().optional(),
@@ -186,6 +188,13 @@ export async function createOccupant(dormId: string, formData: FormData) {
     student_id: formData.get("student_id"),
     classification: formData.get("classification"),
     joined_at: formData.get("joined_at") || new Date().toISOString().split('T')[0],
+    home_address: formData.get("home_address"),
+    birthdate: formData.get("birthdate"),
+    contact_mobile: formData.get("contact_mobile"),
+    contact_email: formData.get("contact_email"),
+    emergency_contact_name: formData.get("emergency_contact_name"),
+    emergency_contact_mobile: formData.get("emergency_contact_mobile"),
+    emergency_contact_relationship: formData.get("emergency_contact_relationship"),
   };
 
   const parsed = occupantSchema.safeParse(rawData);
@@ -202,6 +211,21 @@ export async function createOccupant(dormId: string, formData: FormData) {
       student_id: parsed.data.student_id ? parsed.data.student_id : null,
       classification: parsed.data.classification,
       joined_at: parsed.data.joined_at,
+      home_address: typeof rawData.home_address === "string" && rawData.home_address.trim() ? rawData.home_address.trim() : null,
+      birthdate: typeof rawData.birthdate === "string" && rawData.birthdate.trim() ? rawData.birthdate.trim() : null,
+      contact_mobile: typeof rawData.contact_mobile === "string" && rawData.contact_mobile.trim() ? rawData.contact_mobile.trim() : null,
+      contact_email: typeof rawData.contact_email === "string" && rawData.contact_email.trim()
+        ? rawData.contact_email.trim().toLowerCase()
+        : null,
+      emergency_contact_name: typeof rawData.emergency_contact_name === "string" && rawData.emergency_contact_name.trim()
+        ? rawData.emergency_contact_name.trim()
+        : null,
+      emergency_contact_mobile: typeof rawData.emergency_contact_mobile === "string" && rawData.emergency_contact_mobile.trim()
+        ? rawData.emergency_contact_mobile.trim()
+        : null,
+      emergency_contact_relationship: typeof rawData.emergency_contact_relationship === "string" && rawData.emergency_contact_relationship.trim()
+        ? rawData.emergency_contact_relationship.trim()
+        : null,
       status: "active"
     });
 
@@ -210,6 +234,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
   }
 
   revalidatePath("/occupants");
+  revalidatePath("/admin/occupants");
   return { success: true };
 }
 
@@ -223,6 +248,29 @@ export async function updateOccupant(
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be logged in to update occupants." };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    membershipError ||
+    !membership ||
+    !new Set(["admin", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to update occupants." };
+  }
+
   // We can reuse the same schema for now, or make partial
   const rawData = {
     full_name: formData.get("full_name"),
@@ -230,16 +278,41 @@ export async function updateOccupant(
     classification: formData.get("classification"),
     joined_at: formData.get("joined_at"),
     status: formData.get("status"),
+    home_address: formData.get("home_address"),
+    birthdate: formData.get("birthdate"),
+    contact_mobile: formData.get("contact_mobile"),
+    contact_email: formData.get("contact_email"),
+    emergency_contact_name: formData.get("emergency_contact_name"),
+    emergency_contact_mobile: formData.get("emergency_contact_mobile"),
+    emergency_contact_relationship: formData.get("emergency_contact_relationship"),
   };
 
   // Allow partial updates, but validate stricter if needed. 
   // For simpliciy, reusing logic but manually creating object
   const updates: Record<string, string | number | boolean | null> = {};
-  if (rawData.full_name) updates.full_name = rawData.full_name as string;
-  if (rawData.student_id !== undefined) updates.student_id = (rawData.student_id as string) || null;
-  if (rawData.classification) updates.classification = rawData.classification as string;
-  if (rawData.joined_at) updates.joined_at = rawData.joined_at as string;
-  if (rawData.status) updates.status = rawData.status as string;
+  if (rawData.full_name) updates.full_name = String(rawData.full_name).trim();
+  if (rawData.student_id !== undefined) updates.student_id = String(rawData.student_id ?? "").trim() || null;
+  if (rawData.classification !== undefined) updates.classification = String(rawData.classification ?? "").trim() || null;
+  if (rawData.joined_at) updates.joined_at = String(rawData.joined_at).trim();
+  if (rawData.status) {
+    const parsedStatus = occupantStatusSchema.safeParse(
+      String(rawData.status).trim()
+    );
+    if (!parsedStatus.success) {
+      return { error: "Invalid occupant status." };
+    }
+    updates.status = parsedStatus.data;
+  }
+  if (rawData.home_address !== undefined) updates.home_address = String(rawData.home_address ?? "").trim() || null;
+  if (rawData.birthdate !== undefined) updates.birthdate = String(rawData.birthdate ?? "").trim() || null;
+  if (rawData.contact_mobile !== undefined) updates.contact_mobile = String(rawData.contact_mobile ?? "").trim() || null;
+  if (rawData.contact_email !== undefined) {
+    const value = String(rawData.contact_email ?? "").trim();
+    updates.contact_email = value ? value.toLowerCase() : null;
+  }
+  if (rawData.emergency_contact_name !== undefined) updates.emergency_contact_name = String(rawData.emergency_contact_name ?? "").trim() || null;
+  if (rawData.emergency_contact_mobile !== undefined) updates.emergency_contact_mobile = String(rawData.emergency_contact_mobile ?? "").trim() || null;
+  if (rawData.emergency_contact_relationship !== undefined) updates.emergency_contact_relationship = String(rawData.emergency_contact_relationship ?? "").trim() || null;
 
   const { error } = await supabase
     .from("occupants")
@@ -252,6 +325,8 @@ export async function updateOccupant(
   }
 
   revalidatePath("/occupants");
+  revalidatePath("/admin/occupants");
+  revalidatePath(`/admin/occupants/${occupantId}`);
   revalidatePath(`/occupants/${occupantId}`);
   return { success: true };
 }
