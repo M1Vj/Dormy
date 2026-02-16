@@ -254,7 +254,7 @@ export async function issueFine(dormId: string, formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data, error } = await supabase.from("fines").insert({

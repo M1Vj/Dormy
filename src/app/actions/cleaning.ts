@@ -498,7 +498,7 @@ export async function getCleaningSnapshot(
 
   const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const weekResult = await getWeekByStart(
@@ -898,7 +898,7 @@ export async function upsertCleaningWeek(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const ensured = await ensureWeekRecord(
@@ -967,7 +967,7 @@ export async function setCleaningRoomAssignment(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const ensuredWeek = await ensureWeekRecord(
@@ -1100,7 +1100,7 @@ export async function generateCleaningAssignments(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const ensuredWeek = await ensureWeekRecord(
@@ -1267,7 +1267,7 @@ export async function createCleaningException(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(viewer.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: exceptionRow, error } = await supabase

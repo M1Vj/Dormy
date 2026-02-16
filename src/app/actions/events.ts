@@ -382,7 +382,7 @@ export async function getEventsOverview(dormId: string): Promise<EventSummary[]>
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
-    throw new Error(semesterResult.error);
+    throw new Error(semesterResult.error ?? "Failed to resolve active semester.");
   }
 
   const { data: eventRows, error: eventsError } = await supabase
@@ -448,7 +448,7 @@ export async function getEventDetail(
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
-    throw new Error(semesterResult.error);
+    throw new Error(semesterResult.error ?? "Failed to resolve active semester.");
   }
 
   const { data: eventRow, error: eventError } = await supabase
@@ -571,7 +571,7 @@ export async function createEvent(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: event, error } = await supabase
@@ -649,7 +649,7 @@ export async function updateEvent(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: existingEvent } = await supabase
@@ -737,7 +737,7 @@ export async function deleteEvent(formData: FormData) {
 
   const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: event } = await supabase

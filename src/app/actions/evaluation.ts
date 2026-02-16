@@ -315,7 +315,7 @@ export async function createEvaluationCycle(
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
-    return { error: semesterResult.error };
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: cycle, error } = await supabase
