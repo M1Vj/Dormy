@@ -160,7 +160,7 @@ export async function getFines(
     .from("fines")
     .select(`
       *,
-      occupant:occupants(full_name, room_assignments(room:rooms(code))),
+      occupant:occupants(full_name, student_id, room_assignments(room:rooms(code))),
       rule:fine_rules(title, severity),
       issuer:issued_by(display_name)
     `)
@@ -173,25 +173,34 @@ export async function getFines(
     query = query.is("voided_at", null);
   }
 
-  // Search by occupant name is complex with join.
-  // Supabase doesn't support deep filter on join easily without !inner
-  // We can simple-filter in memory or use !inner if search is present.
-  if (search) {
-    // Filter by note or rule title or occupant name?
-    // This requires !inner join on occupants.
-    // For Simplification in v1: Search only matches note. 
-    // Ideal: use Views or RPC for search.
-    // Let's stick to simple client-side filtering or exact matches for now if complex.
-    // Or filtering by `note` column.
-    query = query.ilike("note", `%${search}%`);
-  }
-
   const { data, error } = await query;
   if (error) {
     console.error(error);
     return [];
   }
-  return data;
+
+  if (!search) {
+    return data;
+  }
+
+  const normalizedSearch = search.toLowerCase();
+  const asFirst = <T,>(value?: T | T[] | null) =>
+    Array.isArray(value) ? value[0] : value;
+
+  return data.filter((fine) => {
+    const occupant = asFirst(fine.occupant);
+    const rule = asFirst(fine.rule);
+
+    const values = [
+      fine.note ?? "",
+      occupant?.full_name ?? "",
+      occupant?.student_id ?? "",
+      rule?.title ?? "",
+      rule?.severity ?? "",
+    ];
+
+    return values.some((value) => value.toLowerCase().includes(normalizedSearch));
+  });
 }
 
 export async function issueFine(dormId: string, formData: FormData) {

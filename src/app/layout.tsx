@@ -16,6 +16,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const isVercelDeployment = process.env.VERCEL === "1";
+
 export const metadata: Metadata = {
   title: {
     default: "Dormy",
@@ -24,6 +26,11 @@ export const metadata: Metadata = {
   description:
     "Dorm operations platform for VSU dormitories: fines, finance, evaluations, events, and cleaning schedules.",
   applicationName: "Dormy",
+  icons: {
+    icon: "/brand/dormy-house.png",
+    shortcut: "/brand/dormy-house.png",
+    apple: "/brand/dormy-house.png",
+  },
 };
 
 export default function RootLayout({
@@ -36,7 +43,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
-          <Analytics />
+          {isVercelDeployment ? <Analytics /> : null}
           <Toaster richColors closeButton />
         </ThemeProvider>
       </body>

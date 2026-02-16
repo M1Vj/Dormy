@@ -1,4 +1,11 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import Link from "next/link";
+
+import { ChargeDialog } from "@/components/finance/charge-dialog";
+import { PaymentDialog } from "@/components/finance/payment-dialog";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -7,14 +14,60 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PaymentDialog } from "@/components/finance/payment-dialog";
-import { ChargeDialog } from "@/components/finance/charge-dialog";
-import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function MaintenancePage() {
+type SearchParams = {
+  search?: string | string[];
+  status?: string | string[];
+};
+
+type LedgerEntry = {
+  ledger?: string | null;
+  voided_at?: string | null;
+  amount_pesos?: number | string | null;
+};
+
+type RoomRef = {
+  code?: string | null;
+};
+
+type RoomAssignment = {
+  room?: RoomRef | RoomRef[] | null;
+};
+
+type OccupantRow = {
+  id: string;
+  full_name?: string | null;
+  room_assignments?: RoomAssignment[] | RoomAssignment | null;
+  ledger_entries?: LedgerEntry[] | null;
+};
+
+type MaintenanceRow = {
+  id: string;
+  full_name: string;
+  roomCode: string | null;
+  balance: number;
+};
+
+const normalizeParam = (value?: string | string[]) => {
+  if (Array.isArray(value)) {
+    return value.length ? value[0] : undefined;
+  }
+  return value;
+};
+
+const asFirst = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] : value);
+
+export default async function MaintenancePage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const search = normalizeParam(params?.search)?.trim() || "";
+  const statusFilter = normalizeParam(params?.status)?.trim() || "";
+
   const activeDormId = await getActiveDormId();
   if (!activeDormId) {
     return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
@@ -54,66 +107,99 @@ export default async function MaintenancePage() {
 
   const canFilterDorm = role === "admin";
 
-
-  // Fetch occupants and their maintenance balances
-  // We can do this efficiently with a query or by fetching all occupants and then aggregate ledger.
-  // For V1, getting all occupants + summing ledger in code or SQL is fine.
-  // SQL View would be better: `occupant_balances`.
-
-  // Let's query ledger entries for 'adviser_maintenance' and group by occupant.
-  // But we need to show ALL active occupants, even with 0 balance.
-
-  const { data: occupants, error } = await supabase
-    .from("occupants")
-    .select(`
-      id,
-      dorm_id,
-      full_name,
-      room_assignments(room:rooms(code)),
-      ledger_entries!left(amount_pesos, ledger, voided_at)
-    `)
-    .eq("dorm_id", activeDormId)
-    .eq("status", "active")
-    .order("full_name");
+  const [{ data: occupants, error }, dormOptions] = await Promise.all([
+    supabase
+      .from("occupants")
+      .select(`
+        id,
+        full_name,
+        room_assignments(room:rooms(code)),
+        ledger_entries!left(amount_pesos, ledger, voided_at)
+      `)
+      .eq("dorm_id", activeDormId)
+      .eq("status", "active")
+      .order("full_name"),
+    getUserDorms(),
+  ]);
 
   if (error) {
-    console.error(error);
-    return <div>Error loading occupants</div>;
+    return <div className="p-6 text-sm text-destructive">Error loading occupants.</div>;
   }
 
-  // Calculate balances
-  const rows = occupants.map(occ => {
-    let balance = 0;
-    // Filter for maintenance ledger and active entries
-    const entries = occ.ledger_entries as { ledger: string; voided_at: string | null; amount_pesos: number }[] || [];
-    entries.forEach((entry) => {
-      if (entry.ledger === 'adviser_maintenance' && !entry.voided_at) {
-        balance += Number(entry.amount_pesos);
-      }
-    });
+  const normalizedSearch = search.toLowerCase();
 
-    // Room code - room_assignments is an array with nested room object
-    const roomAssignments = occ.room_assignments as unknown;
-    const roomCode = (roomAssignments as Array<{ room: { code: string } }>)?.[0]?.room?.code || "No Room";
+  const rows: MaintenanceRow[] = ((occupants ?? []) as OccupantRow[])
+    .map((occupant) => {
+      const entries = occupant.ledger_entries ?? [];
+      const balance = entries.reduce((sum, entry) => {
+        if (entry.ledger !== "adviser_maintenance" || entry.voided_at) {
+          return sum;
+        }
+        return sum + Number(entry.amount_pesos ?? 0);
+      }, 0);
 
-    return {
-      ...occ,
-      roomCode,
-      balance
-    };
-  });
+      const assignment = asFirst(occupant.room_assignments ?? null);
+      const room = asFirst(assignment?.room ?? null);
 
-  // Sort by balance desc (debtors first)
-  rows.sort((a, b) => b.balance - a.balance);
+      return {
+        id: occupant.id,
+        full_name: occupant.full_name?.trim() || "Unnamed occupant",
+        roomCode: room?.code ?? null,
+        balance,
+      };
+    })
+    .filter((row) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        row.full_name.toLowerCase().includes(normalizedSearch) ||
+        (row.roomCode ?? "").toLowerCase().includes(normalizedSearch);
 
-  const totalCollectible = rows.reduce((sum, r) => sum + (r.balance > 0 ? r.balance : 0), 0);
-  const dormOptions = await getUserDorms();
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === "outstanding" && row.balance > 0) ||
+        (statusFilter === "cleared" && row.balance <= 0);
+
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => b.balance - a.balance);
+
+  const totalCollectible = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-xl font-medium">Maintenance Ledger</h3>
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Maintenance ledger</h1>
+          <p className="text-sm text-muted-foreground">
+            Track maintenance balances and collect payments efficiently.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+          <form method="GET" className="grid w-full gap-2 sm:grid-cols-[1fr_170px_auto_auto]">
+            <Input
+              name="search"
+              placeholder="Search occupant or room"
+              defaultValue={search}
+              className="w-full"
+            />
+            <select
+              name="status"
+              defaultValue={statusFilter}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">All balances</option>
+              <option value="outstanding">Outstanding only</option>
+              <option value="cleared">Cleared only</option>
+            </select>
+            <Button type="submit" variant="secondary" size="sm">
+              Filter
+            </Button>
+            {search || statusFilter ? (
+              <Button asChild type="button" variant="ghost" size="sm">
+                <Link href="/admin/finance/maintenance">Reset</Link>
+              </Button>
+            ) : null}
+          </form>
           <ExportXlsxDialog
             report="maintenance-ledger"
             title="Export Maintenance Ledger"
@@ -122,18 +208,35 @@ export default async function MaintenancePage() {
             dormOptions={dormOptions}
             includeDormSelector={canFilterDorm}
           />
-          <Button variant="outline" disabled className="w-full sm:w-auto">Bulk Charge (Soon)</Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Visible Occupants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{rows.length}</div>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Collectible</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₱{totalCollectible.toFixed(2)}</div>
+            <div className="text-2xl font-semibold">₱{totalCollectible.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Outstanding maintenance fees</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Operations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" disabled className="w-full">
+              Bulk Charge (Soon)
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -146,12 +249,12 @@ export default async function MaintenancePage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium">{row.full_name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {row.roomCode === "No Room" ? "No room assigned" : `Room ${row.roomCode}`}
+                    {row.roomCode ? `Room ${row.roomCode}` : "No room assigned"}
                   </p>
                 </div>
                 <p
                   className={`text-right text-sm font-semibold ${
-                    row.balance > 0 ? "text-red-600" : "text-green-600"
+                    row.balance > 0 ? "text-rose-600" : "text-emerald-600"
                   }`}
                 >
                   ₱{row.balance.toFixed(2)}
@@ -205,31 +308,29 @@ export default async function MaintenancePage() {
             {rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">{row.full_name}</TableCell>
-                <TableCell>{row.roomCode}</TableCell>
-                <TableCell className={`text-right font-medium ${row.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                <TableCell>{row.roomCode ?? "No room"}</TableCell>
+                <TableCell
+                  className={`text-right font-medium ${
+                    row.balance > 0 ? "text-rose-600" : "text-emerald-600"
+                  }`}
+                >
                   ₱{row.balance.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <ChargeDialog
-                      dormId={activeDormId}
-                      occupantId={row.id}
-                      category="adviser_maintenance"
-                    />
-                    <PaymentDialog
-                      dormId={activeDormId}
-                      occupantId={row.id}
-                      category="adviser_maintenance"
-                    />
+                    <ChargeDialog dormId={activeDormId} occupantId={row.id} category="adviser_maintenance" />
+                    <PaymentDialog dormId={activeDormId} occupantId={row.id} category="adviser_maintenance" />
                   </div>
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length === 0 && (
+            {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">No occupants found.</TableCell>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  No occupants found.
+                </TableCell>
               </TableRow>
-            )}
+            ) : null}
           </TableBody>
         </Table>
       </div>

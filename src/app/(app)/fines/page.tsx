@@ -1,9 +1,17 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getFines } from "@/app/actions/fines";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+type SearchParams = {
+  search?: string | string[];
+  status?: string | string[];
+};
 
 type RoomRef = {
   code?: string | null;
@@ -36,8 +44,14 @@ type FineRow = {
   rule?: FineRuleRef | FineRuleRef[] | null;
 };
 
-const asFirst = <T,>(value?: T | T[] | null) =>
-  Array.isArray(value) ? value[0] : value;
+const normalizeParam = (value?: string | string[]) => {
+  if (Array.isArray(value)) {
+    return value.length ? value[0] : undefined;
+  }
+  return value;
+};
+
+const asFirst = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] : value);
 
 const formatDate = (value?: string | null) => {
   if (!value) return "-";
@@ -75,7 +89,16 @@ const getRuleLabel = (rule?: FineRuleRef | FineRuleRef[] | null) => {
   return `${ref.title} (${ref.severity})`;
 };
 
-export default async function FinesPage() {
+export default async function FinesPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const search = normalizeParam(params?.search)?.trim() || "";
+  const status = normalizeParam(params?.status)?.trim() || "";
+  const hasFilters = Boolean(search) || Boolean(status);
+
   const dormId = await getActiveDormId();
   if (!dormId) {
     return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
@@ -119,7 +142,11 @@ export default async function FinesPage() {
     redirect("/admin/fines");
   }
 
-  const fines = (await getFines(dormId)) as FineRow[];
+  const fines = (await getFines(dormId, {
+    search: search || undefined,
+    status: status || undefined,
+  })) as FineRow[];
+
   const activeFines = fines.filter((fine) => !fine.voided_at);
   const totalPesos = activeFines.reduce((sum, fine) => sum + Number(fine.pesos ?? 0), 0);
   const totalPoints = activeFines.reduce((sum, fine) => sum + Number(fine.points ?? 0), 0);
@@ -129,11 +156,11 @@ export default async function FinesPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Fines</h1>
         <p className="text-sm text-muted-foreground">
-          View fines visible to your role and current dorm membership.
+          Review your dorm fines, points deductions, and current status.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Visible Entries</CardTitle>
@@ -161,11 +188,90 @@ export default async function FinesPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Fines Ledger</CardTitle>
+        <CardHeader className="space-y-4">
+          <CardTitle className="text-base">Fines ledger</CardTitle>
+          <form className="grid gap-2 sm:grid-cols-[1fr_170px_auto_auto]" method="GET">
+            <Input
+              name="search"
+              placeholder="Search occupant, rule, or note"
+              defaultValue={search}
+            />
+            <select
+              name="status"
+              defaultValue={status}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="voided">Voided</option>
+            </select>
+            <Button type="submit" variant="secondary" size="sm">
+              Filter
+            </Button>
+            {hasFilters ? (
+              <Button asChild type="button" variant="ghost" size="sm">
+                <Link href="/fines">Reset</Link>
+              </Button>
+            ) : null}
+          </form>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {fines.map((fine) => {
+              const roomCode = getRoomCode(fine.occupant);
+              const isVoided = Boolean(fine.voided_at);
+
+              return (
+                <div key={fine.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{getOccupantName(fine.occupant)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {roomCode ? `Room ${roomCode}` : "No room"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                        isVoided
+                          ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      }`}
+                    >
+                      {isVoided ? "Voided" : "Active"}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs">
+                    <p>
+                      <span className="text-muted-foreground">Rule:</span> {getRuleLabel(fine.rule)}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Issued:</span> {formatDate(fine.issued_at ?? fine.created_at)}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Amount:</span> ₱{formatAmount(fine.pesos)} · {formatAmount(fine.points)} pts
+                    </p>
+                    {fine.note ? (
+                      <p>
+                        <span className="text-muted-foreground">Note:</span> {fine.note}
+                      </p>
+                    ) : null}
+                    {isVoided && fine.void_reason ? (
+                      <p>
+                        <span className="text-muted-foreground">Void reason:</span> {fine.void_reason}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+            {!fines.length ? (
+              <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No fines are visible for your current role.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
                 <tr className="border-b">

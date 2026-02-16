@@ -57,7 +57,7 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">User management</h1>
           <p className="text-sm text-muted-foreground">
@@ -74,7 +74,29 @@ export default async function AdminUsersPage() {
           <CardTitle className="text-base">Dorm members</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {(members ?? []).map((member) => {
+              const profile = Array.isArray(member.profiles)
+                ? member.profiles[0]
+                : member.profiles
+
+              return (
+                <div key={member.user_id} className="rounded-lg border p-3">
+                  <p className="font-medium">{profile?.display_name ?? "Unassigned"}</p>
+                  <p className="text-xs capitalize text-muted-foreground">
+                    {member.role.replace(/_/g, " ")}
+                  </p>
+                </div>
+              )
+            })}
+            {!(members ?? []).length ? (
+              <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No members yet.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
                 <tr className="border-b">

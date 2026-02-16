@@ -31,14 +31,16 @@ export default async function AppLayout({
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
                 <Link href="/" className="flex items-center gap-2">
-                  <Image
-                    src="/brand/dormy-house.png"
-                    alt=""
-                    width={28}
-                    height={28}
-                    className="h-7 w-7"
-                    priority
-                  />
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-muted/35">
+                    <Image
+                      src="/brand/dormy-house.png"
+                      alt="Dormy mark"
+                      width={20}
+                      height={20}
+                      className="h-5 w-5"
+                      priority
+                    />
+                  </span>
                   <span className="font-semibold">Dormy</span>
                 </Link>
                 <HeaderRoleChip />

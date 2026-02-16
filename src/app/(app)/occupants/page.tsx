@@ -94,7 +94,44 @@ export default async function OccupantsPage() {
           <CardTitle className="text-base">Active Occupants</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {occupants.map((occupant) => {
+              const assignment = occupant.current_room_assignment;
+              const roomRef = asFirst(asFirst(assignment?.room ?? null));
+              const levelLabel =
+                roomRef?.level === null || roomRef?.level === undefined
+                  ? "Unassigned level"
+                  : `Level ${roomRef.level}`;
+
+              return (
+                <div key={occupant.id} className="rounded-lg border p-3">
+                  <p className="font-medium">{occupant.full_name ?? "Unnamed"}</p>
+                  <p className="text-xs text-muted-foreground">{occupant.classification ?? "-"}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Student ID</p>
+                      <p>{occupant.student_id ?? "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Room</p>
+                      <p>{roomRef?.code ? `Room ${roomRef.code}` : "Unassigned"}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-muted-foreground">Level</p>
+                      <p>{levelLabel}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {!occupants.length ? (
+              <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                No active occupants found.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
                 <tr className="border-b">
@@ -115,7 +152,9 @@ export default async function OccupantsPage() {
                       <td className="px-3 py-2 font-medium">{occupant.full_name ?? "Unnamed"}</td>
                       <td className="px-3 py-2">{occupant.classification ?? "-"}</td>
                       <td className="px-3 py-2">{occupant.student_id ?? "-"}</td>
-                      <td className="px-3 py-2">{roomRef?.code ? `Room ${roomRef.code}` : "Unassigned"}</td>
+                      <td className="px-3 py-2">
+                        {roomRef?.code ? `Room ${roomRef.code}` : "Unassigned"}
+                      </td>
                       <td className="px-3 py-2">
                         {roomRef?.level === null || roomRef?.level === undefined
                           ? "-"
