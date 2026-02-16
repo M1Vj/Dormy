@@ -60,12 +60,12 @@ const getLooseNameKey = (value) => {
   const parts = name.split(",");
   if (parts.length < 2) {
     const first = name.split(" ")[0] ?? "";
-    return `${name}:${first.slice(0, 5)}`;
+    return `${name}:${first.slice(0, 3)}`;
   }
   const last = parts[0].trim();
   const rest = parts.slice(1).join(",").trim();
   const firstToken = rest.split(" ")[0] ?? "";
-  return `${last}:${firstToken.slice(0, 5)}`;
+  return `${last}:${firstToken.slice(0, 3)}`;
 };
 
 const formatDate = (date) => {
@@ -229,8 +229,7 @@ const baseRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 const byRoomRows = XLSX.utils.sheet_to_json(byRoomSheet, { defval: "" });
 
 const occupantsByKey = new Map();
-const occupantLooseKeyToKey = new Map();
-const ambiguousLooseKeys = new Set();
+const occupantLooseKeyToKeys = new Map(); // looseKey -> occupantKey[]
 
 const upsertOccupantData = (occupant) => {
   if (!occupant?.full_name) return;
@@ -255,20 +254,9 @@ for (const row of baseRows) {
   upsertOccupantData(occupant);
 }
 
-for (const [key, occ] of occupantsByKey.entries()) {
-  const loose = getLooseNameKey(occ.full_name);
-  if (!loose) continue;
-  if (ambiguousLooseKeys.has(loose)) continue;
-  if (occupantLooseKeyToKey.has(loose)) {
-    occupantLooseKeyToKey.delete(loose);
-    ambiguousLooseKeys.add(loose);
-    continue;
-  }
-  occupantLooseKeyToKey.set(loose, key);
-}
-
 const assignmentsByKey = new Map(); // occupantKey -> roomNumber
 const roomOrder = new Map(); // roomNumber -> occupantKey[] in source order
+const bigbrodsKeys = new Set();
 
 const pushRoomOrder = (roomNumber, occupantKey) => {
   const list = roomOrder.get(roomNumber) ?? [];
@@ -277,6 +265,7 @@ const pushRoomOrder = (roomNumber, occupantKey) => {
 };
 
 let currentRoomNumber = null;
+let inBigbrodsList = false;
 for (const row of byRoomRows) {
   const rawName = clean(getRowValue(row, ["Name"]));
   const nameKey = normalizeNameKey(rawName);
@@ -286,12 +275,14 @@ for (const row of byRoomRows) {
   if (roomMatch) {
     currentRoomNumber = Number.parseInt(roomMatch[1], 10);
     if (Number.isNaN(currentRoomNumber)) currentRoomNumber = null;
+    inBigbrodsList = false;
     continue;
   }
 
   if (nameKey === "name") continue;
   if (nameKey === "bigbrods") {
     currentRoomNumber = null;
+    inBigbrodsList = true;
     continue;
   }
 
@@ -301,7 +292,17 @@ for (const row of byRoomRows) {
   if (currentRoomNumber) {
     assignmentsByKey.set(nameKey, currentRoomNumber);
     pushRoomOrder(currentRoomNumber, nameKey);
+  } else if (inBigbrodsList) {
+    bigbrodsKeys.add(nameKey);
   }
+}
+
+for (const [key, occ] of occupantsByKey.entries()) {
+  const loose = getLooseNameKey(occ.full_name);
+  if (!loose) continue;
+  const list = occupantLooseKeyToKeys.get(loose) ?? [];
+  if (!list.includes(key)) list.push(key);
+  occupantLooseKeyToKeys.set(loose, list);
 }
 
 if (bigbrodsRoomsWorkbookPath) {
@@ -349,11 +350,21 @@ if (bigbrodsRoomsWorkbookPath) {
       }
 
       const loose = getLooseNameKey(nameCell);
-      if (!loose || ambiguousLooseKeys.has(loose)) continue;
-      const resolved = occupantLooseKeyToKey.get(loose);
-      if (!resolved) continue;
-      assignmentsByKey.set(resolved, bbRoomNumber);
-      pushRoomOrder(bbRoomNumber, resolved);
+      if (!loose) continue;
+      const candidates = occupantLooseKeyToKeys.get(loose) ?? [];
+      if (candidates.length === 1) {
+        assignmentsByKey.set(candidates[0], bbRoomNumber);
+        pushRoomOrder(bbRoomNumber, candidates[0]);
+        continue;
+      }
+
+      if (candidates.length > 1) {
+        const scoped = candidates.filter((key) => bigbrodsKeys.has(key));
+        if (scoped.length === 1) {
+          assignmentsByKey.set(scoped[0], bbRoomNumber);
+          pushRoomOrder(bbRoomNumber, scoped[0]);
+        }
+      }
     }
   }
 }
@@ -517,6 +528,13 @@ const splitRoom = (roomNumber, codes, maxPerCode) => {
 
 splitRoom(4, ["4a", "4b"], 5);
 splitRoom(10, ["10a", "10b"], 5);
+
+const occupantKeys = Array.from(occupantIdByKey.keys());
+const unassigned = occupantKeys.filter((key) => !desiredRoomCodeByKey.has(key));
+if (unassigned.length) {
+  console.error(`Missing room assignment for ${unassigned.length} occupant(s).`);
+  process.exit(1);
+}
 
 const roomCounts = {};
 for (const code of desiredRoomCodeByKey.values()) {
