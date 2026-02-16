@@ -455,7 +455,54 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            <div className="space-y-3 md:hidden">
+              {snapshot.room_plans.map((plan) => (
+                <div key={plan.room_id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium">Room {plan.room_code}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Level {plan.room_level} · {plan.occupant_count} occupant(s)
+                      </p>
+                    </div>
+                    {plan.is_rest_week ? (
+                      <Badge variant="secondary">Rest Week</Badge>
+                    ) : (
+                      <Badge variant="outline">{plan.area_name ?? "Unassigned"}</Badge>
+                    )}
+                  </div>
+                  {canManage && !plan.is_rest_week ? (
+                    <form onSubmit={handleSetAssignment} className="mt-3 space-y-2">
+                      <input type="hidden" name="room_id" value={plan.room_id} />
+                      <select
+                        name="area_id"
+                        defaultValue={plan.area_id ?? ""}
+                        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                      >
+                        <option value="">Unassigned</option>
+                        {activeAreas.map((area) => (
+                          <option key={area.id} value={area.id}>
+                            {area.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button size="sm" variant="outline" disabled={isPending} className="w-full">
+                        <Save className="mr-1.5 size-3.5" />
+                        Save Assignment
+                      </Button>
+                    </form>
+                  ) : (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {plan.is_rest_week
+                        ? "No assignment needed for this room this week."
+                        : plan.area_name ?? "Pending assignment"}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
