@@ -170,7 +170,7 @@ const issueFineSchema = z.object({
 
 export async function getFines(
   dormId: string,
-  { search, status }: { search?: string; status?: string } = {}
+  { search, status, occupantId }: { search?: string; status?: string; occupantId?: string } = {}
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -199,6 +199,10 @@ export async function getFines(
     query = query.not("voided_at", "is", null);
   } else if (status === "active") {
     query = query.is("voided_at", null);
+  }
+
+  if (occupantId) {
+    query = query.eq("occupant_id", occupantId);
   }
 
   const { data, error } = await query;
