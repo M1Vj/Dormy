@@ -11,14 +11,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Settings, User } from "lucide-react"
+import { LogOut, Settings, User, ArrowLeftRight } from "lucide-react"
 import { logout } from "@/app/actions/auth"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useMounted } from "@/hooks/use-mounted"
 import { getRoleLabel, getRoleSummary } from "@/lib/roles"
 
 export function UserNav() {
-  const { user, role } = useAuth()
+  const {
+    user,
+    role,
+    actualRole,
+    isOccupantMode,
+    canToggleOccupantMode,
+    toggleOccupantMode,
+  } = useAuth()
   const mounted = useMounted()
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) || "User"
@@ -59,6 +66,11 @@ export function UserNav() {
             {role ? (
               <p className="text-xs leading-none text-muted-foreground">
                 {getRoleLabel(role)}
+                {isOccupantMode && actualRole ? (
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">
+                    (viewing as Occupant)
+                  </span>
+                ) : null}
               </p>
             ) : null}
           </div>
@@ -69,6 +81,19 @@ export function UserNav() {
             <DropdownMenuLabel className="font-normal">
               <p className="text-xs text-muted-foreground">{getRoleSummary(role)}</p>
             </DropdownMenuLabel>
+          </>
+        ) : null}
+        {canToggleOccupantMode ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleOccupantMode}>
+              <ArrowLeftRight className="mr-2 h-4 w-4" />
+              <span>
+                {isOccupantMode
+                  ? `Switch to ${getRoleLabel(actualRole)} view`
+                  : "Switch to Occupant view"}
+              </span>
+            </DropdownMenuItem>
           </>
         ) : null}
         <DropdownMenuSeparator />

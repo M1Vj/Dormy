@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  BarChart3,
   Calendar,
   FileText,
   Home,
@@ -40,6 +41,7 @@ const items = [
   { title: "Cleaning", url: "/cleaning", icon: Calendar },
   { title: "Evaluation", url: "/evaluation", icon: Shield },
   { title: "Events", url: "/events", icon: Calendar },
+  { title: "Reporting", url: "/admin/reporting", icon: BarChart3 },
   { title: "AI", url: "/ai", icon: Sparkles },
   { title: "Admin", url: "/admin", icon: Settings },
 ]
@@ -94,6 +96,10 @@ export function AppSidebar() {
 
     if (item.url === "/ai") {
       return role ? aiRoles.has(role) : false
+    }
+
+    if (item.url === "/admin/reporting") {
+      return new Set(["admin", "treasurer", "student_assistant", "adviser"]).has(role)
     }
 
     if (item.url === "/join") {

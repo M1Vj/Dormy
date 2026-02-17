@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -26,11 +26,28 @@ export const metadata: Metadata = {
   description:
     "Dorm operations platform for VSU dormitories: fines, finance, evaluations, events, and cleaning schedules.",
   applicationName: "Dormy",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Dormy",
+  },
   icons: {
     icon: "/brand/dormy-house.png",
     shortcut: "/brand/dormy-house.png",
     apple: "/brand/dormy-house.png",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default function RootLayout({
@@ -46,6 +63,17 @@ export default function RootLayout({
           {isVercelDeployment ? <Analytics /> : null}
           <Toaster richColors closeButton />
         </ThemeProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js');
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

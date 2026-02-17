@@ -16,11 +16,27 @@ import { roles, type AppRole } from "@/lib/roles";
 
 export { roles };
 
+/** Roles that are also occupants and can toggle to occupant mode */
+const OCCUPANT_ELIGIBLE_ROLES = new Set<AppRole>([
+  "student_assistant",
+  "treasurer",
+  "officer",
+]);
+
 interface AuthContextValue {
   user: User | null;
+  /** The actual role from the database */
+  actualRole: AppRole | null;
+  /** The currently active role (may be overridden to 'occupant') */
   role: AppRole | null;
   dormId: string | null;
   isLoading: boolean;
+  /** Whether occupant mode is currently active */
+  isOccupantMode: boolean;
+  /** Whether this user can toggle to occupant mode */
+  canToggleOccupantMode: boolean;
+  /** Toggle between actual role and occupant mode */
+  toggleOccupantMode: () => void;
   refresh: () => Promise<void>;
 }
 
@@ -35,15 +51,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [actualRole, setActualRole] = useState<AppRole | null>(null);
   const [dormId, setDormId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOccupantMode, setIsOccupantMode] = useState(false);
   const refreshInProgress = useRef(false);
+
+  const canToggleOccupantMode = Boolean(
+    actualRole && OCCUPANT_ELIGIBLE_ROLES.has(actualRole)
+  );
+
+  const role = isOccupantMode && canToggleOccupantMode ? "occupant" : actualRole;
+
+  const toggleOccupantMode = useCallback(() => {
+    if (!canToggleOccupantMode) return;
+    setIsOccupantMode((prev) => !prev);
+  }, [canToggleOccupantMode]);
 
   const refresh = useCallback(async () => {
     if (!supabase) {
       setUser(null);
-      setRole(null);
+      setActualRole(null);
       setDormId(null);
       return;
     }
@@ -70,10 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .limit(1)
           .maybeSingle();
 
-        setRole((membership?.role as AppRole) ?? null);
+        setActualRole((membership?.role as AppRole) ?? null);
         setDormId(membership?.dorm_id ?? null);
       } else {
-        setRole(null);
+        setActualRole(null);
         setDormId(null);
       }
     } catch (error) {
@@ -110,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, supabase]);
 
   useEffect(() => {
-    if (!user || role) {
+    if (!user || actualRole) {
       return;
     }
 
@@ -119,11 +147,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 8000);
 
     return () => window.clearInterval(interval);
-  }, [refresh, role, user]);
+  }, [refresh, actualRole, user]);
 
   const value = useMemo(
-    () => ({ user, role, dormId, isLoading, refresh }),
-    [user, role, dormId, isLoading, refresh]
+    () => ({
+      user,
+      actualRole,
+      role,
+      dormId,
+      isLoading,
+      isOccupantMode,
+      canToggleOccupantMode,
+      toggleOccupantMode,
+      refresh,
+    }),
+    [
+      user,
+      actualRole,
+      role,
+      dormId,
+      isLoading,
+      isOccupantMode,
+      canToggleOccupantMode,
+      toggleOccupantMode,
+      refresh,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
