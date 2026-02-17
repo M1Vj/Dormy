@@ -120,23 +120,23 @@ type CleaningAssignmentRow = {
   area_id: string;
   created_at: string;
   room:
-    | {
-        code: string;
-        level: number;
-      }
-    | {
-        code: string;
-        level: number;
-      }[]
-    | null;
+  | {
+    code: string;
+    level: number;
+  }
+  | {
+    code: string;
+    level: number;
+  }[]
+  | null;
   area:
-    | {
-        name: string;
-      }
-    | {
-        name: string;
-      }[]
-    | null;
+  | {
+    name: string;
+  }
+  | {
+    name: string;
+  }[]
+  | null;
 };
 
 type ViewerContext = {
@@ -1162,6 +1162,26 @@ export async function generateCleaningAssignments(formData: FormData) {
     };
   }
 
+  // Smart rotation: fetch past assignment history to determine least-recently-assigned areas
+  const { data: pastAssignments } = await supabase
+    .from("cleaning_assignments")
+    .select("room_id, area_id, created_at")
+    .eq("dorm_id", viewer.dormId)
+    .order("created_at", { ascending: false });
+
+  // Build a map: room_id → area_id → last assigned timestamp
+  const roomAreaHistory = new Map<string, Map<string, string>>();
+  for (const pa of (pastAssignments ?? []) as Array<{ room_id: string; area_id: string; created_at: string }>) {
+    if (!roomAreaHistory.has(pa.room_id)) {
+      roomAreaHistory.set(pa.room_id, new Map());
+    }
+    const areaMap = roomAreaHistory.get(pa.room_id)!;
+    // Only keep the most recent assignment per area (first seen = most recent due to DESC order)
+    if (!areaMap.has(pa.area_id)) {
+      areaMap.set(pa.area_id, pa.created_at);
+    }
+  }
+
   const gardenArea =
     areas.find((area) => area.name.toLowerCase().includes("garden")) ?? null;
 
@@ -1171,13 +1191,29 @@ export async function generateCleaningAssignments(formData: FormData) {
 
   const fallbackAreas = nonGardenAreas.length ? nonGardenAreas : areas;
 
-  const gardenRoomId = gardenArea
-    ? activeRooms[Math.floor(Math.random() * activeRooms.length)]?.id ?? null
-    : null;
+  // For garden area: find the room that had it least recently
+  let gardenRoomId: string | null = null;
+  if (gardenArea) {
+    let leastRecentGardenTime = Infinity;
+    let leastRecentGardenRoom = activeRooms[0]?.id ?? null;
 
-  let rotationIndex = 0;
+    for (const room of activeRooms) {
+      const areaMap = roomAreaHistory.get(room.id);
+      const lastGardenTime = areaMap?.get(gardenArea.id);
+      const timestamp = lastGardenTime ? new Date(lastGardenTime).getTime() : 0;
+      if (timestamp < leastRecentGardenTime) {
+        leastRecentGardenTime = timestamp;
+        leastRecentGardenRoom = room.id;
+      }
+    }
+    gardenRoomId = leastRecentGardenRoom;
+  }
+
+  // For each room, sort available areas by least-recently-assigned
+  const usedAreaIds = new Set<string>();
   const assignments = activeRooms.map((room) => {
     if (gardenArea && room.id === gardenRoomId) {
+      usedAreaIds.add(gardenArea.id);
       return {
         dorm_id: viewer.dormId,
         cleaning_week_id: ensuredWeek.week.id,
@@ -1186,8 +1222,25 @@ export async function generateCleaningAssignments(formData: FormData) {
       };
     }
 
-    const selectedArea = fallbackAreas[rotationIndex % fallbackAreas.length];
-    rotationIndex += 1;
+    const areaMap = roomAreaHistory.get(room.id);
+
+    // Score each area: lower timestamp = haven't done it recently = preferred
+    const scoredAreas = fallbackAreas
+      .filter((a) => !usedAreaIds.has(a.id)) // prefer unused areas this week
+      .map((area) => {
+        const lastTime = areaMap?.get(area.id);
+        return {
+          area,
+          score: lastTime ? new Date(lastTime).getTime() : 0, // 0 = never assigned = most preferred
+        };
+      })
+      .sort((a, b) => a.score - b.score);
+
+    // Pick the least-recently-assigned area, or fallback to any available
+    const selectedArea =
+      scoredAreas[0]?.area ?? fallbackAreas[0];
+
+    usedAreaIds.add(selectedArea.id);
 
     return {
       dorm_id: viewer.dormId,
