@@ -121,8 +121,8 @@ export default async function AdminFineReportDetailPage({
       .select(
         `
         *,
-        reporter:occupants(full_name, student_id, user_id),
-        reported:occupants(full_name, student_id),
+        reporter:occupants!fine_reports_reporter_occupant_id_fkey(full_name, student_id, user_id),
+        reported:occupants!fine_reports_reported_occupant_id_fkey(full_name, student_id),
         rule:fine_rules(title, severity)
       `
       )
@@ -311,4 +311,3 @@ export default async function AdminFineReportDetailPage({
     </div>
   );
 }
-
