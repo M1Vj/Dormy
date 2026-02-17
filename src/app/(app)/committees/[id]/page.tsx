@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 import { format } from "date-fns";
 
 import { getEventDormOptions } from "@/app/actions/events";
-import { getCommittee, type CommitteeMemberRole } from "@/app/actions/committees";
+import { getCommittee, getCommitteeFinanceSummary, type CommitteeMemberRole } from "@/app/actions/committees";
+import { getCommitteeAnnouncements } from "@/app/actions/announcements";
+import { AnnouncementFormSlot } from "@/components/announcements/announcement-form-slot";
+import { DeleteAnnouncementButton } from "@/components/announcements/delete-announcement-button";
 import { getOccupants } from "@/app/actions/occupants";
 import { AddMemberDialog } from "@/components/admin/committees/add-member-dialog";
 import { RemoveMemberButton } from "@/components/admin/committees/remove-member-button";
@@ -107,6 +110,20 @@ export default async function CommitteeDetailsPage({
 
   const events = committee.events ?? [];
 
+  const [{ announcements: committeeAnnouncements }, financeSummaryResult] = await Promise.all([
+    getCommitteeAnnouncements(dormId, committee.id, { limit: 8 }),
+    getCommitteeFinanceSummary(committee.id),
+  ]);
+
+  const financeSummary = financeSummaryResult.data ?? [];
+  const incomeCharged = financeSummary.reduce((sum, row) => sum + row.charged_pesos, 0);
+  const incomeCollected = financeSummary.reduce((sum, row) => sum + row.collected_pesos, 0);
+  const incomeOutstanding = financeSummary.reduce((sum, row) => sum + row.balance_pesos, 0);
+
+  const topIncomeEvents = financeSummary
+    .filter((row) => row.charged_pesos > 0 || row.collected_pesos > 0)
+    .slice(0, 6);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -171,6 +188,61 @@ export default async function CommitteeDetailsPage({
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1">
+                <CardTitle>Announcements</CardTitle>
+                <CardDescription>
+                  Updates from the committee. Posts can be shared to committee members or the whole dorm.
+                </CardDescription>
+              </div>
+              {canManageCommittee ? (
+                <AnnouncementFormSlot dormId={dormId} mode="create" committeeId={committee.id} />
+              ) : null}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {committeeAnnouncements.length ? (
+                committeeAnnouncements.map((announcement) => (
+                  <div key={announcement.id} className="rounded-lg border p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{announcement.title}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {announcement.starts_at
+                            ? format(new Date(announcement.starts_at), "MMM d, yyyy h:mm a")
+                            : "Published"}
+                          {" · "}
+                          {announcement.audience === "committee" ? "Committee members" : "Whole dorm"}
+                        </p>
+                      </div>
+                      {canManageCommittee ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <AnnouncementFormSlot
+                            dormId={dormId}
+                            mode="edit"
+                            announcement={announcement}
+                            committeeId={committee.id}
+                            trigger={
+                              <button className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+                                Edit
+                              </button>
+                            }
+                          />
+                          <DeleteAnnouncementButton dormId={dormId} announcementId={announcement.id} />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 whitespace-pre-line text-sm">{announcement.body}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-lg border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+                  No announcements posted yet.
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-6">
@@ -185,9 +257,43 @@ export default async function CommitteeDetailsPage({
               ) : null}
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-4">
-                <span className="text-sm font-medium">Total Approved Expenses</span>
-                <span className="text-lg font-bold">₱{totalApproved.toFixed(2)}</span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Event income collected</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-600">₱{incomeCollected.toFixed(2)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Charged ₱{incomeCharged.toFixed(2)} · Outstanding ₱{incomeOutstanding.toFixed(2)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Approved expenses</p>
+                  <p className="mt-1 text-2xl font-bold">₱{totalApproved.toFixed(2)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Only approved expenses are included here.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold">Event income</h4>
+                {financeSummaryResult.error ? (
+                  <p className="text-xs text-muted-foreground">{financeSummaryResult.error}</p>
+                ) : null}
+                {topIncomeEvents.map((row) => (
+                  <div key={row.event_id} className="flex items-start justify-between gap-3 border-b py-2 text-sm last:border-0">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{row.event_title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Charged ₱{row.charged_pesos.toFixed(2)} · Collected ₱{row.collected_pesos.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs text-muted-foreground">Outstanding</p>
+                      <p className="font-semibold">₱{row.balance_pesos.toFixed(2)}</p>
+                    </div>
+                  </div>
+                ))}
+                {!topIncomeEvents.length ? (
+                  <p className="text-xs text-muted-foreground">No event income recorded yet.</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">

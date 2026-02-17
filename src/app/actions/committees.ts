@@ -396,3 +396,57 @@ export async function getCommittee(committeeId: string) {
 
   return { data: formatted };
 }
+
+type CommitteeFinanceRpcRow = {
+  event_id: string;
+  event_title: string;
+  charged_pesos: number | string | null;
+  collected_pesos: number | string | null;
+};
+
+export type CommitteeFinanceSummaryRow = {
+  event_id: string;
+  event_title: string;
+  charged_pesos: number;
+  collected_pesos: number;
+  balance_pesos: number;
+};
+
+function asNumber(value: unknown) {
+  const parsed = Number(value ?? 0);
+  if (Number.isNaN(parsed)) return 0;
+  return parsed;
+}
+
+export async function getCommitteeFinanceSummary(committeeId: string) {
+  const parsed = z.string().uuid().safeParse(committeeId);
+  if (!parsed.success) {
+    return { error: "Invalid committee id.", data: [] as CommitteeFinanceSummaryRow[] };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured.", data: [] as CommitteeFinanceSummaryRow[] };
+
+  const { data, error } = await supabase.rpc("get_committee_finance_summary", {
+    p_committee_id: parsed.data,
+  });
+
+  if (error) {
+    return { error: error.message, data: [] as CommitteeFinanceSummaryRow[] };
+  }
+
+  const rows = (data ?? []) as CommitteeFinanceRpcRow[];
+  const normalized = rows.map((row) => {
+    const charged = asNumber(row.charged_pesos);
+    const collected = asNumber(row.collected_pesos);
+    return {
+      event_id: row.event_id,
+      event_title: row.event_title,
+      charged_pesos: charged,
+      collected_pesos: collected,
+      balance_pesos: Math.max(0, charged - collected),
+    };
+  });
+
+  return { data: normalized as CommitteeFinanceSummaryRow[], error: "" };
+}
