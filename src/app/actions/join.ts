@@ -6,6 +6,7 @@ import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js
 
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPublicBaseUrl } from "@/lib/public-url";
 
 const assignableRoles = [
   "student_assistant",
@@ -438,6 +439,43 @@ export async function createDormInvite(formData: FormData) {
     console.error("Failed to write audit event for invite:", auditError);
   }
 
+  try {
+    const { sendEmail, renderDormInviteEmail } = await import("@/lib/email");
+    const baseUrl = getPublicBaseUrl();
+    const joinUrl = `${baseUrl}/join`;
+
+    const roleLabel = parsed.data.role
+      .split("_")
+      .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+
+    const { data: dorm } = await adminClient
+      .from("dorms")
+      .select("name")
+      .eq("id", parsed.data.dormId)
+      .maybeSingle();
+
+    const rendered = renderDormInviteEmail({
+      dormName: dorm?.name?.trim() || "Dorm",
+      roleLabel,
+      joinUrl,
+      note: parsed.data.note ?? null,
+    });
+
+    const result = await sendEmail({
+      to: parsed.data.email,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+    });
+
+    if (!result.success) {
+      console.warn("Invite email could not be sent:", result.error);
+    }
+  } catch (emailError) {
+    console.error("Failed to send invite email:", emailError);
+  }
+
   revalidatePath("/admin/users");
   return { success: true };
 }
@@ -619,4 +657,3 @@ export async function reviewDormApplication(formData: FormData) {
   revalidatePath("/join");
   return { success: true };
 }
-
