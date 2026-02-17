@@ -180,7 +180,9 @@ const rowToOccupant = (row) => {
   const emergency_contact_name = clean(
     getRowValue(row, ["Emergency Contact Person ", "Emergency Contact Person"])
   );
-  const emergency_contact_mobile = parsePhone(getRowValue(row, ["Mobile Number.1"]));
+  const emergency_contact_mobile = parsePhone(
+    getRowValue(row, ["Mobile Number_1", "Mobile Number.1", "Mobile Number 1"])
+  );
   const emergency_contact_relationship = clean(
     getRowValue(row, ["Relationship to Occupant"])
   );
