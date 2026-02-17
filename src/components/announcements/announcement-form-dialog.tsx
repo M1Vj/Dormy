@@ -47,14 +47,19 @@ export function AnnouncementFormDialog({
   mode,
   announcement,
   trigger,
+  committeeId,
 }: {
   dormId: string;
   mode: "create" | "edit";
   announcement?: DormAnnouncement;
   trigger?: React.ReactNode;
+  committeeId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  const resolvedCommitteeId = committeeId ?? announcement?.committee_id ?? null;
+  const isCommitteeContext = Boolean(resolvedCommitteeId);
 
   const action =
     mode === "create"
@@ -91,11 +96,17 @@ export function AnnouncementFormDialog({
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "Create announcement" : "Edit announcement"}</DialogTitle>
           <DialogDescription>
-            Member-visible announcements appear on the occupant Home page. Staff-only updates stay hidden from occupants.
+            {isCommitteeContext
+              ? "Committee announcements can be shared with committee members or the whole dorm."
+              : "Member-visible announcements appear on the occupant Home page. Staff-only updates stay hidden from occupants."}
           </DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="space-y-4">
+          {resolvedCommitteeId ? (
+            <input type="hidden" name="committee_id" value={resolvedCommitteeId} />
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="announcement_title">Title</Label>
             <Input
@@ -120,18 +131,35 @@ export function AnnouncementFormDialog({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="announcement_visibility">Visibility</Label>
-              <select
-                id="announcement_visibility"
-                name="visibility"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                defaultValue={announcement?.visibility ?? "members"}
-              >
-                <option value="members">Members (occupants can view)</option>
-                <option value="staff">Staff only</option>
-              </select>
-            </div>
+            {isCommitteeContext ? (
+              <div className="space-y-2">
+                <Label htmlFor="announcement_audience">Post to</Label>
+                <select
+                  id="announcement_audience"
+                  name="audience"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  defaultValue={announcement?.audience ?? "committee"}
+                >
+                  <option value="committee">Committee members</option>
+                  <option value="dorm">Whole dorm</option>
+                </select>
+                <input type="hidden" name="visibility" value="members" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="announcement_visibility">Visibility</Label>
+                <select
+                  id="announcement_visibility"
+                  name="visibility"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  defaultValue={announcement?.visibility ?? "members"}
+                >
+                  <option value="members">Members (occupants can view)</option>
+                  <option value="staff">Staff only</option>
+                </select>
+                <input type="hidden" name="audience" value="dorm" />
+              </div>
+            )}
             <div className="space-y-2">
               <span className="text-sm font-medium">Options</span>
               <label className="flex items-center gap-2 text-sm">

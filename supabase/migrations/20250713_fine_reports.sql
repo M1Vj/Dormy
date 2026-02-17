@@ -4,7 +4,11 @@
 create table if not exists fine_reports (
   id uuid primary key default gen_random_uuid(),
   dorm_id uuid not null references dorms(id) on delete cascade,
-  semester_id uuid not null references semesters(id) on delete cascade,
+  semester_id uuid not null,
+  constraint fine_reports_semester_dorm_fkey
+    foreign key (semester_id, dorm_id)
+    references public.dorm_semesters(id, dorm_id)
+    on delete cascade,
   
   reporter_occupant_id uuid not null references occupants(id) on delete cascade,
   reported_occupant_id uuid not null references occupants(id) on delete cascade,

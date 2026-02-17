@@ -442,6 +442,11 @@ export default async function HomePage() {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="truncate font-medium">{announcement.title}</div>
+                        {announcement.committee ? (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {announcement.committee.name} · {announcement.audience === "committee" ? "Committee members" : "Whole dorm"}
+                          </div>
+                        ) : null}
                         <div className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
                           {preview}
                         </div>

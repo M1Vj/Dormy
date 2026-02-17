@@ -232,6 +232,109 @@ async function requireManagerContext() {
   return { context } as const;
 }
 
+async function requireCommitteeLeadContext(committeeId: string) {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return { error: context.error } as const;
+  }
+
+  const parsedCommitteeId = z.string().uuid("Invalid committee id.").safeParse(committeeId);
+  if (!parsedCommitteeId.success) {
+    return { error: parsedCommitteeId.error.issues[0]?.message ?? "Invalid committee id." } as const;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." } as const;
+  }
+
+  const { data: committee, error: committeeError } = await supabase
+    .from("committees")
+    .select("id, dorm_id")
+    .eq("id", parsedCommitteeId.data)
+    .maybeSingle();
+
+  if (committeeError) {
+    return { error: committeeError.message } as const;
+  }
+
+  if (!committee || committee.dorm_id !== context.dormId) {
+    return { error: "Committee not found for the active dorm." } as const;
+  }
+
+  const { data: committeeMembership, error: committeeMembershipError } = await supabase
+    .from("committee_members")
+    .select("role")
+    .eq("committee_id", parsedCommitteeId.data)
+    .eq("user_id", context.userId)
+    .maybeSingle();
+
+  if (committeeMembershipError) {
+    return { error: committeeMembershipError.message } as const;
+  }
+
+  const isLead = Boolean(
+    committeeMembership && new Set(["head", "co-head"]).has(committeeMembership.role)
+  );
+
+  if (!isLead) {
+    return { error: "You do not have permission to manage this committee's events." } as const;
+  }
+
+  return { context, committeeId: parsedCommitteeId.data } as const;
+}
+
+async function requireCommitteeEventManagerContext(eventId: string) {
+  const context = await getEventViewerContext();
+  if ("error" in context) {
+    return { error: context.error } as const;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." } as const;
+  }
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id, dorm_id, committee_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (eventError) {
+    return { error: eventError.message } as const;
+  }
+
+  if (!event || event.dorm_id !== context.dormId) {
+    return { error: "Event not found." } as const;
+  }
+
+  if (!event.committee_id) {
+    return { error: "You do not have permission to manage this event." } as const;
+  }
+
+  const { data: committeeMembership, error: committeeMembershipError } = await supabase
+    .from("committee_members")
+    .select("role")
+    .eq("committee_id", event.committee_id)
+    .eq("user_id", context.userId)
+    .maybeSingle();
+
+  if (committeeMembershipError) {
+    return { error: committeeMembershipError.message } as const;
+  }
+
+  const isLead = Boolean(
+    committeeMembership && new Set(["head", "co-head"]).has(committeeMembership.role)
+  );
+
+  if (!isLead) {
+    return { error: "You do not have permission to manage this event." } as const;
+  }
+
+  return { context, committeeId: event.committee_id } as const;
+}
+
 async function getViewerOccupantId(dormId: string, userId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -555,9 +658,49 @@ export async function getEventDetail(
 }
 
 export async function createEvent(formData: FormData) {
+  const committeeIdInput = String(formData.get("committee_id") ?? "").trim();
+  const requestedCommitteeId = committeeIdInput ? committeeIdInput : null;
+
   const manager = await requireManagerContext();
-  if ("error" in manager) {
-    return { error: manager.error };
+  const contextResult =
+    "error" in manager && requestedCommitteeId
+      ? await requireCommitteeLeadContext(requestedCommitteeId)
+      : manager;
+
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
+
+  let committeeId: string | null = null;
+  if (requestedCommitteeId) {
+    if ("committeeId" in contextResult && typeof contextResult.committeeId === "string") {
+      committeeId = contextResult.committeeId;
+    } else {
+      const parsedCommitteeId = z.string().uuid("Invalid committee id.").safeParse(requestedCommitteeId);
+      if (!parsedCommitteeId.success) {
+        return { error: parsedCommitteeId.error.issues[0]?.message ?? "Invalid committee id." };
+      }
+
+      const supabase = await createSupabaseServerClient();
+      if (!supabase) {
+        return { error: "Supabase is not configured for this environment." };
+      }
+
+      const { data: committee } = await supabase
+        .from("committees")
+        .select("id")
+        .eq("dorm_id", context.dormId)
+        .eq("id", parsedCommitteeId.data)
+        .maybeSingle();
+
+      if (!committee) {
+        return { error: "Committee not found for the active dorm." };
+      }
+
+      committeeId = committee.id;
+    }
   }
 
   const parsed = parseEventInput(formData);
@@ -570,7 +713,7 @@ export async function createEvent(formData: FormData) {
     return { error: "Supabase is not configured for this environment." };
   }
 
-  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
@@ -578,7 +721,7 @@ export async function createEvent(formData: FormData) {
   const { data: event, error } = await supabase
     .from("events")
     .insert({
-      dorm_id: manager.context.dormId,
+      dorm_id: context.dormId,
       semester_id: semesterResult.semesterId,
       title: parsed.data.title,
       description: parsed.data.description,
@@ -586,7 +729,8 @@ export async function createEvent(formData: FormData) {
       starts_at: parsed.data.starts_at,
       ends_at: parsed.data.ends_at,
       is_competition: parsed.data.is_competition,
-      created_by: manager.context.userId,
+      created_by: context.userId,
+      committee_id: committeeId,
     })
     .select("id")
     .single();
@@ -597,7 +741,7 @@ export async function createEvent(formData: FormData) {
 
   const participatingDormResult = await syncParticipatingDorms(
     event.id,
-    manager.context.dormId,
+    context.dormId,
     parsed.data.participating_dorm_ids
   );
   if ("error" in participatingDormResult) {
@@ -609,8 +753,8 @@ export async function createEvent(formData: FormData) {
   revalidatePath("/admin/finance/events");
 
   await safeLogEventAudit({
-    dormId: manager.context.dormId,
-    actorUserId: manager.context.userId,
+    dormId: context.dormId,
+    actorUserId: context.userId,
     action: "events.created",
     entityType: "event",
     entityId: event.id,
@@ -621,6 +765,7 @@ export async function createEvent(formData: FormData) {
       location: parsed.data.location,
       is_competition: parsed.data.is_competition,
       participating_dorm_count: parsed.data.participating_dorm_ids.length,
+      committee_id: committeeId,
     },
   });
 
@@ -628,15 +773,24 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(formData: FormData) {
-  const manager = await requireManagerContext();
-  if ("error" in manager) {
-    return { error: manager.error };
-  }
-
   const eventId = String(formData.get("event_id") ?? "").trim();
   if (!eventId) {
     return { error: "Event ID is required." };
   }
+
+  const manager = await requireManagerContext();
+  const contextResult =
+    "error" in manager ? await requireCommitteeEventManagerContext(eventId) : manager;
+
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
+  const committeeId =
+    "committeeId" in contextResult && typeof contextResult.committeeId === "string"
+      ? contextResult.committeeId
+      : null;
 
   const parsed = parseEventInput(formData);
   if ("error" in parsed) {
@@ -648,21 +802,25 @@ export async function updateEvent(formData: FormData) {
     return { error: "Supabase is not configured for this environment." };
   }
 
-  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: existingEvent } = await supabase
     .from("events")
-    .select("id, title, starts_at, ends_at, location, description, is_competition")
+    .select("id, title, starts_at, ends_at, location, description, is_competition, committee_id")
     .eq("id", eventId)
-    .eq("dorm_id", manager.context.dormId)
+    .eq("dorm_id", context.dormId)
     .eq("semester_id", semesterResult.semesterId)
     .maybeSingle();
 
   if (!existingEvent) {
     return { error: "Event not found." };
+  }
+
+  if (committeeId && existingEvent.committee_id !== committeeId) {
+    return { error: "You do not have permission to manage this event." };
   }
 
   const { error } = await supabase
@@ -677,7 +835,7 @@ export async function updateEvent(formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", eventId)
-    .eq("dorm_id", manager.context.dormId);
+    .eq("dorm_id", context.dormId);
 
   if (error) {
     return { error: error.message };
@@ -685,7 +843,7 @@ export async function updateEvent(formData: FormData) {
 
   const participatingDormResult = await syncParticipatingDorms(
     eventId,
-    manager.context.dormId,
+    context.dormId,
     parsed.data.participating_dorm_ids
   );
   if ("error" in participatingDormResult) {
@@ -706,14 +864,15 @@ export async function updateEvent(formData: FormData) {
   ].filter((field): field is string => Boolean(field));
 
   await safeLogEventAudit({
-    dormId: manager.context.dormId,
-    actorUserId: manager.context.userId,
+    dormId: context.dormId,
+    actorUserId: context.userId,
     action: "events.updated",
     entityType: "event",
     entityId: eventId,
     metadata: {
       changed_fields: changedFields,
       participating_dorm_count: parsed.data.participating_dorm_ids.length,
+      committee_id: existingEvent.committee_id ?? null,
     },
   });
 
@@ -721,31 +880,40 @@ export async function updateEvent(formData: FormData) {
 }
 
 export async function deleteEvent(formData: FormData) {
-  const manager = await requireManagerContext();
-  if ("error" in manager) {
-    return { error: manager.error };
-  }
-
   const eventId = String(formData.get("event_id") ?? "").trim();
   if (!eventId) {
     return { error: "Event ID is required." };
   }
+
+  const manager = await requireManagerContext();
+  const contextResult =
+    "error" in manager ? await requireCommitteeEventManagerContext(eventId) : manager;
+
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
+  const committeeId =
+    "committeeId" in contextResult && typeof contextResult.committeeId === "string"
+      ? contextResult.committeeId
+      : null;
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
   }
 
-  const semesterResult = await ensureActiveSemesterId(manager.context.dormId, supabase);
+  const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
   const { data: event } = await supabase
     .from("events")
-    .select("id, title, is_competition")
+    .select("id, title, is_competition, committee_id")
     .eq("id", eventId)
-    .eq("dorm_id", manager.context.dormId)
+    .eq("dorm_id", context.dormId)
     .eq("semester_id", semesterResult.semesterId)
     .maybeSingle();
 
@@ -753,11 +921,15 @@ export async function deleteEvent(formData: FormData) {
     return { error: "Event not found." };
   }
 
+  if (committeeId && event.committee_id !== committeeId) {
+    return { error: "You do not have permission to manage this event." };
+  }
+
   const { data: photos } = await supabase
     .from("event_photos")
     .select("storage_path")
     .eq("event_id", eventId)
-    .eq("dorm_id", manager.context.dormId);
+    .eq("dorm_id", context.dormId);
 
   if (photos?.length) {
     await supabase.storage
@@ -769,7 +941,7 @@ export async function deleteEvent(formData: FormData) {
     .from("events")
     .delete()
     .eq("id", eventId)
-    .eq("dorm_id", manager.context.dormId);
+    .eq("dorm_id", context.dormId);
 
   if (error) {
     return { error: error.message };
@@ -780,8 +952,8 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/admin/finance/events");
 
   await safeLogEventAudit({
-    dormId: manager.context.dormId,
-    actorUserId: manager.context.userId,
+    dormId: context.dormId,
+    actorUserId: context.userId,
     action: "events.deleted",
     entityType: "event",
     entityId: eventId,
@@ -789,6 +961,7 @@ export async function deleteEvent(formData: FormData) {
       title: event.title,
       is_competition: event.is_competition,
       deleted_photo_count: photos?.length ?? 0,
+      committee_id: event.committee_id ?? null,
     },
   });
 
@@ -915,7 +1088,13 @@ export async function deleteEventRating(formData: FormData) {
     return { error: "Rating not found." };
   }
 
-  if (!context.canManageEvents) {
+  let canManageThisEvent = context.canManageEvents;
+  if (!canManageThisEvent) {
+    const committeeManager = await requireCommitteeEventManagerContext(eventId);
+    canManageThisEvent = !("error" in committeeManager);
+  }
+
+  if (!canManageThisEvent) {
     const occupantResult = await getViewerOccupantId(context.dormId, context.userId);
     if ("error" in occupantResult) {
       return { error: occupantResult.error };
@@ -948,7 +1127,7 @@ export async function deleteEventRating(formData: FormData) {
     metadata: {
       event_id: eventId,
       occupant_id: rating.occupant_id,
-      deleted_by_manager: context.canManageEvents,
+      deleted_by_manager: canManageThisEvent,
     },
   });
 
@@ -956,15 +1135,20 @@ export async function deleteEventRating(formData: FormData) {
 }
 
 export async function uploadEventPhoto(formData: FormData) {
-  const manager = await requireManagerContext();
-  if ("error" in manager) {
-    return { error: manager.error };
-  }
-
   const eventId = String(formData.get("event_id") ?? "").trim();
   if (!eventId) {
     return { error: "Event ID is required." };
   }
+
+  const manager = await requireManagerContext();
+  const contextResult =
+    "error" in manager ? await requireCommitteeEventManagerContext(eventId) : manager;
+
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
 
   const photoEntry = formData.get("photo");
   if (!(photoEntry instanceof File)) {
@@ -992,7 +1176,7 @@ export async function uploadEventPhoto(formData: FormData) {
     .from("events")
     .select("id")
     .eq("id", eventId)
-    .eq("dorm_id", manager.context.dormId)
+    .eq("dorm_id", context.dormId)
     .maybeSingle();
 
   if (!event) {
@@ -1001,7 +1185,7 @@ export async function uploadEventPhoto(formData: FormData) {
 
   // Optimize image: resize + convert to WebP
   const optimized = await optimizeImage(photoEntry);
-  const storagePath = `${manager.context.dormId}/${eventId}/${crypto.randomUUID()}.${optimized.extension}`;
+  const storagePath = `${context.dormId}/${eventId}/${crypto.randomUUID()}.${optimized.extension}`;
 
   const { error: uploadError } = await supabase.storage
     .from("event-photos")
@@ -1017,10 +1201,10 @@ export async function uploadEventPhoto(formData: FormData) {
   const { data: createdPhoto, error: insertError } = await supabase
     .from("event_photos")
     .insert({
-      dorm_id: manager.context.dormId,
+      dorm_id: context.dormId,
       event_id: eventId,
       storage_path: storagePath,
-      uploaded_by: manager.context.userId,
+      uploaded_by: context.userId,
     })
     .select("id")
     .single();
@@ -1034,8 +1218,8 @@ export async function uploadEventPhoto(formData: FormData) {
   revalidatePath("/events");
 
   await safeLogEventAudit({
-    dormId: manager.context.dormId,
-    actorUserId: manager.context.userId,
+    dormId: context.dormId,
+    actorUserId: context.userId,
     action: "events.photo_uploaded",
     entityType: "event_photo",
     entityId: createdPhoto.id,
@@ -1051,16 +1235,21 @@ export async function uploadEventPhoto(formData: FormData) {
 }
 
 export async function deleteEventPhoto(formData: FormData) {
-  const manager = await requireManagerContext();
-  if ("error" in manager) {
-    return { error: manager.error };
-  }
-
   const eventId = String(formData.get("event_id") ?? "").trim();
   const photoId = String(formData.get("photo_id") ?? "").trim();
   if (!eventId || !photoId) {
     return { error: "Photo reference is incomplete." };
   }
+
+  const manager = await requireManagerContext();
+  const contextResult =
+    "error" in manager ? await requireCommitteeEventManagerContext(eventId) : manager;
+
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -1072,7 +1261,7 @@ export async function deleteEventPhoto(formData: FormData) {
     .select("id, storage_path")
     .eq("id", photoId)
     .eq("event_id", eventId)
-    .eq("dorm_id", manager.context.dormId)
+    .eq("dorm_id", context.dormId)
     .maybeSingle();
 
   if (!photo) {
@@ -1092,7 +1281,7 @@ export async function deleteEventPhoto(formData: FormData) {
     .delete()
     .eq("id", photoId)
     .eq("event_id", eventId)
-    .eq("dorm_id", manager.context.dormId);
+    .eq("dorm_id", context.dormId);
 
   if (deleteError) {
     return { error: deleteError.message };
@@ -1102,8 +1291,8 @@ export async function deleteEventPhoto(formData: FormData) {
   revalidatePath("/events");
 
   await safeLogEventAudit({
-    dormId: manager.context.dormId,
-    actorUserId: manager.context.userId,
+    dormId: context.dormId,
+    actorUserId: context.userId,
     action: "events.photo_deleted",
     entityType: "event_photo",
     entityId: photoId,

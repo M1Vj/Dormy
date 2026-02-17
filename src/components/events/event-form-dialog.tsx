@@ -51,11 +51,13 @@ export function EventFormDialog({
   hostDormId,
   dormOptions,
   event,
+  committeeId,
 }: {
   mode: "create" | "edit";
   hostDormId: string;
   dormOptions: EventDormOption[];
   event?: EventDetail;
+  committeeId?: string;
 }) {
   const router = useRouter();
   const action = mode === "create" ? createEvent : updateEvent;
@@ -129,6 +131,9 @@ export function EventFormDialog({
         <form action={formAction} className="space-y-4">
           {mode === "edit" ? (
             <input type="hidden" name="event_id" value={event?.id ?? ""} />
+          ) : null}
+          {committeeId ? (
+            <input type="hidden" name="committee_id" value={committeeId} />
           ) : null}
 
           <div className="space-y-2">
