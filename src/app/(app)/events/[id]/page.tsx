@@ -15,6 +15,7 @@ import { EventRatingPanel } from "@/components/events/event-rating-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function parseDate(value: string | null) {
   if (!value) {
@@ -58,13 +59,39 @@ export default async function EventDetailPage({
     return <div className="p-6 text-sm text-muted-foreground">{context.error}</div>;
   }
 
-  const [event, dormOptions] = await Promise.all([
-    getEventDetail(context.dormId, id, context.userId),
-    context.canManageEvents ? getEventDormOptions() : Promise.resolve([]),
-  ]);
+  const event = await getEventDetail(context.dormId, id, context.userId);
   if (!event) {
     notFound();
   }
+
+  let canManage = context.canManageEvents;
+  if (!canManage) {
+    const supabase = await createSupabaseServerClient();
+    if (supabase) {
+      const { data: eventMeta } = await supabase
+        .from("events")
+        .select("committee_id")
+        .eq("id", id)
+        .eq("dorm_id", context.dormId)
+        .maybeSingle();
+
+      if (eventMeta?.committee_id) {
+        const { data: committeeMembership } = await supabase
+          .from("committee_members")
+          .select("role")
+          .eq("committee_id", eventMeta.committee_id)
+          .eq("user_id", context.userId)
+          .maybeSingle();
+
+        canManage = Boolean(
+          committeeMembership &&
+            new Set(["head", "co-head"]).has(committeeMembership.role)
+        );
+      }
+    }
+  }
+
+  const dormOptions = canManage ? await getEventDormOptions() : [];
 
   const startsAt = parseDate(event.starts_at);
   const endsAt = parseDate(event.ends_at);
@@ -104,7 +131,7 @@ export default async function EventDetailPage({
               </Link>
             </Button>
           ) : null}
-          {context.canManageEvents ? (
+          {canManage ? (
             <>
               <EventFormDialog
                 mode="edit"
@@ -164,13 +191,13 @@ export default async function EventDetailPage({
               Photo Gallery
             </CardTitle>
             <CardDescription>
-              Officers and admins can upload photos for this event.
+              Officers/admins and committee leads can upload photos for this event.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <EventPhotoManager
               eventId={event.id}
-              canManage={context.canManageEvents}
+              canManage={canManage}
               photos={event.photos}
             />
           </CardContent>
@@ -188,7 +215,7 @@ export default async function EventDetailPage({
               eventId={event.id}
               ratings={event.ratings}
               viewerRating={event.viewer_rating}
-              canModerate={context.canManageEvents}
+              canModerate={canManage}
               canRate={event.viewer_can_rate}
             />
           </CardContent>

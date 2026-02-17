@@ -25,7 +25,7 @@ export function AnnouncementFormSlot(props: {
   mode: "create" | "edit";
   announcement?: DormAnnouncement;
   trigger?: React.ReactNode;
+  committeeId?: string;
 }) {
   return <AnnouncementFormDialog {...props} />;
 }
-

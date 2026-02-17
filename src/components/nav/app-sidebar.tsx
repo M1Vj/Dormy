@@ -36,6 +36,7 @@ const items = [
   { title: "Join", url: "/join", icon: Building2 },
   { title: "Applications", url: "/applications", icon: UserPlus },
   { title: "Occupants", url: "/occupants", icon: Users },
+  { title: "Committees", url: "/committees", icon: Users },
   { title: "Fines", url: "/fines", icon: FileText },
   { title: "Payments", url: "/payments", icon: Wallet },
   { title: "Cleaning", url: "/cleaning", icon: Calendar },
@@ -63,6 +64,7 @@ export function AppSidebar() {
     "/fines",
     "/evaluation",
     "/cleaning",
+    "/committees",
   ])
   const staffApplicationRoles = new Set([
     "admin",

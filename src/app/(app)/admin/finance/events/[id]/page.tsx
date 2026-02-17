@@ -438,6 +438,7 @@ export default async function EventDetailsPage({
                       occupantId={occupant.id}
                       category="treasurer_events"
                       eventId={eventId}
+                      eventTitle={event.title}
                       trigger={
                         <Button size="sm" variant="outline" className="w-full">
                           Record Payment
@@ -498,6 +499,7 @@ export default async function EventDetailsPage({
                         occupantId={occupant.id}
                         category="treasurer_events"
                         eventId={eventId}
+                        eventTitle={event.title}
                         trigger={
                           <Button size="sm" variant="outline">
                             Record Pay
