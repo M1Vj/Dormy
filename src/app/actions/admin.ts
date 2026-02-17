@@ -18,6 +18,12 @@ const assignableRoles = [
 ] as const;
 
 const provisioningRoles = ["admin", "adviser"] as const;
+const occupantLinkedRoles = new Set([
+  "student_assistant",
+  "treasurer",
+  "occupant",
+  "officer",
+]);
 
 const createUserSchema = z.object({
   firstName: z.string().min(1),
@@ -65,6 +71,62 @@ async function findAuthUserByEmail(
   }
 
   return { user: null, error: null };
+}
+
+async function ensureLinkedOccupant({
+  adminClient,
+  dormId,
+  userId,
+  fullName,
+}: {
+  adminClient: ReturnType<typeof createAdminClient>;
+  dormId: string;
+  userId: string;
+  fullName: string;
+}) {
+  const { data: existing, error: existingError } = await adminClient
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingError) {
+    return { error: existingError.message };
+  }
+
+  if (existing?.id) {
+    return { error: null };
+  }
+
+  const { data: namedMatch, error: namedMatchError } = await adminClient
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("full_name", fullName)
+    .is("user_id", null)
+    .maybeSingle();
+
+  if (namedMatchError) {
+    return { error: namedMatchError.message };
+  }
+
+  if (namedMatch?.id) {
+    const { error: linkError } = await adminClient
+      .from("occupants")
+      .update({ user_id: userId })
+      .eq("id", namedMatch.id);
+
+    return { error: linkError?.message ?? null };
+  }
+
+  const { error: insertError } = await adminClient.from("occupants").insert({
+    dorm_id: dormId,
+    user_id: userId,
+    full_name: fullName,
+  });
+
+  return { error: insertError?.message ?? null };
 }
 
 export async function createUser(formData: FormData) {
@@ -212,6 +274,19 @@ export async function createUser(formData: FormData) {
         await adminClient.auth.admin.deleteUser(createdUserId);
       }
       return { error: membershipInsertError.message };
+    }
+  }
+
+  if (occupantLinkedRoles.has(parsed.data.role)) {
+    const ensureResult = await ensureLinkedOccupant({
+      adminClient,
+      dormId: parsed.data.dormId,
+      userId: createdUserId,
+      fullName: displayName,
+    });
+
+    if (ensureResult.error) {
+      return { error: `Failed to link occupant profile: ${ensureResult.error}` };
     }
   }
 
