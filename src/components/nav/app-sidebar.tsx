@@ -24,6 +24,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
 import { DormSwitcher } from "@/components/nav/dorm-switcher"
@@ -46,6 +47,7 @@ const items = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { role } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
 
   const directAdminOccupants =
     role === "admin" || role === "student_assistant"
@@ -123,7 +125,12 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={resolvedUrl}>
+                      <Link
+                        href={resolvedUrl}
+                        onClick={() => {
+                          if (isMobile) setOpenMobile(false)
+                        }}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
