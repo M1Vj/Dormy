@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { getOccupants } from "@/app/actions/occupants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,15 @@ type OccupantRow = {
   student_id?: string | null;
   status?: string | null;
   current_room_assignment?: AssignmentRef | null;
+};
+
+type DirectoryRow = {
+  id: string;
+  full_name: string | null;
+  student_id: string | null;
+  classification: string | null;
+  room_code: string | null;
+  room_level: number | null;
 };
 
 const asFirst = <T,>(value?: T | T[] | null) =>
@@ -66,14 +76,118 @@ export default async function OccupantsPage() {
     );
   }
 
-  if (new Set(["admin", "student_assistant"]).has(role)) {
+  const occupantModeCookie = cookies().get("dormy_occupant_mode")?.value ?? "0";
+  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
+  const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
+  const effectiveRole = isOccupantMode ? "occupant" : role;
+
+  if (new Set(["admin", "student_assistant"]).has(role) && effectiveRole !== "occupant") {
     redirect("/admin/occupants");
   }
 
-  if (role === "occupant") {
+  if (effectiveRole === "occupant") {
+    const { data, error } = await supabase.rpc("get_dorm_occupant_directory", {
+      p_dorm_id: dormId,
+    });
+
+    if (error) {
+      return (
+        <div className="p-6 text-sm text-muted-foreground">
+          {error.message}
+        </div>
+      );
+    }
+
+    const directory = (data ?? []) as DirectoryRow[];
+
     return (
-      <div className="p-6 text-sm text-muted-foreground">
-        Occupant roster access is limited to dorm staff roles.
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Occupant Directory</h1>
+          <p className="text-sm text-muted-foreground">
+            Active residents and room placement for your selected dorm.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Active Occupants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 md:hidden">
+              {directory.map((occupant) => {
+                const levelLabel =
+                  occupant.room_level === null || occupant.room_level === undefined
+                    ? "Unassigned level"
+                    : `Level ${occupant.room_level}`;
+
+                return (
+                  <div key={occupant.id} className="rounded-lg border p-3">
+                    <p className="font-medium">{occupant.full_name ?? "Unnamed"}</p>
+                    <p className="text-xs text-muted-foreground">{occupant.classification ?? "-"}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Student ID</p>
+                        <p>{occupant.student_id ?? "-"}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Room</p>
+                        <p>{occupant.room_code ? `Room ${occupant.room_code}` : "Unassigned"}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-muted-foreground">Level</p>
+                        <p>{levelLabel}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {!directory.length ? (
+                <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+                  No active occupants found.
+                </div>
+              ) : null}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead className="text-left text-muted-foreground">
+                  <tr className="border-b">
+                    <th className="px-3 py-2 font-medium">Name</th>
+                    <th className="px-3 py-2 font-medium">Classification</th>
+                    <th className="px-3 py-2 font-medium">Student ID</th>
+                    <th className="px-3 py-2 font-medium">Room</th>
+                    <th className="px-3 py-2 font-medium">Level</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {directory.map((occupant) => (
+                    <tr key={occupant.id} className="border-b">
+                      <td className="px-3 py-2 font-medium">{occupant.full_name ?? "Unnamed"}</td>
+                      <td className="px-3 py-2">{occupant.classification ?? "-"}</td>
+                      <td className="px-3 py-2">{occupant.student_id ?? "-"}</td>
+                      <td className="px-3 py-2">
+                        {occupant.room_code ? `Room ${occupant.room_code}` : "Unassigned"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {occupant.room_level === null || occupant.room_level === undefined
+                          ? "-"
+                          : `Level ${occupant.room_level}`}
+                      </td>
+                    </tr>
+                  ))}
+                  {!directory.length ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                        No active occupants found.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
