@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
 import { getActiveDormId } from "@/lib/dorms";
+import { optimizeImage } from "@/lib/images";
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -60,15 +61,15 @@ type EventRatingRow = {
   created_at: string;
   occupant_id: string;
   occupant:
-    | {
-        full_name: string | null;
-        student_id: string | null;
-      }
-    | {
-        full_name: string | null;
-        student_id: string | null;
-      }[]
-    | null;
+  | {
+    full_name: string | null;
+    student_id: string | null;
+  }
+  | {
+    full_name: string | null;
+    student_id: string | null;
+  }[]
+  | null;
 };
 
 type EventPhotoRow = {
@@ -80,17 +81,17 @@ type EventPhotoRow = {
 
 type ParticipatingDormRow = {
   dorm:
-    | {
-        id: string;
-        name: string;
-        slug: string;
-      }
-    | {
-        id: string;
-        name: string;
-        slug: string;
-      }[]
-    | null;
+  | {
+    id: string;
+    name: string;
+    slug: string;
+  }
+  | {
+    id: string;
+    name: string;
+    slug: string;
+  }[]
+  | null;
 };
 
 function normalizeFromJoin<T>(value: T | T[] | null): T | null {
@@ -998,18 +999,15 @@ export async function uploadEventPhoto(formData: FormData) {
     return { error: "Event not found." };
   }
 
-  const extension =
-    photoEntry.name.split(".").pop()?.toLowerCase() ||
-    photoEntry.type.split("/")[1] ||
-    "jpg";
-  const sanitizedExtension = extension.replace(/[^a-z0-9]/g, "");
-  const storagePath = `${manager.context.dormId}/${eventId}/${crypto.randomUUID()}.${sanitizedExtension}`;
+  // Optimize image: resize + convert to WebP
+  const optimized = await optimizeImage(photoEntry);
+  const storagePath = `${manager.context.dormId}/${eventId}/${crypto.randomUUID()}.${optimized.extension}`;
 
   const { error: uploadError } = await supabase.storage
     .from("event-photos")
-    .upload(storagePath, photoEntry, {
+    .upload(storagePath, optimized.buffer, {
       upsert: false,
-      contentType: photoEntry.type,
+      contentType: optimized.contentType,
     });
 
   if (uploadError) {
