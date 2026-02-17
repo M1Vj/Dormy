@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
 
+import { getEventDormOptions } from "@/app/actions/events";
 import { getCommittee, type CommitteeMemberRole } from "@/app/actions/committees";
 import { getOccupants } from "@/app/actions/occupants";
 import { AddMemberDialog } from "@/components/admin/committees/add-member-dialog";
@@ -8,6 +9,8 @@ import { RemoveMemberButton } from "@/components/admin/committees/remove-member-
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EventFormDialog } from "@/components/events/event-form-dialog";
+import { SubmitExpenseDialog } from "@/components/finance/submit-expense-dialog";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -63,6 +66,16 @@ export default async function CommitteeDetailsPage({
   const canManageCommittee =
     (viewerRole ? STAFF_MANAGE_ROLES.has(viewerRole) : false) ||
     (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+
+  const canCreateCommitteeEvent =
+    (viewerRole ? new Set(["admin", "officer"]).has(viewerRole) : false) ||
+    (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+
+  const canSubmitExpense =
+    (viewerRole ? new Set(["admin", "treasurer", "officer"]).has(viewerRole) : false) ||
+    (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+
+  const dormOptions = canCreateCommitteeEvent ? await getEventDormOptions() : [];
 
   const memberUserIds = new Set(committee.members.map((member) => member.user_id));
   const eligibleOccupants = canManageCommittee
@@ -162,9 +175,14 @@ export default async function CommitteeDetailsPage({
 
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Finances</CardTitle>
-              <CardDescription>Committee expenses are visible to dorm members after approval.</CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1">
+                <CardTitle>Finances</CardTitle>
+                <CardDescription>Committee expenses are visible to dorm members after approval.</CardDescription>
+              </div>
+              {canSubmitExpense ? (
+                <SubmitExpenseDialog dormId={dormId} committeeId={committee.id} />
+              ) : null}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-4">
@@ -198,9 +216,19 @@ export default async function CommitteeDetailsPage({
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Events</CardTitle>
-              <CardDescription>Events organized by this committee.</CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+              <div className="space-y-1">
+                <CardTitle>Events</CardTitle>
+                <CardDescription>Events organized by this committee.</CardDescription>
+              </div>
+              {canCreateCommitteeEvent ? (
+                <EventFormDialog
+                  mode="create"
+                  hostDormId={dormId}
+                  dormOptions={dormOptions}
+                  committeeId={committee.id}
+                />
+              ) : null}
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -226,4 +254,3 @@ export default async function CommitteeDetailsPage({
     </div>
   );
 }
-

@@ -63,6 +63,24 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardContent>
           </Card>
         ) : null}
+
+        {canManageEvents || role === "officer" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Operating Expenses</CardTitle>
+              <CardDescription>
+                {role === "officer"
+                  ? "Submit purchase receipts for approval."
+                  : "Review and track logic purchases."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/admin/finance/expenses">Open expenses ledger</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {!canManageEvents && !canManageMaintenance && !canManageFines ? (
@@ -212,9 +230,8 @@ export default async function PaymentsPage() {
                       </p>
                     </div>
                     <p
-                      className={`text-sm font-semibold ${
-                        isPayment || entry.amount_pesos < 0 ? "text-green-600" : "text-foreground"
-                      }`}
+                      className={`text-sm font-semibold ${isPayment || entry.amount_pesos < 0 ? "text-green-600" : "text-foreground"
+                        }`}
                     >
                       ₱{Number(entry.amount_pesos).toFixed(2)}
                     </p>
@@ -269,9 +286,8 @@ export default async function PaymentsPage() {
                           .replace("treasurer_", "")}
                       </td>
                       <td
-                        className={`p-3 text-right font-medium ${
-                          isPayment || entry.amount_pesos < 0 ? "text-green-600" : ""
-                        }`}
+                        className={`p-3 text-right font-medium ${isPayment || entry.amount_pesos < 0 ? "text-green-600" : ""
+                          }`}
                       >
                         ₱{Number(entry.amount_pesos).toFixed(2)}
                       </td>
