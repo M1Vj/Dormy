@@ -159,7 +159,7 @@ export async function submitEvaluation(
 
   const { data: rater, error: raterError } = await supabase
     .from("occupants")
-    .select("id, dorm_id, user_id")
+    .select("id, dorm_id, user_id, is_bigbrod")
     .eq("id", parsed.data.raterId)
     .single();
 
@@ -169,6 +169,24 @@ export async function submitEvaluation(
 
   if (rater.user_id !== auth.user.id) {
     return { error: "Rater mismatch." };
+  }
+
+  // Enforce semester-based rater restrictions:
+  // Sem 1: only BigBrods can rate
+  // Sem 2: everyone can rate (except self, already checked above)
+  const semesterResult = await ensureActiveSemesterId(rater.dorm_id, supabase);
+  if (!("error" in semesterResult)) {
+    const { data: activeCycle } = await supabase
+      .from("evaluation_cycles")
+      .select("semester")
+      .eq("dorm_id", rater.dorm_id)
+      .eq("semester_id", semesterResult.semesterId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (activeCycle?.semester === 1 && !rater.is_bigbrod) {
+      return { error: "Only BigBrods (top retained occupants) can submit evaluations during Semester 1." };
+    }
   }
 
   const { data: ratee, error: rateeError } = await supabase
@@ -918,16 +936,28 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
 
   if (!self) return [];
 
+  // Check BigBrod status for Sem 1 restriction
+  const { data: selfOccupant } = await supabase
+    .from("occupants")
+    .select("is_bigbrod")
+    .eq("id", self.id)
+    .single();
+
   // 2. Get active cycle and template
   const { data: cycle } = await supabase
     .from("evaluation_cycles")
-    .select("id")
+    .select("id, semester")
     .eq("dorm_id", dormId)
     .eq("semester_id", semesterResult.semesterId)
     .eq("is_active", true)
     .single();
 
   if (!cycle) return [];
+
+  // Enforce: Sem 1 only BigBrods can rate
+  if (cycle.semester === 1 && !selfOccupant?.is_bigbrod) {
+    return []; // Not eligible to rate in Sem 1
+  }
 
   const { data: template } = await supabase
     .from("evaluation_templates")
