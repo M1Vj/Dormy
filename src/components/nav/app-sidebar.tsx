@@ -47,6 +47,11 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { role } = useAuth()
 
+  const directAdminOccupants =
+    role === "admin" || role === "student_assistant"
+  const directAdminFines =
+    role === "admin" || role === "student_assistant"
+
   const occupantRoutes = new Set([
     "/home",
     "/events",
@@ -106,12 +111,19 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleItems.map((item) => {
-                const isActive = pathname === item.url ||
-                  (item.url !== "/" && pathname.startsWith(item.url))
+                const resolvedUrl =
+                  item.url === "/occupants" && directAdminOccupants
+                    ? "/admin/occupants"
+                    : item.url === "/fines" && directAdminFines
+                      ? "/admin/fines"
+                      : item.url
+
+                const isActive = pathname === resolvedUrl ||
+                  (resolvedUrl !== "/" && pathname.startsWith(resolvedUrl))
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url}>
+                      <Link href={resolvedUrl}>
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>
