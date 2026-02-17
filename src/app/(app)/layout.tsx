@@ -26,7 +26,7 @@ export default async function AppLayout({
       <DormProvider dorms={dorms} initialDormId={initialDormId}>
         <SidebarProvider>
           <AppSidebar />
-          <main className="w-full">
+          <main className="min-w-0 flex-1">
             <header className="flex h-16 items-center justify-between border-b px-4">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
@@ -50,7 +50,9 @@ export default async function AppLayout({
                 <UserNav />
               </div>
             </header>
-            <div className="p-4">{children}</div>
+            <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              {children}
+            </div>
           </main>
         </SidebarProvider>
       </DormProvider>
