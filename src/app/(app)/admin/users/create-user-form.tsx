@@ -225,11 +225,11 @@ export function CreateUserForm({
                   <p className="text-sm text-destructive">{state.error}</p>
                 ) : null}
                 {state.success ? (
-                  <p className="text-sm text-primary">User created successfully.</p>
+                  <p className="text-sm text-primary">Account provisioned successfully.</p>
                 ) : null}
                 <SheetFooter>
                   <Button type="submit" disabled={isPending}>
-                    {isPending ? "Creating..." : "Create user"}
+                    {isPending ? "Provisioning..." : "Provision account"}
                   </Button>
                 </SheetFooter>
               </form>
