@@ -123,6 +123,16 @@ export default async function AnnouncementsPage() {
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {announcement.committee ? (
+                      <span className="rounded-full border bg-card px-2 py-0.5 text-xs">
+                        {announcement.committee.name}
+                      </span>
+                    ) : null}
+                    {announcement.committee ? (
+                      <span className="rounded-full border bg-card px-2 py-0.5 text-xs">
+                        {announcement.audience === "committee" ? "Committee members" : "Whole dorm"}
+                      </span>
+                    ) : null}
                     {announcement.pinned ? (
                       <span className="inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-xs">
                         <Pin className="size-3" />
