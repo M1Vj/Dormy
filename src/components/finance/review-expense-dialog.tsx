@@ -105,7 +105,13 @@ export function ReviewExpenseDialog({
         {expense.receipt_storage_path ? (
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted">
             {receiptUrl ? (
-              <Image src={receiptUrl} alt="Receipt" fill className="object-contain" />
+              <Image
+                src={receiptUrl}
+                alt="Receipt"
+                fill
+                sizes="(max-width: 640px) 100vw, 640px"
+                className="object-contain"
+              />
             ) : receiptError ? (
               <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
                 {receiptError}
