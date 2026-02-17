@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "reset:demo-passwords": "node scripts/reset-demo-passwords.mjs",
+    "provision:demo-users": "node scripts/provision-demo-users.mjs",
     "import:occupants:xlsx": "node scripts/import-occupants-xlsx.mjs"
   },
   "dependencies": {
