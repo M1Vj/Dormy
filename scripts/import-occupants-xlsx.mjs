@@ -421,6 +421,9 @@ if (roomsError) {
 const roomByCode = new Map(
   (rooms ?? []).map((room) => [String(room.code).toLowerCase(), room])
 );
+const roomIdToCode = new Map(
+  (rooms ?? []).map((room) => [room.id, String(room.code)])
+);
 
 const { data: existingOccupants, error: existingError } = await supabase
   .from("occupants")
@@ -531,11 +534,78 @@ const splitRoom = (roomNumber, codes, maxPerCode) => {
 splitRoom(4, ["4a", "4b"], 5);
 splitRoom(10, ["10a", "10b"], 5);
 
-const occupantKeys = Array.from(occupantIdByKey.keys());
-const unassigned = occupantKeys.filter((key) => !desiredRoomCodeByKey.has(key));
-if (unassigned.length) {
-  console.error(`Missing room assignment for ${unassigned.length} occupant(s).`);
+const { data: activeAssignments, error: activeAssignmentsError } = await supabase
+  .from("room_assignments")
+  .select("id, occupant_id, room_id")
+  .eq("dorm_id", dorm.id)
+  .is("end_date", null);
+
+if (activeAssignmentsError) {
+  console.error(
+    `Failed to fetch active room assignments: ${activeAssignmentsError.message}`
+  );
   process.exit(1);
+}
+
+const activeAssignmentByOccupantId = new Map(
+  (activeAssignments ?? []).map((a) => [a.occupant_id, a])
+);
+
+const activeRoomCodeByOccupantId = new Map();
+for (const assignment of activeAssignments ?? []) {
+  const code = roomIdToCode.get(assignment.room_id);
+  if (!code) continue;
+  activeRoomCodeByOccupantId.set(assignment.occupant_id, code);
+}
+
+let preservedAssignments = 0;
+for (const [occKey, occupantId] of occupantIdByKey.entries()) {
+  if (!occupantId) continue;
+  if (desiredRoomCodeByKey.has(occKey)) continue;
+  const activeCode = activeRoomCodeByOccupantId.get(occupantId);
+  if (!activeCode) continue;
+  desiredRoomCodeByKey.set(occKey, activeCode);
+  preservedAssignments += 1;
+}
+
+const occupantKeys = Array.from(occupantIdByKey.keys());
+let unassigned = occupantKeys.filter((key) => !desiredRoomCodeByKey.has(key));
+let autoAssignedBigbrods = 0;
+
+if (unassigned.length) {
+  const remainingBigbrods = unassigned
+    .filter((key) => bigbrodsKeys.has(key))
+    .sort();
+
+  if (remainingBigbrods.length) {
+    const roomCountByCode = new Map();
+    for (const code of desiredRoomCodeByKey.values()) {
+      roomCountByCode.set(code, (roomCountByCode.get(code) ?? 0) + 1);
+    }
+
+    const pending = [...remainingBigbrods];
+    for (const roomDef of roomDefs) {
+      if (!pending.length) break;
+      const room = roomByCode.get(roomDef.code.toLowerCase());
+      const capacity = Number(room?.capacity ?? roomDef.capacity ?? 0);
+      const currentCount = roomCountByCode.get(roomDef.code) ?? 0;
+      let available = capacity - currentCount;
+      while (available > 0 && pending.length) {
+        const key = pending.shift();
+        if (!key) break;
+        desiredRoomCodeByKey.set(key, roomDef.code);
+        roomCountByCode.set(roomDef.code, (roomCountByCode.get(roomDef.code) ?? 0) + 1);
+        autoAssignedBigbrods += 1;
+        available -= 1;
+      }
+    }
+  }
+
+  unassigned = occupantKeys.filter((key) => !desiredRoomCodeByKey.has(key));
+  if (unassigned.length) {
+    console.error(`Missing room assignment for ${unassigned.length} occupant(s).`);
+    process.exit(1);
+  }
 }
 
 const roomCounts = {};
@@ -554,23 +624,6 @@ for (const [code, count] of Object.entries(roomCounts)) {
     process.exit(1);
   }
 }
-
-const { data: activeAssignments, error: activeAssignmentsError } = await supabase
-  .from("room_assignments")
-  .select("id, occupant_id, room_id")
-  .eq("dorm_id", dorm.id)
-  .is("end_date", null);
-
-if (activeAssignmentsError) {
-  console.error(
-    `Failed to fetch active room assignments: ${activeAssignmentsError.message}`
-  );
-  process.exit(1);
-}
-
-const activeAssignmentByOccupantId = new Map(
-  (activeAssignments ?? []).map((a) => [a.occupant_id, a])
-);
 
 let assigned = 0;
 let assignmentUpdated = 0;
@@ -623,6 +676,8 @@ console.log(
       occupants_failed: failed,
       rooms_seeded: roomDefs.length,
       assignments_targeted: desiredRoomCodeByKey.size,
+      assignments_preserved: preservedAssignments,
+      bigbrods_auto_assigned: autoAssignedBigbrods,
       assignments_created: assigned,
       assignments_updated: assignmentUpdated,
       assignments_failed: assignmentFailed,
