@@ -88,6 +88,9 @@ export default async function HomePage() {
 
   const dormId = resolvedMembership.dorm_id;
   const role = resolvedMembership.role;
+  const finesHref = new Set(["admin", "student_assistant"]).has(role)
+    ? "/admin/fines"
+    : "/fines";
 
   const { data: dorm } = await supabase
     .from("dorms")
@@ -281,7 +284,7 @@ export default async function HomePage() {
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/fines">
+                <Link href={finesHref}>
                   <FileText className="mr-2 size-4" />
                   Fines
                 </Link>
@@ -508,7 +511,7 @@ export default async function HomePage() {
               <CardDescription>Visible dorm rules and default penalties.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href="/fines">
+              <Link href={finesHref}>
                 <FileText className="mr-2 size-4" />
                 View fines
               </Link>
