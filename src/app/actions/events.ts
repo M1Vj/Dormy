@@ -675,7 +675,7 @@ export async function createEvent(formData: FormData) {
 
   let committeeId: string | null = null;
   if (requestedCommitteeId) {
-    if ("committeeId" in contextResult) {
+    if ("committeeId" in contextResult && typeof contextResult.committeeId === "string") {
       committeeId = contextResult.committeeId;
     } else {
       const parsedCommitteeId = z.string().uuid("Invalid committee id.").safeParse(requestedCommitteeId);
@@ -787,7 +787,10 @@ export async function updateEvent(formData: FormData) {
   }
 
   const context = contextResult.context;
-  const committeeId = "committeeId" in contextResult ? contextResult.committeeId : null;
+  const committeeId =
+    "committeeId" in contextResult && typeof contextResult.committeeId === "string"
+      ? contextResult.committeeId
+      : null;
 
   const parsed = parseEventInput(formData);
   if ("error" in parsed) {
@@ -891,7 +894,10 @@ export async function deleteEvent(formData: FormData) {
   }
 
   const context = contextResult.context;
-  const committeeId = "committeeId" in contextResult ? contextResult.committeeId : null;
+  const committeeId =
+    "committeeId" in contextResult && typeof contextResult.committeeId === "string"
+      ? contextResult.committeeId
+      : null;
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
