@@ -44,7 +44,7 @@ const formSchema = z.object({
   amount: z.number().min(1, "Amount must be greater than 0"),
   method: z.string().min(1, "Method is required"),
   note: z.string().optional(),
-  sendReceiptEmail: z.boolean().default(true),
+  sendReceiptEmail: z.boolean(),
   receiptSubject: z.string().trim().max(140).optional(),
   receiptMessage: z.string().trim().max(2000).optional(),
 });
