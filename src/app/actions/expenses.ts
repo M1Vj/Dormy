@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -111,7 +112,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
   if (receipt && receipt.size > 0) {
     const { buffer, contentType } = await optimizeImage(receipt);
     const scopeFolder = committeeId ? `committee-${committeeId}` : "dorm";
-    const filename = `expenses/${dormId}/${scopeFolder}/${Date.now()}-${user.id}.webp`;
+    const filename = `expenses/${dormId}/${scopeFolder}/${Date.now()}-${randomUUID()}.webp`;
     const { error: uploadError } = await supabase.storage
       .from("dormy-uploads")
       .upload(filename, buffer, {

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 import { reviewExpense } from "@/app/actions/expenses";
+import { createSignedUploadUrl } from "@/app/actions/uploads";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,23 +32,60 @@ export function ReviewExpenseDialog({
   const [open, setOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const router = useRouter();
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    setReceiptUrl(null);
+    setReceiptError(null);
+    if (!nextOpen) {
+      setComment("");
+    }
+  };
 
   const handleAction = (action: "approve" | "reject") => {
     startTransition(async () => {
       await reviewExpense(dormId, expense.id, action, comment);
-      setOpen(false);
-      setComment("");
+      handleOpenChange(false);
       router.refresh();
     });
   };
 
-  const receiptUrl = expense.receipt_storage_path
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/dormy-uploads/${expense.receipt_storage_path}`
-    : null;
+  useEffect(() => {
+    if (!open || !expense.receipt_storage_path) return;
+
+    const receiptPath = expense.receipt_storage_path;
+    let cancelled = false;
+
+    (async () => {
+      const result = await createSignedUploadUrl({
+        dormId,
+        bucket: "dormy-uploads",
+        path: receiptPath,
+        expiresInSeconds: 10 * 60,
+      });
+
+      if (cancelled) return;
+
+      if ("error" in result) {
+        setReceiptUrl(null);
+        setReceiptError(result.error ?? "Failed to load receipt.");
+        return;
+      }
+
+      setReceiptUrl(result.url);
+      setReceiptError(null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dormId, expense.receipt_storage_path, open]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           Review
@@ -64,14 +102,19 @@ export function ReviewExpenseDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {receiptUrl ? (
+        {expense.receipt_storage_path ? (
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md border bg-muted">
-            <Image
-              src={receiptUrl}
-              alt="Receipt"
-              fill
-              className="object-contain"
-            />
+            {receiptUrl ? (
+              <Image src={receiptUrl} alt="Receipt" fill className="object-contain" />
+            ) : receiptError ? (
+              <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                {receiptError}
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Loading receipt…
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex h-32 items-center justify-center rounded-md border bg-muted text-sm text-muted-foreground">
