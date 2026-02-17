@@ -26,6 +26,16 @@ Dormy is a dormitory operations web app for **Visayas State University (VSU) —
 - `officer`: creates/manages events and competition workflows
 - `occupant`: read-only self view (balances/clearance), can participate in ratings/evaluation
 
+## Access Model (How Users Join A Dorm)
+
+Dormy is tenant-aware. Authentication (having an account) is separate from dorm membership (having a role in a dorm).
+
+Supported onboarding flows:
+
+- **Invite (recommended):** Admin/Adviser creates an invite in `Admin → Users → Invite`. The user signs in with Google and accepts the invite on `/join`.
+- **Application:** Any signed-in user can request access on `/join`. Staff review requests on `/applications` and approve/reject.
+- **Provision (fallback):** Admin/Adviser can create an email+password account in `Admin → Users → Provision`. Users should then link Google in `/settings` to avoid duplicates.
+
 ## Tech Stack
 
 - Next.js 16 (App Router, TypeScript)
@@ -72,16 +82,28 @@ cp .env.example .env.local
 2. Link the repo to your Supabase project:
 
 ```bash
-supabase link --project-ref <project-ref> --password <db-password> --yes
+supabase link --project-ref <project-ref>
 ```
 
 3. Push migrations to hosted DB:
 
 ```bash
-supabase db push --linked --include-all --yes -p <db-password>
+supabase db push
 ```
 
-4. Seed core data (recommended)
+4. Enable Google sign-in (recommended)
+
+- In **Google Cloud Console**, set the OAuth redirect URI to:
+  - `https://<project-ref>.supabase.co/auth/v1/callback`
+- In **Supabase Dashboard → Authentication**:
+  - Enable the Google provider (Client ID + Client Secret)
+  - Set **URL Configuration**:
+    - Site URL: `http://localhost:3000` (dev) and your Vercel domain (prod)
+    - Additional Redirect URLs: include:
+      - `http://localhost:3000/auth/callback`
+      - `https://<your-vercel-domain>/auth/callback`
+
+5. Seed core data (recommended)
 
 Local development runs `supabase/seed.sql` automatically during `supabase db reset`. For hosted Supabase, run `supabase/seed.sql` in the Supabase Dashboard SQL editor to create:
 
@@ -89,24 +111,17 @@ Local development runs `supabase/seed.sql` automatically during `supabase db res
 - room inventory
 - starter fine rules (optional)
 
-5. Bootstrap the first admin (required)
+6. Bootstrap the first admin (required)
 
 There is **no public sign-up**. You must:
 
 - Create an auth user in Supabase Auth (Dashboard or service-role tooling).
-- Insert/update `public.profiles` for that `auth.users.id`.
+- `public.profiles` is auto-created for new auth users (via DB trigger).
 - Insert/update `public.dorm_memberships` with `role = 'admin'`.
 
 Seed template (replace `<ADMIN_USER_ID>`):
 
 ```sql
-with dorm as (
-  select id from public.dorms where slug = 'molave-mens-hall'
-)
-insert into public.profiles (user_id, display_name)
-values ('<ADMIN_USER_ID>'::uuid, 'Dorm Admin')
-on conflict (user_id) do update set display_name = excluded.display_name;
-
 with dorm as (
   select id from public.dorms where slug = 'molave-mens-hall'
 )
@@ -116,7 +131,7 @@ from dorm
 on conflict (dorm_id, user_id) do update set role = excluded.role;
 ```
 
-6. Run the app:
+7. Run the app:
 
 ```bash
 npm run dev
@@ -163,7 +178,7 @@ set -a; source .env.local; set +a
 npm run import:occupants:xlsx -- /absolute/path/to/occupants.xlsx
 ```
 
-If your main workbook lists BigBrods separately (common in Molave), pass the BigBrods room assignment workbook as a second argument:
+If your main workbook lists BigBrods separately (common in Molave), you can pass a BigBrods room assignment workbook as a second argument:
 
 ```bash
 set -a; source .env.local; set +a
@@ -173,7 +188,9 @@ npm run import:occupants:xlsx -- /absolute/path/to/occupants.xlsx /absolute/path
 Notes:
 
 - The import script seeds Molave room inventory if rooms are missing (room codes `1-3`, `4a/4b`, `5-9`, `10a/10b`).
-- The script will fail if any occupant is missing a room assignment, to avoid partially-assigned rosters.
+- If the roster sheet omits placements (ex: BigBrods list), the script will:
+  - preserve existing active room assignments when present
+  - otherwise auto-assign BigBrods into available room capacity (deterministic fill)
 
 Optional env overrides:
 
