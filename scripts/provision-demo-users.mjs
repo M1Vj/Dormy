@@ -52,6 +52,13 @@ const supabase = createClient(url, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
+const occupantLinkedRoles = new Set([
+  "student_assistant",
+  "treasurer",
+  "officer",
+  "occupant",
+]);
+
 async function listAllAuthUsers() {
   const users = [];
   const perPage = 200;
@@ -127,6 +134,60 @@ async function ensureMembership({ dormId, userId, desiredRole }) {
   throw new Error(upsertError.message);
 }
 
+async function ensureLinkedOccupant({ dormId, userId, fullName }) {
+  const { data: existing, error: existingError } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  if (existing?.id) {
+    return { status: "exists" };
+  }
+
+  const { data: matchByName, error: matchByNameError } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("full_name", fullName)
+    .is("user_id", null)
+    .maybeSingle();
+
+  if (matchByNameError) {
+    throw new Error(matchByNameError.message);
+  }
+
+  if (matchByName?.id) {
+    const { error: linkError } = await supabase
+      .from("occupants")
+      .update({ user_id: userId })
+      .eq("id", matchByName.id);
+
+    if (linkError) {
+      throw new Error(linkError.message);
+    }
+
+    return { status: "linked" };
+  }
+
+  const { error: insertError } = await supabase.from("occupants").insert({
+    dorm_id: dormId,
+    user_id: userId,
+    full_name: fullName,
+  });
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+
+  return { status: "created" };
+}
+
 const { data: dorm, error: dormError } = await supabase
   .from("dorms")
   .select("id, slug, name")
@@ -155,6 +216,8 @@ let createdUsers = 0;
 let updatedUsers = 0;
 let createdMemberships = 0;
 let updatedMemberships = 0;
+let createdOccupants = 0;
+let linkedOccupants = 0;
 
 for (const account of demoAccounts) {
   const email = account.email.trim().toLowerCase();
@@ -225,10 +288,24 @@ for (const account of demoAccounts) {
   } catch (error) {
     console.log(`failed: ${email} (membership ${error?.message ?? String(error)})`);
   }
+
+  if (occupantLinkedRoles.has(desiredRole)) {
+    try {
+      const occupantResult = await ensureLinkedOccupant({
+        dormId: dorm.id,
+        userId: ensuredUserId,
+        fullName: displayName,
+      });
+
+      if (occupantResult.status === "created") createdOccupants += 1;
+      if (occupantResult.status === "linked") linkedOccupants += 1;
+    } catch (error) {
+      console.log(`failed: ${email} (occupant ${error?.message ?? String(error)})`);
+    }
+  }
 }
 
 console.log(
-  `done: users created=${createdUsers} updated=${updatedUsers}; memberships created=${createdMemberships} updated=${updatedMemberships}`
+  `done: users created=${createdUsers} updated=${updatedUsers}; memberships created=${createdMemberships} updated=${updatedMemberships}; occupants created=${createdOccupants} linked=${linkedOccupants}`
 );
 console.log(`demo password set to: ${password}`);
-
