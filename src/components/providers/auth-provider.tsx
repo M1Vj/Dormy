@@ -27,6 +27,13 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [supabase] = useState(() => {
+    try {
+      return createSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
+  });
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [dormId, setDormId] = useState<string | null>(null);
@@ -34,23 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshInProgress = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (!supabase) {
+      setUser(null);
+      setRole(null);
+      setDormId(null);
+      return;
+    }
+
     if (refreshInProgress.current) {
       return;
     }
 
     refreshInProgress.current = true;
     setIsLoading(true);
-    let supabase: ReturnType<typeof createSupabaseBrowserClient>;
     try {
-      try {
-        supabase = createSupabaseBrowserClient();
-      } catch {
-        setUser(null);
-        setRole(null);
-        setDormId(null);
-        return;
-      }
-
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
@@ -72,21 +76,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRole(null);
         setDormId(null);
       }
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "name" in error &&
+        (error as { name?: string }).name === "AbortError"
+      ) {
+        return;
+      }
+
+      console.error("Auth refresh failed:", error);
     } finally {
       refreshInProgress.current = false;
       setIsLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     refresh();
 
-    let supabase: ReturnType<typeof createSupabaseBrowserClient>;
-    try {
-      supabase = createSupabaseBrowserClient();
-    } catch {
+    if (!supabase) {
       return;
     }
+
     const { data } = supabase.auth.onAuthStateChange(() => {
       refresh();
     });
@@ -94,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       data.subscription.unsubscribe();
     };
-  }, [refresh]);
+  }, [refresh, supabase]);
 
   useEffect(() => {
     if (!user || role) {
