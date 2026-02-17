@@ -443,7 +443,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1.45fr_1fr]">
         <Card className="border-border/70">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
