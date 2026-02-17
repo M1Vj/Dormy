@@ -84,7 +84,7 @@ export async function assignOccupant(
         .maybeSingle(),
       supabase
         .from("rooms")
-        .select("id, code")
+        .select("id, code, capacity")
         .eq("dorm_id", dormId)
         .eq("id", roomId)
         .maybeSingle(),
@@ -96,6 +96,25 @@ export async function assignOccupant(
 
   if (roomError || !targetRoom) {
     return { error: roomError?.message ?? "Room not found." };
+  }
+
+  // Capacity enforcement: count active assignments in the target room
+  const { count: activeCount, error: countError } = await supabase
+    .from("room_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("dorm_id", dormId)
+    .eq("room_id", roomId)
+    .is("end_date", null);
+
+  if (countError) {
+    return { error: "Failed to check room capacity." };
+  }
+
+  const roomCapacity = targetRoom.capacity ?? 6; // fallback to default capacity
+  if ((activeCount ?? 0) >= roomCapacity) {
+    return {
+      error: `Room ${targetRoom.code} is at full capacity (${activeCount}/${roomCapacity}). Remove an occupant first or increase the room capacity.`,
+    };
   }
 
   // 1. Check if occupant has active assignment
