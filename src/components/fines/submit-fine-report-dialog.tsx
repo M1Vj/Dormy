@@ -99,6 +99,10 @@ export function SubmitFineReportDialog({
     }
 
     formData.set("reported_occupant_id", selectedOccupantId);
+    const rawRuleId = formData.get("rule_id");
+    if (rawRuleId === "__none__") {
+      formData.set("rule_id", "");
+    }
 
     startTransition(async () => {
       const result = await submitFineReport(dormId, formData);
@@ -191,12 +195,12 @@ export function SubmitFineReportDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="rule_id">Rule (Optional)</Label>
-            <Select name="rule_id" defaultValue="">
+            <Select name="rule_id" defaultValue="__none__">
               <SelectTrigger id="rule_id">
                 <SelectValue placeholder="Select rule (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unspecified</SelectItem>
+                <SelectItem value="__none__">Unspecified</SelectItem>
                 {activeRules.map((rule) => (
                   <SelectItem key={rule.id} value={rule.id}>
                     {(rule.title ?? "Untitled rule") + (rule.severity ? ` (${rule.severity})` : "")}
@@ -244,4 +248,3 @@ export function SubmitFineReportDialog({
     </Dialog>
   );
 }
-
