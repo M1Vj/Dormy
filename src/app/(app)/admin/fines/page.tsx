@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 
 import { getFineRules, getFines } from "@/app/actions/fines";
+import { getFineReports } from "@/app/actions/fine-reports";
 import { getOccupants } from "@/app/actions/occupants";
 import { FinesLedger } from "@/components/admin/fines/fines-ledger";
+import { FineReportsTable, type FineReportRow } from "@/components/admin/fines/fine-reports-table";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { RulesTable } from "@/components/admin/fines/rules-table";
 import {
@@ -81,6 +83,8 @@ export default async function AdminFinesPage({
     }),
     getOccupants(activeMembership.dorm_id, { status: "active" }),
   ]);
+  const reportsResult = await getFineReports(activeMembership.dorm_id);
+  const reports = ("data" in reportsResult ? (reportsResult.data ?? []) : []) as FineReportRow[];
   const dormOptions = await getUserDorms();
 
   return (
@@ -106,6 +110,7 @@ export default async function AdminFinesPage({
         <TabsList>
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="rules">Rules</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
         <TabsContent value="ledger">
           <FinesLedger
@@ -121,6 +126,9 @@ export default async function AdminFinesPage({
         </TabsContent>
         <TabsContent value="rules">
           <RulesTable dormId={activeMembership.dorm_id} rules={rules} />
+        </TabsContent>
+        <TabsContent value="reports">
+          <FineReportsTable reports={reports} />
         </TabsContent>
       </Tabs>
     </div>
