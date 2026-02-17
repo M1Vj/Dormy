@@ -16,12 +16,42 @@ import { roles, type AppRole } from "@/lib/roles";
 
 export { roles };
 
+const OCCUPANT_MODE_COOKIE = "dormy_occupant_mode";
+
 /** Roles that are also occupants and can toggle to occupant mode */
 const OCCUPANT_ELIGIBLE_ROLES = new Set<AppRole>([
   "student_assistant",
   "treasurer",
   "officer",
 ]);
+
+function readCookie(name: string) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const match = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  if (!match) {
+    return null;
+  }
+
+  const [, value] = match.split("=");
+  return value ?? null;
+}
+
+function writeCookie(name: string, value: string, maxAgeSeconds: number) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const maxAge = Math.max(0, Math.floor(maxAgeSeconds));
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -54,7 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [actualRole, setActualRole] = useState<AppRole | null>(null);
   const [dormId, setDormId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isOccupantMode, setIsOccupantMode] = useState(false);
+  const [isOccupantMode, setIsOccupantMode] = useState(() => {
+    return readCookie(OCCUPANT_MODE_COOKIE) === "1";
+  });
   const refreshInProgress = useRef(false);
 
   const canToggleOccupantMode = Boolean(
@@ -65,7 +97,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const toggleOccupantMode = useCallback(() => {
     if (!canToggleOccupantMode) return;
-    setIsOccupantMode((prev) => !prev);
+    setIsOccupantMode((prev) => {
+      const next = !prev;
+      writeCookie(OCCUPANT_MODE_COOKIE, next ? "1" : "0", 60 * 60 * 24 * 30);
+      return next;
+    });
   }, [canToggleOccupantMode]);
 
   const refresh = useCallback(async () => {
@@ -148,6 +184,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => window.clearInterval(interval);
   }, [refresh, actualRole, user]);
+
+  useEffect(() => {
+    if (isOccupantMode && !canToggleOccupantMode) {
+      setIsOccupantMode(false);
+      writeCookie(OCCUPANT_MODE_COOKIE, "0", 0);
+    }
+  }, [canToggleOccupantMode, isOccupantMode]);
 
   const value = useMemo(
     () => ({

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getFines } from "@/app/actions/fines";
@@ -138,7 +139,12 @@ export default async function FinesPage({
     );
   }
 
-  if (new Set(["admin", "student_assistant"]).has(role)) {
+  const occupantModeCookie = cookies().get("dormy_occupant_mode")?.value ?? "0";
+  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
+  const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
+  const effectiveRole = isOccupantMode ? "occupant" : role;
+
+  if (new Set(["admin", "student_assistant"]).has(role) && effectiveRole !== "occupant") {
     redirect("/admin/fines");
   }
 
