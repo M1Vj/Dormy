@@ -26,7 +26,7 @@ export default async function AppLayout({
       <DormProvider dorms={dorms} initialDormId={initialDormId}>
         <SidebarProvider>
           <AppSidebar />
-          <main className="w-full">
+          <main className="min-w-0 flex-1">
             <header className="flex h-16 items-center justify-between border-b px-4">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
