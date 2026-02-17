@@ -152,7 +152,7 @@ export function ProfileEditor() {
               id="displayName"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Example: Vj Mabansag"
+              placeholder="Example: Your name"
               disabled={loading}
             />
           </div>
