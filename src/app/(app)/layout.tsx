@@ -50,7 +50,9 @@ export default async function AppLayout({
                 <UserNav />
               </div>
             </header>
-            <div className="p-4">{children}</div>
+            <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              {children}
+            </div>
           </main>
         </SidebarProvider>
       </DormProvider>
