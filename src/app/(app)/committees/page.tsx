@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { getCommittees } from "@/app/actions/committees";
-import { CreateCommitteeDialog } from "@/components/admin/committees/create-committee-dialog";
-import { CommitteeCard } from "@/components/admin/committees/committee-card";
+import { CreateCommitteeSlot } from "@/components/admin/committees/create-committee-slot";
+import { CommitteeCardSlot } from "@/components/admin/committees/committee-card-slot";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -56,12 +56,12 @@ export default async function CommitteesPage() {
             Manage student committees, their members, and finances.
           </p>
         </div>
-        {canCreate ? <CreateCommitteeDialog dormId={dormId} /> : null}
+        {canCreate ? <CreateCommitteeSlot dormId={dormId} /> : null}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {committees?.map((committee) => (
-          <CommitteeCard key={committee.id} committee={committee} />
+          <CommitteeCardSlot key={committee.id} committee={committee} />
         ))}
         {committees?.length === 0 ? (
           <div className="col-span-full rounded-lg border border-dashed py-12 text-center text-muted-foreground">
