@@ -11,6 +11,8 @@ import {
   Shield,
   Users,
   Wallet,
+  UserPlus,
+  Building2,
 } from "lucide-react"
 
 import {
@@ -29,6 +31,8 @@ import { DormSwitcher } from "@/components/nav/dorm-switcher"
 // Menu items.
 const items = [
   { title: "Home", url: "/home", icon: Home },
+  { title: "Join", url: "/join", icon: Building2 },
+  { title: "Applications", url: "/applications", icon: UserPlus },
   { title: "Occupants", url: "/occupants", icon: Users },
   { title: "Fines", url: "/fines", icon: FileText },
   { title: "Payments", url: "/payments", icon: Wallet },
@@ -51,6 +55,11 @@ export function AppSidebar() {
     "/evaluation",
     "/cleaning",
   ])
+  const staffApplicationRoles = new Set([
+    "admin",
+    "adviser",
+    "student_assistant",
+  ])
   const aiRoles = new Set([
     "admin",
     "officer",
@@ -60,8 +69,16 @@ export function AppSidebar() {
     "assistant_adviser",
   ])
   const visibleItems = items.filter((item) => {
+    if (!role) {
+      return item.url === "/join"
+    }
+
     if (role === "occupant") {
       return occupantRoutes.has(item.url)
+    }
+
+    if (item.url === "/applications") {
+      return staffApplicationRoles.has(role)
     }
 
     if (item.url === "/admin") {
@@ -70,6 +87,10 @@ export function AppSidebar() {
 
     if (item.url === "/ai") {
       return role ? aiRoles.has(role) : false
+    }
+
+    if (item.url === "/join") {
+      return false
     }
 
     return true
