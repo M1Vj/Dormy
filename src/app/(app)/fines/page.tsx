@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getFines } from "@/app/actions/fines";
@@ -138,7 +139,13 @@ export default async function FinesPage({
     );
   }
 
-  if (new Set(["admin", "student_assistant"]).has(role)) {
+  const cookieStore = await cookies();
+  const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
+  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
+  const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
+  const effectiveRole = isOccupantMode ? "occupant" : role;
+
+  if (new Set(["admin", "student_assistant"]).has(role) && effectiveRole !== "occupant") {
     redirect("/admin/fines");
   }
 
@@ -162,11 +169,16 @@ export default async function FinesPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">My Fines</h1>
-        <p className="text-sm text-muted-foreground">
-          Your personal fines, points deductions, and current status.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">My Fines</h1>
+          <p className="text-sm text-muted-foreground">
+            Your personal fines, points deductions, and current status.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/fines/reports">Report a violation</Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
