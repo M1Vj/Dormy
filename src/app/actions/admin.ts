@@ -39,6 +39,33 @@ const createAdminClient = () => {
   );
 };
 
+async function findAuthUserByEmail(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  email: string
+) {
+  const target = email.trim().toLowerCase();
+  if (!target) return { user: null as null | { id: string; email?: string | null }, error: null as string | null };
+
+  const perPage = 200;
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      return { user: null, error: error.message };
+    }
+
+    const match = (data?.users ?? []).find((user) => (user.email ?? "").toLowerCase() === target);
+    if (match) {
+      return { user: match, error: null };
+    }
+
+    if (!data?.users?.length || data.users.length < perPage) {
+      break;
+    }
+  }
+
+  return { user: null, error: null };
+}
+
 export async function createUser(formData: FormData) {
   const parsed = createUserSchema.safeParse({
     firstName: String(formData.get("firstName") ?? "").trim(),
@@ -88,9 +115,17 @@ export async function createUser(formData: FormData) {
 
   const adminClient = createAdminClient();
   const displayName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
-  const { data: created, error: createError } =
-    await adminClient.auth.admin.createUser({
-      email: parsed.data.email,
+  const existingLookup = await findAuthUserByEmail(adminClient, parsed.data.email);
+  if (existingLookup.error) {
+    return { error: existingLookup.error };
+  }
+
+  const existingUser = existingLookup.user;
+  const targetUserId = existingUser?.id ?? null;
+  const isExistingAccount = Boolean(targetUserId);
+
+  if (targetUserId) {
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(targetUserId, {
       password: parsed.data.password,
       email_confirm: true,
       user_metadata: {
@@ -98,34 +133,99 @@ export async function createUser(formData: FormData) {
       },
     });
 
+    if (updateError) {
+      return { error: updateError.message ?? "Failed to update user." };
+    }
+  }
+
+  const { data: created, error: createError } = targetUserId
+    ? { data: { user: { id: targetUserId } }, error: null }
+    : await adminClient.auth.admin.createUser({
+        email: parsed.data.email,
+        password: parsed.data.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: displayName,
+        },
+      });
+
   if (createError || !created.user) {
     return { error: createError?.message ?? "Failed to create user." };
   }
 
-  const { error: membershipInsertError } = await adminClient
-    .from("dorm_memberships")
-    .insert({
-      dorm_id: parsed.data.dormId,
-      user_id: created.user.id,
-      role: parsed.data.role,
-    });
+  const createdUserId = created.user.id;
 
-  if (membershipInsertError) {
-    await adminClient.auth.admin.deleteUser(created.user.id);
-    return { error: membershipInsertError.message };
+  const { error: profileError } = await adminClient.from("profiles").upsert(
+    {
+      user_id: createdUserId,
+      display_name: displayName,
+    },
+    {
+      onConflict: "user_id",
+    }
+  );
+
+  if (profileError) {
+    console.warn("Failed to sync profile display name:", profileError.message);
+  }
+
+  const { data: existingMembership, error: membershipFetchError } = await adminClient
+    .from("dorm_memberships")
+    .select("id, role")
+    .eq("dorm_id", parsed.data.dormId)
+    .eq("user_id", createdUserId)
+    .maybeSingle();
+
+  if (membershipFetchError) {
+    if (!isExistingAccount) {
+      await adminClient.auth.admin.deleteUser(createdUserId);
+    }
+    return { error: membershipFetchError.message };
+  }
+
+  if (existingMembership?.role === "admin") {
+    // Never downgrade admin from the UI. Admin must be managed directly in the database.
+  } else if (existingMembership?.id) {
+    const { error: membershipUpdateError } = await adminClient
+      .from("dorm_memberships")
+      .update({ role: parsed.data.role })
+      .eq("id", existingMembership.id);
+
+    if (membershipUpdateError) {
+      if (!isExistingAccount) {
+        await adminClient.auth.admin.deleteUser(createdUserId);
+      }
+      return { error: membershipUpdateError.message };
+    }
+  } else {
+    const { error: membershipInsertError } = await adminClient
+      .from("dorm_memberships")
+      .insert({
+        dorm_id: parsed.data.dormId,
+        user_id: createdUserId,
+        role: parsed.data.role,
+      });
+
+    if (membershipInsertError) {
+      if (!isExistingAccount) {
+        await adminClient.auth.admin.deleteUser(createdUserId);
+      }
+      return { error: membershipInsertError.message };
+    }
   }
 
   try {
     await logAuditEvent({
       dormId: parsed.data.dormId,
       actorUserId: user.id,
-      action: "admin.user_provisioned",
+      action: isExistingAccount ? "admin.user_reprovisioned" : "admin.user_provisioned",
       entityType: "dorm_membership",
       entityId: null,
       metadata: {
-        target_user_id: created.user.id,
+        target_user_id: createdUserId,
         target_email: parsed.data.email,
-        target_role: parsed.data.role,
+        target_role: existingMembership?.role === "admin" ? "admin" : parsed.data.role,
+        existing_account: isExistingAccount,
       },
     });
   } catch (error) {
