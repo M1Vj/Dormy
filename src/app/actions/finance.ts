@@ -16,6 +16,13 @@ const transactionSchema = z.object({
   metadata: z.record(z.string(), z.any()).optional(),
   event_id: z.string().uuid().optional(),
   fine_id: z.string().uuid().optional(),
+  receipt_email: z
+    .object({
+      enabled: z.boolean().default(true),
+      subject: z.string().trim().min(1).max(140).optional(),
+      message: z.string().trim().max(2000).optional(),
+    })
+    .optional(),
 });
 
 type TransactionData = z.infer<typeof transactionSchema>;
@@ -116,6 +123,93 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     });
   } catch (auditError) {
     console.error("Failed to write audit event for finance transaction:", auditError);
+  }
+
+  const receiptConfig = tx.receipt_email ?? null;
+  const shouldSendReceiptEmail = finalAmount < 0 && (receiptConfig?.enabled ?? true);
+
+  if (shouldSendReceiptEmail) {
+    try {
+      const { sendEmail, renderPaymentReceiptEmail } = await import("@/lib/email");
+
+      const { data: occupant } = await supabase
+        .from("occupants")
+        .select("id, user_id, full_name, contact_email")
+        .eq("dorm_id", dormId)
+        .eq("id", tx.occupant_id)
+        .maybeSingle();
+
+      if (!occupant) {
+        throw new Error("Occupant not found for receipt email.");
+      }
+
+      let recipientEmail: string | null = occupant.contact_email?.trim() || null;
+
+      if (!recipientEmail && occupant.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const { createClient } = await import("@supabase/supabase-js");
+        const adminClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          }
+        );
+
+        const { data: authUserResult } = await adminClient.auth.admin.getUserById(occupant.user_id);
+        recipientEmail = authUserResult.user?.email?.trim() || null;
+      }
+
+      if (!recipientEmail) {
+        throw new Error("No email address is available for this occupant.");
+      }
+
+      const ledgerLabel =
+        tx.category === "adviser_maintenance"
+          ? "Maintenance"
+          : tx.category === "sa_fines"
+            ? "Fines"
+            : "Event contributions";
+
+      let eventTitle: string | null = null;
+      if (tx.event_id) {
+        const { data: event } = await supabase
+          .from("events")
+          .select("title")
+          .eq("dorm_id", dormId)
+          .eq("id", tx.event_id)
+          .maybeSingle();
+
+        eventTitle = event?.title?.trim() || null;
+      }
+
+      const rendered = renderPaymentReceiptEmail({
+        recipientName: occupant.full_name ?? null,
+        amountPesos: Math.abs(finalAmount),
+        paidAtIso: new Date().toISOString(),
+        ledgerLabel,
+        method: tx.method?.trim() || null,
+        note: tx.note?.trim() || null,
+        eventTitle,
+        customMessage: receiptConfig?.message?.trim() || null,
+        subjectOverride: receiptConfig?.subject?.trim() || null,
+      });
+
+      const result = await sendEmail({
+        to: recipientEmail,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+
+      if (!result.success) {
+        console.warn("Receipt email could not be sent:", result.error);
+      }
+    } catch (emailError) {
+      console.error("Failed to send receipt email:", emailError);
+    }
   }
 
   revalidatePath("/admin/finance");
