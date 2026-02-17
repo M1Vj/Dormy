@@ -40,7 +40,7 @@ const createAdminClient = () => {
 };
 
 async function findAuthUserByEmail(
-  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  adminClient: ReturnType<typeof createAdminClient>,
   email: string
 ) {
   const target = email.trim().toLowerCase();
