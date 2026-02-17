@@ -142,9 +142,18 @@ export default async function FinesPage({
     redirect("/admin/fines");
   }
 
+  // Occupants: only see their own fines
+  const { data: occupant } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const fines = (await getFines(dormId, {
     search: search || undefined,
     status: status || undefined,
+    occupantId: occupant?.id,
   })) as FineRow[];
 
   const activeFines = fines.filter((fine) => !fine.voided_at);
@@ -154,9 +163,9 @@ export default async function FinesPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Fines</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">My Fines</h1>
         <p className="text-sm text-muted-foreground">
-          Review your dorm fines, points deductions, and current status.
+          Your personal fines, points deductions, and current status.
         </p>
       </div>
 
@@ -231,11 +240,10 @@ export default async function FinesPage({
                       </p>
                     </div>
                     <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                        isVoided
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
                           ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
                           : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                      }`}
+                        }`}
                     >
                       {isVoided ? "Voided" : "Active"}
                     </span>
@@ -308,11 +316,10 @@ export default async function FinesPage({
                       </td>
                       <td className="px-3 py-2">
                         <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                            isVoided
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
                               ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
                               : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          }`}
+                            }`}
                         >
                           {isVoided ? "Voided" : "Active"}
                         </span>
