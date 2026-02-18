@@ -246,7 +246,7 @@ export default async function HomePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="border-t-4 border-t-emerald-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Your account</CardTitle>
             <CardDescription>{getRoleSummary(role)}</CardDescription>
@@ -279,25 +279,25 @@ export default async function HomePage() {
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
                 <Link href="/payments">
-                  <Wallet className="mr-2 size-4" />
+                  <Wallet className="mr-2 size-4 text-amber-500" />
                   Payments
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
                 <Link href={finesHref}>
-                  <FileText className="mr-2 size-4" />
+                  <FileText className="mr-2 size-4 text-rose-500" />
                   Fines
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
                 <Link href="/cleaning">
-                  <ClipboardList className="mr-2 size-4" />
+                  <ClipboardList className="mr-2 size-4 text-lime-500" />
                   Cleaning
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
                 <Link href="/evaluation">
-                  <Shield className="mr-2 size-4" />
+                  <Shield className="mr-2 size-4 text-cyan-500" />
                   Evaluation
                 </Link>
               </Button>
@@ -305,7 +305,7 @@ export default async function HomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-t-4 border-t-amber-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Balances</CardTitle>
             <CardDescription>Only your own ledgers are shown here.</CardDescription>
@@ -344,7 +344,7 @@ export default async function HomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-t-4 border-t-lime-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">This week</CardTitle>
             <CardDescription>Cleaning and deadlines at a glance.</CardDescription>
@@ -353,7 +353,7 @@ export default async function HomePage() {
             {cleaningPlanForRoom ? (
               <div className="rounded-lg border bg-muted/20 p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">Cleaning assignment</div>
+                  <div className="font-medium text-lime-600 dark:text-lime-400">Cleaning assignment</div>
                   <div className="text-xs text-muted-foreground">
                     Week of {format(new Date(cleaningPlanForRoom.week_start), "MMM d")}
                   </div>
@@ -392,7 +392,7 @@ export default async function HomePage() {
                               <div className="truncate text-xs text-muted-foreground">{row.label}</div>
                             ) : null}
                           </div>
-                          <div className={`shrink-0 font-semibold ${isOverdue ? "text-rose-600" : ""}`}>
+                          <div className={`shrink-0 font-semibold ${isOverdue ? "text-rose-600" : "text-amber-600"}`}>
                             {formatPesos(row.balance)}
                           </div>
                         </div>
@@ -419,10 +419,10 @@ export default async function HomePage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-l-4 border-l-sky-500">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div className="space-y-1">
-            <CardTitle className="text-base">Announcements</CardTitle>
+            <CardTitle className="text-base text-sky-600 dark:text-sky-400">Announcements</CardTitle>
             <CardDescription>Shared dorm updates visible to your role.</CardDescription>
           </div>
           <Button asChild size="sm" variant="outline">
@@ -475,15 +475,15 @@ export default async function HomePage() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="border-t-4 border-t-orange-500">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div className="space-y-1">
-              <CardTitle className="text-base">Upcoming events</CardTitle>
+              <CardTitle className="text-base text-orange-600 dark:text-orange-400">Upcoming events</CardTitle>
               <CardDescription>From your current semester calendar.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
               <Link href="/events">
-                <CalendarDays className="mr-2 size-4" />
+                <CalendarDays className="mr-2 size-4 text-orange-500" />
                 Open calendar
               </Link>
             </Button>
@@ -509,15 +509,15 @@ export default async function HomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-t-4 border-t-rose-500">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div className="space-y-1">
-              <CardTitle className="text-base">Rules snapshot</CardTitle>
+              <CardTitle className="text-base text-rose-600 dark:text-rose-400">Rules snapshot</CardTitle>
               <CardDescription>Visible dorm rules and default penalties.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
               <Link href={finesHref}>
-                <FileText className="mr-2 size-4" />
+                <FileText className="mr-2 size-4 text-rose-500" />
                 View fines
               </Link>
             </Button>
@@ -531,9 +531,9 @@ export default async function HomePage() {
               <div className="rounded-lg border bg-muted/20 p-3">
                 <div className="text-xs text-muted-foreground">Severity mix</div>
                 <div className="mt-1 text-sm">
-                  Minor: <span className="font-medium">{rulesSummary.minor}</span> · Major:{" "}
-                  <span className="font-medium">{rulesSummary.major}</span> · Severe:{" "}
-                  <span className="font-medium">{rulesSummary.severe}</span>
+                  Minor: <span className="font-medium text-emerald-600">{rulesSummary.minor}</span> · Major:{" "}
+                  <span className="font-medium text-amber-600">{rulesSummary.major}</span> · Severe:{" "}
+                  <span className="font-medium text-rose-600">{rulesSummary.severe}</span>
                 </div>
               </div>
             </div>
