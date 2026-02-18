@@ -47,7 +47,7 @@ export function CreateOccupantForm({
           className="text-xs text-muted-foreground"
           htmlFor="classification"
         >
-          Classification
+          Course
         </label>
         <Input id="classification" name="classification" className="w-full sm:w-40" />
       </div>

@@ -155,7 +155,7 @@ export default async function OccupantsPage() {
                 <thead className="text-left text-muted-foreground">
                   <tr className="border-b">
                     <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Classification</th>
+                    <th className="px-3 py-2 font-medium">Course</th>
                     <th className="px-3 py-2 font-medium">Student ID</th>
                     <th className="px-3 py-2 font-medium">Room</th>
                     <th className="px-3 py-2 font-medium">Level</th>
@@ -251,7 +251,7 @@ export default async function OccupantsPage() {
               <thead className="text-left text-muted-foreground">
                 <tr className="border-b">
                   <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Classification</th>
+                  <th className="px-3 py-2 font-medium">Course</th>
                   <th className="px-3 py-2 font-medium">Student ID</th>
                   <th className="px-3 py-2 font-medium">Room</th>
                   <th className="px-3 py-2 font-medium">Level</th>

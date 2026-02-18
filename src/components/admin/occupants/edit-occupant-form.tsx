@@ -75,13 +75,13 @@ export function EditOccupantForm({
             htmlFor="classification"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Classification
+            Course
           </label>
           <Input
             id="classification"
             name="classification"
             defaultValue={occupant.classification ?? ""}
-            placeholder="e.g. BSCS-III"
+            placeholder="e.g. BSCS"
           />
         </div>
 

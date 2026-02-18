@@ -164,7 +164,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-muted-foreground">Classification</p>
+                      <p className="text-muted-foreground">Course</p>
                       <p>{occupant.classification ?? "—"}</p>
                     </div>
                     <div>
@@ -205,7 +205,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
             <thead className="text-left text-muted-foreground">
               <tr className="border-b">
                 <th className="px-3 py-2 font-medium">Name</th>
-                <th className="px-3 py-2 font-medium">Classification</th>
+                <th className="px-3 py-2 font-medium">Course</th>
                 <th className="px-3 py-2 font-medium">Student ID</th>
                 <th className="px-3 py-2 font-medium">Room</th>
                 <th className="px-3 py-2 font-medium">Status</th>
