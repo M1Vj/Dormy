@@ -969,13 +969,22 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
   // 2. Get active cycle and template
   const { data: cycle } = await supabase
     .from("evaluation_cycles")
-    .select("id, semester")
+    .select("id, semester, starts_at, ends_at")
     .eq("dorm_id", dormId)
     .eq("semester_id", semesterResult.semesterId)
     .eq("is_active", true)
+    .eq("hidden", false)
     .single();
 
   if (!cycle) return [];
+
+  const now = new Date();
+  if (cycle.starts_at && new Date(cycle.starts_at) > now) {
+    return []; // Not started yet
+  }
+  if (cycle.ends_at && new Date(cycle.ends_at) < now) {
+    return []; // Already ended
+  }
 
   // Enforce: Sem 1 only BigBrods can rate
   if (cycle.semester === 1 && !selfOccupant?.is_bigbrod) {
