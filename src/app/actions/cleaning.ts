@@ -30,6 +30,7 @@ const MOLAVE_DEFAULT_AREAS = [
   "Right Lawn",
   "Back Lawn",
   "Garden",
+  "General Cleaning",
 ];
 
 const weekInputSchema = z.object({

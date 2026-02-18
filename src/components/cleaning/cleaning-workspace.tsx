@@ -444,122 +444,169 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1.45fr_1fr]">
-        <Card className="border-border/70">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Shuffle className="size-4 text-emerald-600" />
-              Room-to-Area Assignments
-            </CardTitle>
-            <CardDescription>
-              Rooms in the rest level are automatically skipped for this week.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 md:hidden">
-              {snapshot.room_plans.map((plan) => (
-                <div key={plan.room_id} className="rounded-lg border p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium">Room {plan.room_code}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Level {plan.room_level} · {plan.occupant_count} occupant(s)
-                      </p>
+        <div className="space-y-6">
+          <Card className="border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Shuffle className="size-4 text-emerald-600" />
+                Room-to-Area Assignments
+              </CardTitle>
+              <CardDescription>
+                Rooms in the rest level are automatically skipped for this week.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Existing room plans content */}
+              <div className="space-y-3 md:hidden">
+                {snapshot.room_plans.map((plan) => (
+                  <div key={plan.room_id} className="rounded-lg border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium">Room {plan.room_code}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Level {plan.room_level} · {plan.occupant_count} occupant(s)
+                        </p>
+                      </div>
+                      {plan.is_rest_week ? (
+                        <Badge variant="secondary">Rest Week</Badge>
+                      ) : (
+                        <Badge variant="outline">{plan.area_name ?? "Unassigned"}</Badge>
+                      )}
                     </div>
-                    {plan.is_rest_week ? (
-                      <Badge variant="secondary">Rest Week</Badge>
+                    {canManage && !plan.is_rest_week ? (
+                      <form onSubmit={handleSetAssignment} className="mt-3 space-y-2">
+                        <input type="hidden" name="room_id" value={plan.room_id} />
+                        <select
+                          name="area_id"
+                          defaultValue={plan.area_id ?? ""}
+                          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                        >
+                          <option value="">Unassigned</option>
+                          {activeAreas.map((area) => (
+                            <option key={area.id} value={area.id}>
+                              {area.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Button size="sm" variant="outline" disabled={isPending} className="w-full">
+                          <Save className="mr-1.5 size-3.5" />
+                          Save Assignment
+                        </Button>
+                      </form>
                     ) : (
-                      <Badge variant="outline">{plan.area_name ?? "Unassigned"}</Badge>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {plan.is_rest_week
+                          ? "No assignment needed for this room this week."
+                          : plan.area_name ?? "Pending assignment"}
+                      </p>
                     )}
                   </div>
-                  {canManage && !plan.is_rest_week ? (
-                    <form onSubmit={handleSetAssignment} className="mt-3 space-y-2">
-                      <input type="hidden" name="room_id" value={plan.room_id} />
-                      <select
-                        name="area_id"
-                        defaultValue={plan.area_id ?? ""}
-                        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                      >
-                        <option value="">Unassigned</option>
-                        {activeAreas.map((area) => (
-                          <option key={area.id} value={area.id}>
-                            {area.name}
-                          </option>
-                        ))}
-                      </select>
-                      <Button size="sm" variant="outline" disabled={isPending} className="w-full">
-                        <Save className="mr-1.5 size-3.5" />
-                        Save Assignment
-                      </Button>
-                    </form>
-                  ) : (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {plan.is_rest_week
-                        ? "No assignment needed for this room this week."
-                        : plan.area_name ?? "Pending assignment"}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">Room</th>
-                    <th className="px-3 py-2 font-medium">Level</th>
-                    <th className="px-3 py-2 font-medium">Occupants</th>
-                    <th className="px-3 py-2 font-medium">Assignment</th>
-                    {canManage ? <th className="px-3 py-2 font-medium text-right">Action</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.room_plans.map((plan) => (
-                    <tr key={plan.room_id} className="border-b align-middle">
-                      <td className="px-3 py-2 font-medium">Room {plan.room_code}</td>
-                      <td className="px-3 py-2">{plan.room_level}</td>
-                      <td className="px-3 py-2">{plan.occupant_count}</td>
-                      <td className="px-3 py-2">
-                        {canManage && !plan.is_rest_week ? (
-                          <form onSubmit={handleSetAssignment} className="flex items-center gap-2">
-                            <input type="hidden" name="room_id" value={plan.room_id} />
-                            <select
-                              name="area_id"
-                              defaultValue={plan.area_id ?? ""}
-                              className="h-9 rounded-md border bg-background px-2 text-sm"
-                            >
-                              <option value="">Unassigned</option>
-                              {activeAreas.map((area) => (
-                                <option key={area.id} value={area.id}>
-                                  {area.name}
-                                </option>
-                              ))}
-                            </select>
-                            <Button size="sm" variant="outline" disabled={isPending}>
-                              <Save className="mr-1.5 size-3.5" />
-                              Save
-                            </Button>
-                          </form>
-                        ) : plan.is_rest_week ? (
-                          <Badge variant="secondary">Rest Week</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">{plan.area_name ?? "Unassigned"}</span>
-                        )}
-                      </td>
-                      {canManage ? (
-                        <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                          {plan.is_rest_week
-                            ? "No assignment needed"
-                            : plan.area_name ?? "Pending assignment"}
-                        </td>
-                      ) : null}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">Room</th>
+                      <th className="px-3 py-2 font-medium">Level</th>
+                      <th className="px-3 py-2 font-medium">Occupants</th>
+                      <th className="px-3 py-2 font-medium">Assignment</th>
+                      {canManage ? <th className="px-3 py-2 font-medium text-right">Action</th> : null}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                  </thead>
+                  <tbody>
+                    {snapshot.room_plans.map((plan) => (
+                      <tr key={plan.room_id} className="border-b align-middle">
+                        <td className="px-3 py-2 font-medium">Room {plan.room_code}</td>
+                        <td className="px-3 py-2">{plan.room_level}</td>
+                        <td className="px-3 py-2">{plan.occupant_count}</td>
+                        <td className="px-3 py-2">
+                          {canManage && !plan.is_rest_week ? (
+                            <form onSubmit={handleSetAssignment} className="flex items-center gap-2">
+                              <input type="hidden" name="room_id" value={plan.room_id} />
+                              <select
+                                name="area_id"
+                                defaultValue={plan.area_id ?? ""}
+                                className="h-9 rounded-md border bg-background px-2 text-sm"
+                              >
+                                <option value="">Unassigned</option>
+                                {activeAreas.map((area) => (
+                                  <option key={area.id} value={area.id}>
+                                    {area.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button size="sm" variant="outline" disabled={isPending}>
+                                <Save className="mr-1.5 size-3.5" />
+                                Save
+                              </Button>
+                            </form>
+                          ) : plan.is_rest_week ? (
+                            <Badge variant="secondary">Rest Week</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">{plan.area_name ?? "Unassigned"}</span>
+                          )}
+                        </td>
+                        {canManage ? (
+                          <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                            {plan.is_rest_week
+                              ? "No assignment needed"
+                              : plan.area_name ?? "Pending assignment"}
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="size-4 text-emerald-600" />
+                General Area View
+              </CardTitle>
+              <CardDescription>
+                Summary of cleaning responsibilities for the whole dorm.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {activeAreas.map((area) => {
+                  const assignedTo = snapshot.room_plans.filter(
+                    (plan) => plan.area_id === area.id
+                  );
+                  return (
+                    <div key={area.id} className="rounded-lg border p-3">
+                      <div className="font-medium text-emerald-700 dark:text-emerald-400">
+                        {area.name}
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {assignedTo.length > 0 ? (
+                          <div className="space-y-1">
+                            <p>Assigned to:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {assignedTo.map((plan) => (
+                                <Badge key={plan.room_id} variant="secondary" className="text-[10px]">
+                                  Room {plan.room_code}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p>No room assigned yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="space-y-6">
           <Card className="border-border/70">
