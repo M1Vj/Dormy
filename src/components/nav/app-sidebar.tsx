@@ -32,19 +32,19 @@ import { DormSwitcher } from "@/components/nav/dorm-switcher"
 
 // Menu items.
 const items = [
-  { title: "Home", url: "/home", icon: Home },
-  { title: "Join", url: "/join", icon: Building2 },
-  { title: "Applications", url: "/applications", icon: UserPlus },
-  { title: "Occupants", url: "/occupants", icon: Users },
-  { title: "Committees", url: "/committees", icon: Users },
-  { title: "Fines", url: "/fines", icon: FileText },
-  { title: "Payments", url: "/payments", icon: Wallet },
-  { title: "Cleaning", url: "/cleaning", icon: Calendar },
-  { title: "Evaluation", url: "/evaluation", icon: Shield },
-  { title: "Events", url: "/events", icon: Calendar },
-  { title: "Reporting", url: "/admin/reporting", icon: BarChart3 },
-  { title: "AI", url: "/ai", icon: Sparkles },
-  { title: "Admin", url: "/admin", icon: Settings },
+  { title: "Home", url: "/home", icon: Home, color: "text-sky-500" },
+  { title: "Join", url: "/join", icon: Building2, color: "text-slate-500" },
+  { title: "Applications", url: "/applications", icon: UserPlus, color: "text-indigo-500" },
+  { title: "Occupants", url: "/occupants", icon: Users, color: "text-emerald-500" },
+  { title: "Committees", url: "/committees", icon: Users, color: "text-violet-500" },
+  { title: "Fines", url: "/fines", icon: FileText, color: "text-rose-500" },
+  { title: "Payments", url: "/payments", icon: Wallet, color: "text-amber-500" },
+  { title: "Cleaning", url: "/cleaning", icon: Calendar, color: "text-lime-500" },
+  { title: "Evaluation", url: "/evaluation", icon: Shield, color: "text-cyan-500" },
+  { title: "Events", url: "/events", icon: Calendar, color: "text-orange-500" },
+  { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
+  { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+  { title: "Admin", url: "/admin", icon: Settings, color: "text-zinc-500" },
 ]
 
 export function AppSidebar() {
@@ -139,7 +139,7 @@ export function AppSidebar() {
                           if (isMobile) setOpenMobile(false)
                         }}
                       >
-                        <item.icon />
+                        <item.icon className={isActive ? "text-primary" : item.color} />
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>

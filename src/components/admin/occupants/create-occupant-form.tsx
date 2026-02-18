@@ -45,11 +45,11 @@ export function CreateOccupantForm({
       <div className="w-full space-y-1 sm:w-auto">
         <label
           className="text-xs text-muted-foreground"
-          htmlFor="classification"
+          htmlFor="course"
         >
-          Classification
+          Course
         </label>
-        <Input id="classification" name="classification" className="w-full sm:w-40" />
+        <Input id="course" name="course" className="w-full sm:w-40" />
       </div>
       <div className="w-full space-y-1 sm:w-auto">
         <label className="text-xs text-muted-foreground" htmlFor="joined_at">

@@ -125,7 +125,7 @@ export default async function AdminOccupantProfilePage(props: {
       id: occupant.id,
       full_name: occupant.full_name,
       student_id: occupant.student_id,
-      classification: occupant.classification,
+      course: occupant.course,
     },
   ];
 
@@ -213,9 +213,9 @@ export default async function AdminOccupantProfilePage(props: {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Classification</p>
+                <p className="text-xs text-muted-foreground">Course</p>
                 <p className="text-sm font-medium">
-                  {occupant.classification ?? "-"}
+                  {occupant.course ?? "-"}
                 </p>
               </div>
               <div>

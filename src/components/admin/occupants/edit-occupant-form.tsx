@@ -11,7 +11,7 @@ type Occupant = {
   id: string;
   full_name: string;
   student_id?: string | null;
-  classification?: string | null;
+  course?: string | null;
   status?: string | null;
   home_address?: string | null;
   birthdate?: string | null;
@@ -72,16 +72,16 @@ export function EditOccupantForm({
 
         <div className="grid gap-2">
           <label
-            htmlFor="classification"
+            htmlFor="course"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Classification
+            Course
           </label>
           <Input
-            id="classification"
-            name="classification"
-            defaultValue={occupant.classification ?? ""}
-            placeholder="e.g. BSCS-III"
+            id="course"
+            name="course"
+            defaultValue={occupant.course ?? ""}
+            placeholder="e.g. BS Computer Science"
           />
         </div>
 

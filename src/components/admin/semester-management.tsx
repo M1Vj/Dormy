@@ -17,7 +17,7 @@ type ActiveOccupant = {
   id: string;
   full_name: string;
   student_id: string | null;
-  classification: string | null;
+  course: string | null;
 };
 
 type SemesterManagementProps = {
@@ -369,7 +369,7 @@ export function SemesterManagement({
                           <span className="font-medium">{occupant.full_name}</span>
                           <span className="block text-xs text-muted-foreground">
                             {occupant.student_id ?? "No ID"}
-                            {occupant.classification ? ` · ${occupant.classification}` : ""}
+                            {occupant.course ? ` · ${occupant.course}` : ""}
                           </span>
                         </span>
                       </label>

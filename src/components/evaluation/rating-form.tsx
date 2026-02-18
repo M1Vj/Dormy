@@ -67,23 +67,29 @@ export function RatingForm({ raterId, rateeId, templateId, metrics }: Props) {
               <CardDescription>{metric.description}</CardDescription>
             )}
           </CardHeader>
-          <CardContent>
-            <RadioGroup
-              onValueChange={(val: string) => handleScoreChange(metric.id, val)}
-              className="flex flex-wrap gap-4"
-              required
-            >
-              {[...Array(metric.scale_max - metric.scale_min + 1)].map((_, i) => {
-                const value = metric.scale_min + i;
+          <RadioGroup
+            onValueChange={(val: string) => handleScoreChange(metric.id, val)}
+            value={scores[metric.id]?.toString() || ""} // Ensure controlled component
+            className="grid grid-cols-5 gap-2 pt-2 sm:grid-cols-10 px-6 pb-6" // Added px-6 pb-6 for padding since CardContent is removed
+            required
+          >
+            {Array.from({ length: metric.scale_max - metric.scale_min + 1 }).map(
+              (_, i) => {
+                const val = metric.scale_min + i;
                 return (
-                  <div key={value} className="flex items-center space-x-2">
-                    <RadioGroupItem value={value.toString()} id={`${metric.id}-${value}`} />
-                    <Label htmlFor={`${metric.id}-${value}`} className="cursor-pointer">{value}</Label>
+                  <div
+                    key={val}
+                    className="flex flex-col items-center space-y-1"
+                  >
+                    <RadioGroupItem value={val.toString()} id={`${metric.id}-${val}`} />
+                    <Label htmlFor={`${metric.id}-${val}`} className="font-normal text-xs cursor-pointer">
+                      {val}
+                    </Label>
                   </div>
                 );
-              })}
-            </RadioGroup>
-          </CardContent>
+              }
+            )}
+          </RadioGroup>
         </Card>
       ))}
 

@@ -43,7 +43,7 @@ export type OccupantDirectoryOption = {
   id: string;
   full_name: string | null;
   student_id: string | null;
-  classification: string | null;
+  course: string | null;
   room_code: string | null;
   room_level: number | null;
 };

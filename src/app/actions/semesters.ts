@@ -62,7 +62,7 @@ type SemesterWorkspace = {
     id: string;
     full_name: string;
     student_id: string | null;
-    classification: string | null;
+    course: string | null;
   }>;
   outstandingMoney: {
     total: number;
@@ -186,7 +186,7 @@ export async function getSemesterWorkspace(dormId: string): Promise<SemesterWork
     listDormSemesterArchives(dormId, supabase),
     supabase
       .from("occupants")
-      .select("id, full_name, student_id, classification")
+      .select("id, full_name, student_id, course:classification")
       .eq("dorm_id", dormId)
       .eq("status", "active")
       .order("full_name", { ascending: true }),
@@ -214,7 +214,7 @@ export async function getSemesterWorkspace(dormId: string): Promise<SemesterWork
         id: occupant.id,
         full_name: occupant.full_name,
         student_id: occupant.student_id,
-        classification: occupant.classification,
+        course: occupant.course,
       })) ?? [],
     outstandingMoney: summarizeOutstandingLedger(
       (entriesResult.data ?? []) as Array<{ ledger: string; amount_pesos: number | string | null }>
@@ -465,7 +465,7 @@ export async function archiveSemesterAndStartNext(dormId: string, formData: Form
         .order("created_at", { ascending: true }),
       supabase
         .from("occupants")
-        .select("id, full_name, student_id, classification, status")
+        .select("id, full_name, student_id, course:classification, status")
         .eq("dorm_id", dormId)
         .order("full_name", { ascending: true }),
       supabase

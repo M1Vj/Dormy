@@ -55,7 +55,7 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
       description: "",
       weight_pct: 10,
       scale_min: 1,
-      scale_max: 5,
+      scale_max: 10,
     },
   });
 
@@ -130,23 +130,23 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
               )}
             />
             <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="weight_pct"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Weight (%)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      {...field} 
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="weight_pct"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weight (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <div className="grid grid-cols-2 gap-2">
                 <FormField
                   control={form.control}
@@ -155,9 +155,9 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
                     <FormItem>
                       <FormLabel>Min</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          {...field} 
+                        <Input
+                          type="number"
+                          {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                         />
                       </FormControl>
@@ -172,9 +172,9 @@ export function AddMetricDialog({ dormId, templateId, cycleId }: Props) {
                     <FormItem>
                       <FormLabel>Max</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          {...field} 
+                        <Input
+                          type="number"
+                          {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                         />
                       </FormControl>
