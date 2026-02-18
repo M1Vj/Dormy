@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ const formSchema = z.object({
   is_active: z.boolean(),
   starts_at: z.string().optional(),
   ends_at: z.string().optional(),
-  hidden: z.boolean().default(false),
+  hidden: z.boolean(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -72,7 +72,7 @@ export function CreateCycleDialog({ dormId }: Props) {
     },
   });
 
-  function onSubmit(values: FormValues) {
+  const onSubmit: SubmitHandler<FormValues> = (values) => {
     startTransition(async () => {
       const result = await createEvaluationCycle(dormId, {
         school_year: values.school_year,
@@ -93,7 +93,7 @@ export function CreateCycleDialog({ dormId }: Props) {
         toast.error(result.error || "Failed to create cycle");
       }
     });
-  }
+  };
 
   return (
     <Dialog>

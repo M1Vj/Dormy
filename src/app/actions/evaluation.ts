@@ -1003,7 +1003,7 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
   // 3. Get all other occupants
   const { data: occupants } = await supabase
     .from("occupants")
-    .select("id, full_name, classification")
+    .select("id, full_name, course:classification")
     .eq("dorm_id", dormId)
     .eq("status", "active")
     .neq("id", self.id)
