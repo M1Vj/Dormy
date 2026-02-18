@@ -226,7 +226,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),
-    course: formData.get("classification"),
+    course: formData.get("course"),
     joined_at: formData.get("joined_at") || new Date().toISOString().split('T')[0],
     home_address: formData.get("home_address"),
     birthdate: formData.get("birthdate"),
@@ -348,7 +348,7 @@ export async function updateOccupant(
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),
-    course: formData.get("classification"),
+    course: formData.get("course"),
     joined_at: formData.get("joined_at"),
     status: formData.get("status"),
     home_address: formData.get("home_address"),

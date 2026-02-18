@@ -72,14 +72,14 @@ export function EditOccupantForm({
 
         <div className="grid gap-2">
           <label
-            htmlFor="classification"
+            htmlFor="course"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
             Course
           </label>
           <Input
-            id="classification"
-            name="classification"
+            id="course"
+            name="course"
             defaultValue={occupant.course ?? ""}
             placeholder="e.g. BS Computer Science"
           />

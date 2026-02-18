@@ -246,35 +246,35 @@ async function buildFinesLedgerExport(context: ExportContext): Promise<ExportPay
     const issuer = firstJoin(entry.issuer);
 
     return {
-      issued_at: formatTimestamp(entry.issued_at),
-      occupant_name: occupant?.full_name ?? "",
-      student_id: occupant?.student_id ?? "",
-      rule: rule?.title ?? "",
-      severity: rule?.severity ?? "",
-      pesos: formatPeso(Number(entry.pesos)),
-      points: Number(entry.points),
-      note: entry.note ?? "",
-      status: entry.voided_at ? "voided" : "active",
-      voided_at: formatTimestamp(entry.voided_at),
-      void_reason: entry.void_reason ?? "",
-      issued_by: issuer?.display_name ?? "",
+      "Date": formatTimestamp(entry.issued_at),
+      "Occupant": occupant?.full_name ?? "",
+      "Student ID": occupant?.student_id ?? "",
+      "Violation": rule?.title ?? "",
+      "Severity": rule?.severity ?? "",
+      "Amount (₱)": formatPeso(Number(entry.pesos)),
+      "Points": Number(entry.points),
+      "Note": entry.note ?? "",
+      "Status": entry.voided_at ? "voided" : "active",
+      "Voided At": formatTimestamp(entry.voided_at),
+      "Void Reason": entry.void_reason ?? "",
+      "Issued By": issuer?.display_name ?? "",
     };
   });
 
   const workbook = buildWorkbook();
   appendSheet(workbook, "Fines Ledger", rows, [
-    "issued_at",
-    "occupant_name",
-    "student_id",
-    "rule",
-    "severity",
-    "pesos",
-    "points",
-    "note",
-    "status",
-    "voided_at",
-    "void_reason",
-    "issued_by",
+    "Date",
+    "Occupant",
+    "Student ID",
+    "Violation",
+    "Severity",
+    "Amount (₱)",
+    "Points",
+    "Note",
+    "Status",
+    "Voided At",
+    "Void Reason",
+    "Issued By",
   ]);
   appendMetadataSheet(workbook, [
     { key: "Report", value: "Fines Ledger" },
@@ -417,12 +417,14 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
   const summaryRows = [...summaryMap.values()]
     .sort((left, right) => left.occupant_name.localeCompare(right.occupant_name))
     .map((row) => ({
-      ...row,
-      maintenance_balance: formatPeso(row.maintenance_balance),
-      fines_balance: formatPeso(row.fines_balance),
-      events_balance: formatPeso(row.events_balance),
-      total_balance: formatPeso(row.total_balance),
-      clearance_status: row.total_balance <= 0 ? "CLEARED" : "NOT CLEARED",
+      "Occupant": row.occupant_name,
+      "Student ID": row.student_id,
+      "Course": row.course,
+      "Maintenance Balance": formatPeso(row.maintenance_balance),
+      "Fines Balance": formatPeso(row.fines_balance),
+      "Events Balance": formatPeso(row.events_balance),
+      "Total Balance": formatPeso(row.total_balance),
+      "Clearance Status": row.total_balance <= 0 ? "CLEARED" : "NOT CLEARED",
     }));
 
   const transactionRows = entries.map((entry) => {
@@ -432,41 +434,41 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     const fineRule = firstJoin(fine?.rule ?? null);
 
     return {
-      posted_at: formatTimestamp(entry.posted_at),
-      occupant_name: occupant?.full_name ?? "",
-      student_id: occupant?.student_id ?? "",
-      ledger: entry.ledger,
-      entry_type: entry.entry_type,
-      amount_pesos: formatPeso(Number(entry.amount_pesos)),
-      method: entry.method ?? "",
-      note: entry.note ?? "",
-      event: event?.title ?? "",
-      fine_rule: fineRule?.title ?? "",
+      "Date": formatTimestamp(entry.posted_at),
+      "Occupant": occupant?.full_name ?? "",
+      "Student ID": occupant?.student_id ?? "",
+      "Ledger": entry.ledger,
+      "Type": entry.entry_type,
+      "Amount (₱)": formatPeso(Number(entry.amount_pesos)),
+      "Method": entry.method ?? "",
+      "Note": entry.note ?? "",
+      "Event": event?.title ?? "",
+      "Fine Violation": fineRule?.title ?? "",
     };
   });
 
   const workbook = buildWorkbook();
   appendSheet(workbook, "Statement Summary", summaryRows, [
-    "occupant_name",
-    "student_id",
-    "course",
-    "maintenance_balance",
-    "fines_balance",
-    "events_balance",
-    "total_balance",
-    "clearance_status",
+    "Occupant",
+    "Student ID",
+    "Course",
+    "Maintenance Balance",
+    "Fines Balance",
+    "Events Balance",
+    "Total Balance",
+    "Clearance Status",
   ]);
   appendSheet(workbook, "Transactions", transactionRows, [
-    "posted_at",
-    "occupant_name",
-    "student_id",
-    "ledger",
-    "entry_type",
-    "amount_pesos",
-    "method",
-    "note",
-    "event",
-    "fine_rule",
+    "Date",
+    "Occupant",
+    "Student ID",
+    "Ledger",
+    "Type",
+    "Amount (₱)",
+    "Method",
+    "Note",
+    "Event",
+    "Fine Violation",
   ]);
   appendMetadataSheet(workbook, [
     { key: "Report", value: "Per-Occupant Statement" },
@@ -567,27 +569,35 @@ async function buildMaintenanceLedgerExport(context: ExportContext): Promise<Exp
   const balanceRows = [...balanceByOccupant.values()]
     .sort((left, right) => right.balance - left.balance)
     .map((row) => ({
-      occupant_name: row.occupant_name,
-      student_id: row.student_id,
-      maintenance_balance: formatPeso(row.balance),
-      status: row.balance <= 0 ? "CLEARED" : "OUTSTANDING",
+      "Occupant": row.occupant_name,
+      "Student ID": row.student_id,
+      "Balance (₱)": formatPeso(row.balance),
+      "Status": row.balance <= 0 ? "CLEARED" : "OUTSTANDING",
     }));
 
   const workbook = buildWorkbook();
   appendSheet(workbook, "Maintenance Balances", balanceRows, [
-    "occupant_name",
-    "student_id",
-    "maintenance_balance",
-    "status",
+    "Occupant",
+    "Student ID",
+    "Balance (₱)",
+    "Status",
   ]);
-  appendSheet(workbook, "Maintenance Entries", entryRows, [
-    "posted_at",
-    "occupant_name",
-    "student_id",
-    "entry_type",
-    "amount_pesos",
-    "method",
-    "note",
+  appendSheet(workbook, "Maintenance Entries", entryRows.map(r => ({
+    "Date": r.posted_at,
+    "Occupant": r.occupant_name,
+    "Student ID": r.student_id,
+    "Type": r.entry_type,
+    "Amount (₱)": r.amount_pesos,
+    "Method": r.method,
+    "Note": r.note,
+  })), [
+    "Date",
+    "Occupant",
+    "Student ID",
+    "Type",
+    "Amount (₱)",
+    "Method",
+    "Note",
   ]);
   appendMetadataSheet(workbook, [
     { key: "Report", value: "Maintenance Ledger" },
@@ -692,28 +702,37 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
   const summaryRows = [...summaryByEvent.values()]
     .sort((left, right) => left.event_title.localeCompare(right.event_title))
     .map((row) => ({
-      event_title: row.event_title,
-      charged: formatPeso(row.charged),
-      collected: formatPeso(row.collected),
-      balance: formatPeso(row.balance),
+      "Event": row.event_title,
+      "Charged (₱)": formatPeso(row.charged),
+      "Collected (₱)": formatPeso(row.collected),
+      "Balance (₱)": formatPeso(row.balance),
     }));
 
   const workbook = buildWorkbook();
   appendSheet(workbook, "Event Summary", summaryRows, [
-    "event_title",
-    "charged",
-    "collected",
-    "balance",
+    "Event",
+    "Charged (₱)",
+    "Collected (₱)",
+    "Balance (₱)",
   ]);
-  appendSheet(workbook, "Event Entries", entryRows, [
-    "posted_at",
-    "event_title",
-    "occupant_name",
-    "student_id",
-    "entry_type",
-    "amount_pesos",
-    "method",
-    "note",
+  appendSheet(workbook, "Event Entries", entryRows.map(r => ({
+    "Date": r.posted_at,
+    "Event": r.event_title,
+    "Occupant": r.occupant_name,
+    "Student ID": r.student_id,
+    "Type": r.entry_type,
+    "Amount (₱)": r.amount_pesos,
+    "Method": r.method,
+    "Note": r.note,
+  })), [
+    "Date",
+    "Event",
+    "Occupant",
+    "Student ID",
+    "Type",
+    "Amount (₱)",
+    "Method",
+    "Note",
   ]);
   appendMetadataSheet(workbook, [
     { key: "Report", value: "Event Contributions" },
@@ -802,24 +821,24 @@ async function buildEvaluationRankingExport(context: ExportContext): Promise<Exp
 
   const topCutoff = sortedRows.length ? Math.ceil(sortedRows.length * 0.3) : 0;
   const rankingRows = sortedRows.map((row, index) => ({
-    rank: index + 1,
-    occupant_name: row.full_name,
-    peer_score: row.peer_score == null ? "" : Number(row.peer_score.toFixed(2)),
-    sa_score: Number(row.sa_score.toFixed(2)),
-    total_fine_points: Number(row.total_fine_points.toFixed(2)),
-    final_score: Number(row.final_score.toFixed(2)),
-    retention_band: index < topCutoff ? "TOP 30%" : "",
+    "Rank": index + 1,
+    "Occupant": row.full_name,
+    "Peer Score": row.peer_score == null ? "" : Number(row.peer_score.toFixed(2)),
+    "SA Score": Number(row.sa_score.toFixed(2)),
+    "Total Fine Points": Number(row.total_fine_points.toFixed(2)),
+    "Final Score": Number(row.final_score.toFixed(2)),
+    "Retention Band": index < topCutoff ? "TOP 30%" : "",
   }));
 
   const workbook = buildWorkbook();
   appendSheet(workbook, "Ranking", rankingRows, [
-    "rank",
-    "occupant_name",
-    "peer_score",
-    "sa_score",
-    "total_fine_points",
-    "final_score",
-    "retention_band",
+    "Rank",
+    "Occupant",
+    "Peer Score",
+    "SA Score",
+    "Total Fine Points",
+    "Final Score",
+    "Retention Band",
   ]);
   appendMetadataSheet(workbook, [
     { key: "Report", value: "Evaluation Rankings" },
