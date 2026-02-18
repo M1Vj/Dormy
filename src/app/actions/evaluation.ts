@@ -21,6 +21,9 @@ type EvaluationCycleInput = {
   label?: string | null;
   counts_for_retention?: boolean;
   is_active?: boolean;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  hidden?: boolean;
 };
 
 type EvaluationTemplateInput = {
@@ -70,6 +73,9 @@ const cycleSchema = z.object({
   label: z.string().optional().nullable(),
   counts_for_retention: booleanish.optional(),
   is_active: booleanish.optional(),
+  starts_at: z.string().optional().nullable(),
+  ends_at: z.string().optional().nullable(),
+  hidden: booleanish.optional(),
 });
 
 const templateSchema = z.object({
@@ -349,6 +355,17 @@ export async function createEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (!membership || !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)) {
+    return { error: "You do not have permission to manage evaluation cycles." };
+  }
+
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
@@ -364,6 +381,9 @@ export async function createEvaluationCycle(
       label: parsed.data.label,
       counts_for_retention: parsed.data.counts_for_retention ?? false,
       is_active: parsed.data.is_active ?? false,
+      starts_at: parsed.data.starts_at,
+      ends_at: parsed.data.ends_at,
+      hidden: parsed.data.hidden ?? false,
     })
     .select("id")
     .single();
@@ -386,6 +406,9 @@ export async function createEvaluationCycle(
         label: parsed.data.label,
         counts_for_retention: parsed.data.counts_for_retention ?? false,
         is_active: parsed.data.is_active ?? false,
+        starts_at: parsed.data.starts_at,
+        ends_at: parsed.data.ends_at,
+        hidden: parsed.data.hidden ?? false,
       },
     });
   } catch (auditError) {
@@ -423,7 +446,7 @@ export async function updateEvaluationCycle(
 
   const { data: currentCycle, error: currentCycleError } = await supabase
     .from("evaluation_cycles")
-    .select("id, school_year, semester, label, counts_for_retention, is_active")
+    .select("id, school_year, semester, label, counts_for_retention, is_active, starts_at, ends_at, hidden")
     .eq("dorm_id", dormId)
     .eq("id", cycleId)
     .maybeSingle();

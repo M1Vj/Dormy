@@ -43,6 +43,9 @@ const formSchema = z.object({
   label: z.string(),
   counts_for_retention: z.boolean(),
   is_active: z.boolean(),
+  starts_at: z.string().optional(),
+  ends_at: z.string().optional(),
+  hidden: z.boolean().default(false),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -63,6 +66,9 @@ export function CreateCycleDialog({ dormId }: Props) {
       label: "",
       counts_for_retention: false,
       is_active: false,
+      starts_at: "",
+      ends_at: "",
+      hidden: false,
     },
   });
 
@@ -74,6 +80,9 @@ export function CreateCycleDialog({ dormId }: Props) {
         label: values.label || null,
         counts_for_retention: values.counts_for_retention,
         is_active: values.is_active,
+        starts_at: values.starts_at || null,
+        ends_at: values.ends_at || null,
+        hidden: values.hidden,
       });
 
       if (result.success && result.id) {
@@ -147,6 +156,54 @@ export function CreateCycleDialog({ dormId }: Props) {
                     <Input placeholder="e.g. Mid-term Evaluation" {...field} />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="starts_at"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Starts At</FormLabel>
+                    <FormControl>
+                      <Input type="datetime-local" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="ends_at"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ends At</FormLabel>
+                    <FormControl>
+                      <Input type="datetime-local" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="hidden"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <FormLabel>Hidden</FormLabel>
+                    <div className="text-[0.8rem] text-muted-foreground">
+                      Hide this cycle from occupants.
+                    </div>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />
