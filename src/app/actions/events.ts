@@ -982,8 +982,8 @@ export async function upsertEventRating(formData: FormData) {
     return { error: "Event ID is required." };
   }
 
-  if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
-    return { error: "Select a rating between 1 and 5." };
+  if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 10) {
+    return { error: "Select a rating between 1 and 10." };
   }
 
   if (comment.length > 1500) {
