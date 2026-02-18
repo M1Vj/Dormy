@@ -40,6 +40,8 @@ type DormApplicationRow = {
   status: "pending" | "approved" | "rejected" | "cancelled";
   message: string | null;
   review_note: string | null;
+  student_id: string | null;
+  room_number: string | null;
   created_at: string;
   reviewed_at: string | null;
 };
@@ -93,6 +95,17 @@ export function JoinDorm({
   const [selectedDorm, setSelectedDorm] = useState<DormDirectoryRow | null>(null);
   const [requestedRole, setRequestedRole] = useState<AppRole>("occupant");
   const [message, setMessage] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [school, setSchool] = useState("");
+  const [roomNumber, setRoomNumber] = useState("");
+  const [course, setCourse] = useState("");
+  const [yearLevel, setYearLevel] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+  const [homeAddress, setHomeAddress] = useState("");
+  const [birthdate, setBirthdate] = useState("");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactMobile, setEmergencyContactMobile] = useState("");
+  const [emergencyContactRelationship, setEmergencyContactRelationship] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const [isApplying, startApplyTransition] = useTransition();
@@ -116,6 +129,17 @@ export function JoinDorm({
     setSelectedDorm(dorm);
     setRequestedRole("occupant");
     setMessage("");
+    setStudentId("");
+    setSchool("");
+    setRoomNumber("");
+    setCourse("");
+    setYearLevel("");
+    setContactNumber("");
+    setHomeAddress("");
+    setBirthdate("");
+    setEmergencyContactName("");
+    setEmergencyContactMobile("");
+    setEmergencyContactRelationship("");
     setDialogOpen(true);
   };
 
@@ -126,6 +150,17 @@ export function JoinDorm({
       formData.set("dormId", selectedDorm.id);
       formData.set("requestedRole", requestedRole);
       formData.set("message", message);
+      formData.set("studentId", studentId);
+      formData.set("school", school);
+      formData.set("roomNumber", roomNumber);
+      formData.set("course", course);
+      formData.set("yearLevel", yearLevel);
+      formData.set("contactNumber", contactNumber);
+      formData.set("homeAddress", homeAddress);
+      formData.set("birthdate", birthdate);
+      formData.set("emergencyContactName", emergencyContactName);
+      formData.set("emergencyContactMobile", emergencyContactMobile);
+      formData.set("emergencyContactRelationship", emergencyContactRelationship);
 
       const result = await applyToDorm(formData);
       if (result?.error) {
@@ -279,6 +314,8 @@ export function JoinDorm({
                       <p className="text-xs text-muted-foreground">
                         Requested role: {getRoleLabel(app.requested_role)}
                         {app.granted_role ? ` • Granted: ${getRoleLabel(app.granted_role)}` : ""}
+                        {app.student_id ? ` • ID: ${app.student_id}` : ""}
+                        {app.room_number ? ` • Room: ${app.room_number}` : ""}
                       </p>
                     </div>
                     <StatusBadge status={app.status} />
@@ -360,7 +397,116 @@ export function JoinDorm({
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="Example: New occupant for this semester, already in the roster."
-                rows={4}
+                rows={2}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="studentId">
+                  School ID
+                </label>
+                <Input
+                  id="studentId"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="202X-XXXXX"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="contactNumber">
+                  Contact Number
+                </label>
+                <Input
+                  id="contactNumber"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                  placeholder="09XXXXXXXXX"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="roomNumber">
+                  Room Number
+                </label>
+                <Input
+                  id="roomNumber"
+                  value={roomNumber}
+                  onChange={(e) => setRoomNumber(e.target.value)}
+                  placeholder="e.g. 4B"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="birthdate">
+                  Birthdate
+                </label>
+                <Input
+                  id="birthdate"
+                  type="date"
+                  value={birthdate}
+                  onChange={(e) => setBirthdate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="course">
+                  Course
+                </label>
+                <Input
+                  id="course"
+                  value={course}
+                  onChange={(e) => setCourse(e.target.value)}
+                  placeholder="BSCS"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" htmlFor="yearLevel">
+                  Year Level
+                </label>
+                <Input
+                  id="yearLevel"
+                  value={yearLevel}
+                  onChange={(e) => setYearLevel(e.target.value)}
+                  placeholder="1st Year"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="homeAddress">
+                Home Address
+              </label>
+              <Textarea
+                id="homeAddress"
+                value={homeAddress}
+                onChange={(e) => setHomeAddress(e.target.value)}
+                placeholder="Complete Barangay, Municipality/City, Province"
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Emergency Contact</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  value={emergencyContactName}
+                  onChange={(e) => setEmergencyContactName(e.target.value)}
+                  placeholder="Contact Name"
+                />
+                <Input
+                  value={emergencyContactMobile}
+                  onChange={(e) => setEmergencyContactMobile(e.target.value)}
+                  placeholder="Contact Number"
+                />
+              </div>
+              <Input
+                value={emergencyContactRelationship}
+                onChange={(e) => setEmergencyContactRelationship(e.target.value)}
+                placeholder="Relationship (e.g. Parent, Guardian)"
               />
             </div>
           </div>

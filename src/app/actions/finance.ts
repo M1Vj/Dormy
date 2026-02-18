@@ -87,8 +87,13 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     ? -Math.abs(tx.amount)
     : Math.abs(tx.amount);
 
+  // Ensure we have the active semester for this transaction
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  const semesterId = "semesterId" in semesterResult ? semesterResult.semesterId : null;
+
   const { error } = await supabase.from("ledger_entries").insert({
     dorm_id: dormId,
+    semester_id: semesterId,
     ledger: tx.category,
     entry_type: tx.entry_type,
     occupant_id: tx.occupant_id,
