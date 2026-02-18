@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getEvaluationCycle, getEvaluationTemplates } from "@/app/actions/evaluation";
-import { getActiveDormId } from "@/lib/dorms";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,33 +24,45 @@ export default async function CycleDetailsPage({ params }: Props) {
   if (!cycle) notFound();
 
   const templates = await getEvaluationTemplates(dormId, cycle_id);
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6 p-8">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/admin/evaluation">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </Button>
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight">
-            {cycle.label || "Evaluation Cycle"}
-          </h2>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span>{cycle.school_year}</span>
-            <span>•</span>
-            <span>Sem {cycle.semester}</span>
-            {cycle.is_active && (
-              <>
-                <span>•</span>
-                <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                  Active
-                </Badge>
-              </>
-            )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/admin/evaluation">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="space-y-1">
+            <h2 className="text-3xl font-bold tracking-tight">
+              {cycle.label || "Evaluation Cycle"}
+            </h2>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span>{cycle.school_year}</span>
+              <span>•</span>
+              <span>Sem {cycle.semester}</span>
+              {cycle.is_active && (
+                <>
+                  <span>•</span>
+                  <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                    Active
+                  </Badge>
+                </>
+              )}
+            </div>
           </div>
         </div>
+        <ExportXlsxDialog
+          report="evaluation-rankings"
+          title="Export Evaluation Rankings"
+          description="Download ranking results with top 30% retention tagging."
+          defaultDormId={dormId}
+          dormOptions={dormOptions}
+          includeDormSelector
+          defaultParams={{ cycle_id }}
+        />
       </div>
 
       <Tabs defaultValue="templates" className="space-y-4">

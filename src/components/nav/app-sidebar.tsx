@@ -3,13 +3,17 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  BarChart3,
   Calendar,
   FileText,
   Home,
+  Sparkles,
   Settings,
   Shield,
   Users,
   Wallet,
+  UserPlus,
+  Building2,
 } from "lucide-react"
 
 import {
@@ -21,33 +25,87 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
 import { DormSwitcher } from "@/components/nav/dorm-switcher"
 
 // Menu items.
 const items = [
-  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Home", url: "/home", icon: Home },
+  { title: "Join", url: "/join", icon: Building2 },
+  { title: "Applications", url: "/applications", icon: UserPlus },
   { title: "Occupants", url: "/occupants", icon: Users },
+  { title: "Committees", url: "/committees", icon: Users },
   { title: "Fines", url: "/fines", icon: FileText },
   { title: "Payments", url: "/payments", icon: Wallet },
+  { title: "Cleaning", url: "/cleaning", icon: Calendar },
   { title: "Evaluation", url: "/evaluation", icon: Shield },
   { title: "Events", url: "/events", icon: Calendar },
+  { title: "Reporting", url: "/admin/reporting", icon: BarChart3 },
+  { title: "AI", url: "/ai", icon: Sparkles },
   { title: "Admin", url: "/admin", icon: Settings },
 ]
 
 export function AppSidebar() {
   const pathname = usePathname()
   const { role } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
 
-  const occupantRoutes = new Set(["/payments", "/fines", "/evaluation"])
+  const directAdminOccupants =
+    role === "admin" || role === "student_assistant"
+  const directAdminFines =
+    role === "admin" || role === "student_assistant"
+
+  const occupantRoutes = new Set([
+    "/home",
+    "/events",
+    "/payments",
+    "/fines",
+    "/evaluation",
+    "/cleaning",
+    "/committees",
+  ])
+  const staffApplicationRoles = new Set([
+    "admin",
+    "adviser",
+    "student_assistant",
+  ])
+  const aiRoles = new Set([
+    "admin",
+    "officer",
+    "student_assistant",
+    "treasurer",
+    "adviser",
+    "assistant_adviser",
+  ])
   const visibleItems = items.filter((item) => {
+    if (!role) {
+      return item.url === "/join"
+    }
+
     if (role === "occupant") {
       return occupantRoutes.has(item.url)
     }
 
+    if (item.url === "/applications") {
+      return staffApplicationRoles.has(role)
+    }
+
     if (item.url === "/admin") {
-      return role === "admin"
+      return role === "admin" || role === "adviser"
+    }
+
+    if (item.url === "/ai") {
+      return role ? aiRoles.has(role) : false
+    }
+
+    if (item.url === "/admin/reporting") {
+      return new Set(["admin", "treasurer", "student_assistant", "adviser"]).has(role)
+    }
+
+    if (item.url === "/join") {
+      return false
     }
 
     return true
@@ -63,12 +121,24 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleItems.map((item) => {
-                const isActive = pathname === item.url ||
-                  (item.url !== "/" && pathname.startsWith(item.url))
+                const resolvedUrl =
+                  item.url === "/occupants" && directAdminOccupants
+                    ? "/admin/occupants"
+                    : item.url === "/fines" && directAdminFines
+                      ? "/admin/fines"
+                      : item.url
+
+                const isActive = pathname === resolvedUrl ||
+                  (resolvedUrl !== "/" && pathname.startsWith(resolvedUrl))
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url}>
+                      <Link
+                        href={resolvedUrl}
+                        onClick={() => {
+                          if (isMobile) setOpenMobile(false)
+                        }}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </Link>

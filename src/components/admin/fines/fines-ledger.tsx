@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { voidFine } from "@/app/actions/fines";
@@ -10,6 +11,7 @@ import {
 } from "@/components/admin/fines/issue-fine-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -62,6 +64,10 @@ type FinesLedgerProps = {
   fines: FineRow[];
   rules: FineRuleOption[];
   occupants: OccupantOption[];
+  filters?: {
+    search?: string;
+    status?: string;
+  };
 };
 
 const initialState = { error: "", success: false };
@@ -111,7 +117,15 @@ const getIssuerName = (issuer?: FineIssuer | FineIssuer[] | null) => {
   return issuerRef?.display_name?.trim() || "-";
 };
 
-function VoidFineDialog({ dormId, fineId }: { dormId: string; fineId: string }) {
+function VoidFineDialog({
+  dormId,
+  fineId,
+  buttonClassName,
+}: {
+  dormId: string;
+  fineId: string;
+  buttonClassName?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     async (previousState: typeof initialState, formData: FormData) => {
       const reason = formData.get("reason");
@@ -130,7 +144,7 @@ function VoidFineDialog({ dormId, fineId }: { dormId: string; fineId: string }) 
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button size="sm" variant="destructive">
+        <Button size="sm" variant="destructive" className={buttonClassName}>
           Void
         </Button>
       </SheetTrigger>
@@ -165,7 +179,9 @@ function VoidFineDialog({ dormId, fineId }: { dormId: string; fineId: string }) 
   );
 }
 
-export function FinesLedger({ dormId, fines, rules, occupants }: FinesLedgerProps) {
+export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesLedgerProps) {
+  const hasFilters = Boolean(filters?.search) || Boolean(filters?.status);
+
   return (
     <Card>
       <CardHeader className="space-y-4">
@@ -178,9 +194,104 @@ export function FinesLedger({ dormId, fines, rules, occupants }: FinesLedgerProp
           </div>
           <IssueFineDialog dormId={dormId} rules={rules} occupants={occupants} />
         </div>
+        <form className="grid gap-2 sm:grid-cols-[1fr_170px_auto_auto] sm:items-center" method="GET">
+          <Input
+            name="search"
+            placeholder="Search occupant, rule, or note"
+            defaultValue={filters?.search ?? ""}
+          />
+          <select
+            name="status"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            defaultValue={filters?.status ?? ""}
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="voided">Voided</option>
+          </select>
+          <Button type="submit" variant="secondary" size="sm">
+            Filter
+          </Button>
+          {hasFilters ? (
+            <Button asChild type="button" variant="ghost" size="sm">
+              <Link href="/admin/fines">Reset</Link>
+            </Button>
+          ) : null}
+        </form>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden">
+          {fines.length === 0 ? (
+            <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+              No fines issued yet.
+            </div>
+          ) : (
+            fines.map((fine) => {
+              const roomCode = getRoomCode(fine.occupant);
+              const issuedAt = fine.issued_at ?? fine.created_at;
+              const isVoided = Boolean(fine.voided_at);
+
+              return (
+                <div key={fine.id} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{getOccupantName(fine.occupant)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {roomCode ? `Room ${roomCode}` : "No room"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                        isVoided
+                          ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      }`}
+                    >
+                      {isVoided ? "Voided" : "Active"}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs">
+                    <p>
+                      <span className="text-muted-foreground">Rule:</span>{" "}
+                      {getRuleLabel(fine.rule)}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Amount:</span>{" "}
+                      {formatNumber(fine.pesos)} pesos · {formatNumber(fine.points)} points
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Issued:</span>{" "}
+                      {formatDate(issuedAt)} · {getIssuerName(fine.issuer)}
+                    </p>
+                    {fine.note ? (
+                      <p>
+                        <span className="text-muted-foreground">Note:</span>{" "}
+                        {fine.note}
+                      </p>
+                    ) : null}
+                    {isVoided && fine.void_reason ? (
+                      <p>
+                        <span className="text-muted-foreground">Void reason:</span>{" "}
+                        {fine.void_reason}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-3">
+                    {isVoided ? (
+                      <Button size="sm" variant="ghost" disabled className="w-full">
+                        Voided
+                      </Button>
+                    ) : (
+                      <VoidFineDialog dormId={dormId} fineId={fine.id} buttonClassName="w-full" />
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr className="border-b">

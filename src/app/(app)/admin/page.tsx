@@ -29,7 +29,7 @@ export default async function Page() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!membership || membership.role !== "admin") {
+  if (!membership || !new Set(["admin", "adviser"]).has(membership.role)) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -50,16 +50,58 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dorms</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/admin/dorms">Manage dorms</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Audit logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/admin/audit">Open audit trail</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Dorms</CardTitle>
+          <CardTitle className="text-base">Semesters and turnover</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Group events, fines, cleaning, and evaluations by semester while keeping occupants and money persistent.
+          </p>
           <Button asChild>
-            <Link href="/admin/dorms">Manage dorms</Link>
+            <Link href="/admin/terms">Open semester management</Link>
           </Button>
         </CardContent>
       </Card>
+      {membership.role === "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Overrides</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Handle exceptional corrections across occupants, fines, payments, cleaning, events, and evaluation with required reasons.
+            </p>
+            <Button asChild>
+              <Link href="/admin/overrides">Open override center</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

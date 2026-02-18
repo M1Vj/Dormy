@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { logAuditEvent } from "@/lib/audit/log";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { EvaluationSubmission, EvaluationSummary } from "@/lib/types/evaluation";
 
@@ -157,7 +159,7 @@ export async function submitEvaluation(
 
   const { data: rater, error: raterError } = await supabase
     .from("occupants")
-    .select("id, dorm_id, user_id")
+    .select("id, dorm_id, user_id, is_bigbrod")
     .eq("id", parsed.data.raterId)
     .single();
 
@@ -167,6 +169,24 @@ export async function submitEvaluation(
 
   if (rater.user_id !== auth.user.id) {
     return { error: "Rater mismatch." };
+  }
+
+  // Enforce semester-based rater restrictions:
+  // Sem 1: only BigBrods can rate
+  // Sem 2: everyone can rate (except self, already checked above)
+  const semesterResult = await ensureActiveSemesterId(rater.dorm_id, supabase);
+  if (!("error" in semesterResult)) {
+    const { data: activeCycle } = await supabase
+      .from("evaluation_cycles")
+      .select("semester")
+      .eq("dorm_id", rater.dorm_id)
+      .eq("semester_id", semesterResult.semesterId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (activeCycle?.semester === 1 && !rater.is_bigbrod) {
+      return { error: "Only BigBrods (top retained occupants) can submit evaluations during Semester 1." };
+    }
   }
 
   const { data: ratee, error: rateeError } = await supabase
@@ -235,6 +255,24 @@ export async function submitEvaluation(
     return { error: scoresError.message };
   }
 
+  try {
+    await logAuditEvent({
+      dormId: rater.dorm_id,
+      actorUserId: auth.user.id,
+      action: "evaluation.submission_created",
+      entityType: "evaluation_submission",
+      entityId: submission.id,
+      metadata: {
+        template_id: parsed.data.templateId,
+        rater_occupant_id: parsed.data.raterId,
+        ratee_occupant_id: parsed.data.rateeId,
+        metric_scores_count: metricScores.length,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation submission:", auditError);
+  }
+
   revalidatePath("/evaluation");
   revalidatePath("/admin/evaluation");
   return { success: true };
@@ -247,10 +285,18 @@ export async function getEvaluationCycles(dormId: string) {
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    console.error("Failed to resolve active semester for evaluation cycles:", semesterResult.error);
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("evaluation_cycles")
     .select("*")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .order("is_active", { ascending: false })
     .order("school_year", { ascending: false })
     .order("semester", { ascending: false });
@@ -303,10 +349,16 @@ export async function createEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data: cycle, error } = await supabase
     .from("evaluation_cycles")
     .insert({
       dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
       school_year: parsed.data.school_year,
       semester: parsed.data.semester,
       label: parsed.data.label,
@@ -318,6 +370,26 @@ export async function createEvaluationCycle(
 
   if (error || !cycle) {
     return { error: error?.message ?? "Failed to create evaluation cycle." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_created",
+      entityType: "evaluation_cycle",
+      entityId: cycle.id,
+      metadata: {
+        semester_id: semesterResult.semesterId,
+        school_year: parsed.data.school_year,
+        semester: parsed.data.semester,
+        label: parsed.data.label,
+        counts_for_retention: parsed.data.counts_for_retention ?? false,
+        is_active: parsed.data.is_active ?? false,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle creation:", auditError);
   }
 
   revalidatePath("/admin/evaluation");
@@ -349,6 +421,17 @@ export async function updateEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: currentCycle, error: currentCycleError } = await supabase
+    .from("evaluation_cycles")
+    .select("id, school_year, semester, label, counts_for_retention, is_active")
+    .eq("dorm_id", dormId)
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (currentCycleError || !currentCycle) {
+    return { error: currentCycleError?.message ?? "Evaluation cycle not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_cycles")
     .update(updates)
@@ -356,6 +439,22 @@ export async function updateEvaluationCycle(
     .eq("id", cycleId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_updated",
+      entityType: "evaluation_cycle",
+      entityId: cycleId,
+      metadata: {
+        previous: currentCycle,
+        updates,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle update:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${cycleId}`);
@@ -370,6 +469,17 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: cycle, error: cycleError } = await supabase
+    .from("evaluation_cycles")
+    .select("id, school_year, semester, label, counts_for_retention, is_active")
+    .eq("dorm_id", dormId)
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (cycleError || !cycle) {
+    return { error: cycleError?.message ?? "Evaluation cycle not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_cycles")
     .delete()
@@ -377,6 +487,19 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
     .eq("id", cycleId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.cycle_deleted",
+      entityType: "evaluation_cycle",
+      entityId: cycleId,
+      metadata: cycle,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation cycle deletion:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   return { success: true };
@@ -466,6 +589,24 @@ export async function createEvaluationTemplate(
     return { error: error?.message ?? "Failed to create evaluation template." };
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_created",
+      entityType: "evaluation_template",
+      entityId: template.id,
+      metadata: {
+        cycle_id: template.cycle_id,
+        name: parsed.data.name,
+        status: parsed.data.status,
+        rater_group_weights: parsed.data.rater_group_weights ?? {},
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template creation:", auditError);
+  }
+
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${template.cycle_id}`);
   return { success: true, id: template.id };
@@ -505,6 +646,19 @@ export async function updateTemplate(
     return { error: error?.message ?? "Failed to update evaluation template." };
   }
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_updated",
+      entityType: "evaluation_template",
+      entityId: templateId,
+      metadata: updates,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template update:", auditError);
+  }
+
   revalidatePath("/admin/evaluation");
   revalidatePath(`/admin/evaluation/${updated.cycle_id}`);
   return { success: true };
@@ -529,6 +683,21 @@ export async function deleteEvaluationTemplate(
     .eq("id", templateId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.template_deleted",
+      entityType: "evaluation_template",
+      entityId: templateId,
+      metadata: {
+        cycle_id: cycleId ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation template deletion:", auditError);
+  }
 
   revalidatePath("/admin/evaluation");
   if (cycleId) {
@@ -591,7 +760,7 @@ export async function createEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
-  const { error } = await supabase.from("evaluation_metrics").insert({
+  const { data: metric, error } = await supabase.from("evaluation_metrics").insert({
     dorm_id: dormId,
     template_id: parsed.data.template_id,
     name: parsed.data.name,
@@ -600,10 +769,25 @@ export async function createEvaluationMetric(
     scale_min: parsed.data.scale_min,
     scale_max: parsed.data.scale_max,
     sort_order: parsed.data.sort_order,
-  });
+  })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !metric) {
+    return { error: error?.message ?? "Failed to create evaluation metric." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_created",
+      entityType: "evaluation_metric",
+      entityId: metric.id,
+      metadata: parsed.data,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric creation:", auditError);
   }
 
   if (cycleId) {
@@ -636,6 +820,17 @@ export async function updateEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: currentMetric, error: currentMetricError } = await supabase
+    .from("evaluation_metrics")
+    .select("id, template_id, name, description, weight_pct, scale_min, scale_max, sort_order")
+    .eq("dorm_id", dormId)
+    .eq("id", metricId)
+    .maybeSingle();
+
+  if (currentMetricError || !currentMetric) {
+    return { error: currentMetricError?.message ?? "Evaluation metric not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_metrics")
     .update(updates)
@@ -643,6 +838,22 @@ export async function updateEvaluationMetric(
     .eq("id", metricId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_updated",
+      entityType: "evaluation_metric",
+      entityId: metricId,
+      metadata: {
+        previous: currentMetric,
+        updates,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric update:", auditError);
+  }
 
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
@@ -663,6 +874,17 @@ export async function deleteEvaluationMetric(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: metric, error: metricError } = await supabase
+    .from("evaluation_metrics")
+    .select("id, template_id, name, description, weight_pct, scale_min, scale_max, sort_order")
+    .eq("dorm_id", dormId)
+    .eq("id", metricId)
+    .maybeSingle();
+
+  if (metricError || !metric) {
+    return { error: metricError?.message ?? "Evaluation metric not found." };
+  }
+
   const { error } = await supabase
     .from("evaluation_metrics")
     .delete()
@@ -670,6 +892,19 @@ export async function deleteEvaluationMetric(
     .eq("id", metricId);
 
   if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: auth.user.id,
+      action: "evaluation.metric_deleted",
+      entityType: "evaluation_metric",
+      entityId: metricId,
+      metadata: metric,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for evaluation metric deletion:", auditError);
+  }
 
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
@@ -686,6 +921,11 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
     throw new Error("Supabase is not configured for this environment.");
   }
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return [];
+  }
+
   // 1. Get occupant profile for current user
   const { data: self } = await supabase
     .from("occupants")
@@ -696,15 +936,28 @@ export async function getOccupantsToRate(dormId: string, currentUserId: string) 
 
   if (!self) return [];
 
+  // Check BigBrod status for Sem 1 restriction
+  const { data: selfOccupant } = await supabase
+    .from("occupants")
+    .select("is_bigbrod")
+    .eq("id", self.id)
+    .single();
+
   // 2. Get active cycle and template
   const { data: cycle } = await supabase
     .from("evaluation_cycles")
-    .select("id")
+    .select("id, semester")
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .eq("is_active", true)
     .single();
 
   if (!cycle) return [];
+
+  // Enforce: Sem 1 only BigBrods can rate
+  if (cycle.semester === 1 && !selfOccupant?.is_bigbrod) {
+    return []; // Not eligible to rate in Sem 1
+  }
 
   const { data: template } = await supabase
     .from("evaluation_templates")

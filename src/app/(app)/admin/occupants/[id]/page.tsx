@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { getFineRules } from "@/app/actions/fines";
 import { getOccupant } from "@/app/actions/occupants";
 import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveDormId } from "@/lib/dorms";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EditOccupantForm } from "@/components/admin/occupants/edit-occupant-form";
 
@@ -24,7 +25,11 @@ type RoomAssignment = {
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "-";
-  const parsed = new Date(value);
+  const raw = String(value);
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const parsed = ymd
+    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    : new Date(raw);
   if (Number.isNaN(parsed.getTime())) return "-";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -90,7 +95,10 @@ export default async function AdminOccupantProfilePage(props: {
     memberships?.find((membership) => membership.dorm_id === activeDormId) ??
     memberships?.[0];
 
-  if (!activeMembership || activeMembership.role !== "admin") {
+  if (
+    !activeMembership ||
+    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
+  ) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -133,6 +141,7 @@ export default async function AdminOccupantProfilePage(props: {
       ? "-"
       : `Level ${currentRoomRef.level}`;
   const assignments = (occupant.room_assignments as RoomAssignment[]) ?? [];
+  const dormOptions = await getUserDorms();
 
   return (
     <div className="space-y-6">
@@ -159,6 +168,18 @@ export default async function AdminOccupantProfilePage(props: {
             <Button asChild variant="outline">
               <Link href={`/admin/occupants/${occupant.id}?mode=edit`}>Edit</Link>
             </Button>
+          )}
+          {!isEditMode && (
+            <ExportXlsxDialog
+              report="occupant-statement"
+              title="Export Occupant Statement"
+              description="Download balances and transaction history for this occupant."
+              defaultDormId={activeMembership.dorm_id}
+              dormOptions={dormOptions}
+              includeDormSelector
+              defaultParams={{ occupant_id: occupant.id }}
+              triggerLabel="Export statement"
+            />
           )}
           <Button asChild variant="secondary">
             <Link href="/admin/occupants">Back to occupants</Link>
@@ -213,6 +234,79 @@ export default async function AdminOccupantProfilePage(props: {
           )}
         </CardContent>
       </Card>
+
+      {!isEditMode ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Contact</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Email</p>
+                {occupant.contact_email ? (
+                  <a
+                    className="text-sm font-medium underline underline-offset-4"
+                    href={`mailto:${occupant.contact_email}`}
+                  >
+                    {occupant.contact_email}
+                  </a>
+                ) : (
+                  <p className="text-sm font-medium">-</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Mobile number</p>
+                <p className="text-sm font-medium">
+                  {occupant.contact_mobile ?? "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Birthdate</p>
+                <p className="text-sm font-medium">
+                  {formatDate(occupant.birthdate)}
+                </p>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <p className="text-xs text-muted-foreground">Home address</p>
+                <p className="text-sm font-medium whitespace-pre-line">
+                  {occupant.home_address ?? "-"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!isEditMode ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Emergency contact</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Name</p>
+                <p className="text-sm font-medium">
+                  {occupant.emergency_contact_name ?? "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Relationship</p>
+                <p className="text-sm font-medium">
+                  {occupant.emergency_contact_relationship ?? "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Mobile number</p>
+                <p className="text-sm font-medium">
+                  {occupant.emergency_contact_mobile ?? "-"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

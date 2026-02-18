@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/.playwright-cli/
+/output/
 
 # next.js
 /.next/
@@ -32,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -51,3 +54,19 @@ next-env.d.ts
 
 # Supabase local dev
 supabase/.temp/
+supabase/config.toml
+supabase/.gitignore
+supabase/.branches/
+
+# Tasks
+Tasks.md
+.claude/
+AGENTS.md
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

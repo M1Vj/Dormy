@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { logAuditEvent } from "@/lib/audit/log";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // --- Rules ---
@@ -37,6 +39,9 @@ export async function createFineRule(dormId: string, formData: FormData) {
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const rawData = {
     title: formData.get("title"),
@@ -56,6 +61,23 @@ export async function createFineRule(dormId: string, formData: FormData) {
 
   if (error) return { error: error.message };
 
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user?.id ?? null,
+      action: "fines.rule_created",
+      entityType: "fine_rule",
+      metadata: {
+        title: parsed.data.title,
+        severity: parsed.data.severity,
+        default_pesos: parsed.data.default_pesos,
+        default_points: parsed.data.default_points,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine rule creation:", auditError);
+  }
+
   revalidatePath("/admin/fines");
   return { success: true };
 }
@@ -69,6 +91,9 @@ export async function updateFineRule(
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Handle checkbox carefully (if present = true, else false? Or just updates?)
   // For strictness, let's assume active is passed as 'true'/'false' string or via checkbox logic
@@ -88,6 +113,16 @@ export async function updateFineRule(
   const parsed = fineRuleSchema.partial().safeParse(rawData);
   if (!parsed.success) return { error: "Invalid data" };
 
+  const { data: existingRule, error: existingRuleError } = await supabase
+    .from("fine_rules")
+    .select("id, active")
+    .eq("dorm_id", dormId)
+    .eq("id", ruleId)
+    .maybeSingle();
+
+  if (existingRuleError || !existingRule) {
+    return { error: existingRuleError?.message ?? "Fine rule not found." };
+  }
 
   const { error } = await supabase
     .from("fine_rules")
@@ -96,6 +131,28 @@ export async function updateFineRule(
     .eq("id", ruleId);
 
   if (error) return { error: error.message };
+
+  const updatedActive =
+    typeof parsed.data.active === "boolean" ? parsed.data.active : existingRule.active;
+  const action =
+    updatedActive === false && existingRule.active !== false
+      ? "fines.rule_deleted"
+      : updatedActive === true && existingRule.active === false
+        ? "fines.rule_restored"
+        : "fines.rule_updated";
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user?.id ?? null,
+      action,
+      entityType: "fine_rule",
+      entityId: ruleId,
+      metadata: parsed.data,
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine rule update:", auditError);
+  }
 
   revalidatePath("/admin/fines");
   return { success: true };
@@ -113,21 +170,29 @@ const issueFineSchema = z.object({
 
 export async function getFines(
   dormId: string,
-  { search, status }: { search?: string; status?: string } = {}
+  { search, status, occupantId }: { search?: string; status?: string; occupantId?: string } = {}
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     throw new Error("Supabase is not configured for this environment.");
   }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    console.error("Failed to resolve active semester for fines:", semesterResult.error);
+    return [];
+  }
+
   let query = supabase
     .from("fines")
     .select(`
       *,
-      occupant:occupants(full_name, room_assignments(room:rooms(code))),
+      occupant:occupants(full_name, student_id, room_assignments(room:rooms(code))),
       rule:fine_rules(title, severity),
       issuer:issued_by(display_name)
     `)
     .eq("dorm_id", dormId)
+    .eq("semester_id", semesterResult.semesterId)
     .order("issued_at", { ascending: false });
 
   if (status === "voided") {
@@ -136,17 +201,8 @@ export async function getFines(
     query = query.is("voided_at", null);
   }
 
-  // Search by occupant name is complex with join.
-  // Supabase doesn't support deep filter on join easily without !inner
-  // We can simple-filter in memory or use !inner if search is present.
-  if (search) {
-    // Filter by note or rule title or occupant name?
-    // This requires !inner join on occupants.
-    // For Simplification in v1: Search only matches note. 
-    // Ideal: use Views or RPC for search.
-    // Let's stick to simple client-side filtering or exact matches for now if complex.
-    // Or filtering by `note` column.
-    query = query.ilike("note", `%${search}%`);
+  if (occupantId) {
+    query = query.eq("occupant_id", occupantId);
   }
 
   const { data, error } = await query;
@@ -154,7 +210,29 @@ export async function getFines(
     console.error(error);
     return [];
   }
-  return data;
+
+  if (!search) {
+    return data;
+  }
+
+  const normalizedSearch = search.toLowerCase();
+  const asFirst = <T,>(value?: T | T[] | null) =>
+    Array.isArray(value) ? value[0] : value;
+
+  return data.filter((fine) => {
+    const occupant = asFirst(fine.occupant);
+    const rule = asFirst(fine.rule);
+
+    const values = [
+      fine.note ?? "",
+      occupant?.full_name ?? "",
+      occupant?.student_id ?? "",
+      rule?.title ?? "",
+      rule?.severity ?? "",
+    ];
+
+    return values.some((value) => value.toLowerCase().includes(normalizedSearch));
+  });
 }
 
 export async function issueFine(dormId: string, formData: FormData) {
@@ -178,8 +256,14 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
   const { data, error } = await supabase.from("fines").insert({
     dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
     occupant_id: parsed.data.occupant_id,
     rule_id: parsed.data.rule_id || null, // Allow custom fine without rule
     pesos: parsed.data.pesos,
@@ -210,6 +294,24 @@ export async function issueFine(dormId: string, formData: FormData) {
     console.error("Failed to create ledger entry for fine:", ledgerError);
     // Ideally update fine to add a warning or delete it?
     // Let's keep it simple: just log.
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "fines.issued",
+      entityType: "fine",
+      entityId: data.id,
+      metadata: {
+        occupant_id: parsed.data.occupant_id,
+        rule_id: parsed.data.rule_id ?? null,
+        pesos: parsed.data.pesos,
+        points: parsed.data.points,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine issuance:", auditError);
   }
 
   revalidatePath("/admin/fines");
@@ -252,6 +354,21 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
 
   if (ledgerError) {
     console.error("Failed to void ledger entry:", ledgerError);
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "fines.voided",
+      entityType: "fine",
+      entityId: fineId,
+      metadata: {
+        reason,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for fine void:", auditError);
   }
 
   return { success: true };
