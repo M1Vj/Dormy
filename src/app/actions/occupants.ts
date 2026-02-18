@@ -10,7 +10,7 @@ const occupantStatusSchema = z.enum(["active", "left", "removed"]);
 const occupantSchema = z.object({
   full_name: z.string().min(2, "Name is required"),
   student_id: z.string().optional(),
-  classification: z.string().optional(),
+  course: z.string().optional(),
   joined_at: z.string().optional(), // Date string
 });
 
@@ -30,7 +30,7 @@ type RoomAssignment = {
 const OCCUPANT_AUDIT_FIELDS = [
   "full_name",
   "student_id",
-  "classification",
+  "course",
   "joined_at",
   "status",
   "home_address",
@@ -81,7 +81,7 @@ export async function getOccupants(
   let query = supabase
     .from("occupants")
     .select(`
-      *,
+      id, full_name, student_id, user_id, course:classification, joined_at, status, 
       room_assignments(
         id,
         start_date,
@@ -159,7 +159,9 @@ export async function getOccupant(dormId: string, occupantId: string) {
   const { data, error } = await supabase
     .from("occupants")
     .select(`
-      *,
+      id, full_name, student_id, course:classification, joined_at, status,
+      home_address, birthdate, contact_mobile, contact_email, 
+      emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship,
       room_assignments(
         id,
         start_date,
@@ -224,7 +226,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),
-    classification: formData.get("classification"),
+    course: formData.get("classification"),
     joined_at: formData.get("joined_at") || new Date().toISOString().split('T')[0],
     home_address: formData.get("home_address"),
     birthdate: formData.get("birthdate"),
@@ -247,7 +249,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
       dorm_id: dormId,
       full_name: parsed.data.full_name,
       student_id: parsed.data.student_id ? parsed.data.student_id : null,
-      classification: parsed.data.classification,
+      classification: parsed.data.course,
       joined_at: parsed.data.joined_at,
       home_address: typeof rawData.home_address === "string" && rawData.home_address.trim() ? rawData.home_address.trim() : null,
       birthdate: typeof rawData.birthdate === "string" && rawData.birthdate.trim() ? rawData.birthdate.trim() : null,
@@ -266,7 +268,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
         : null,
       status: "active"
     })
-    .select("id, full_name, student_id, classification, joined_at, status")
+    .select("id, full_name, student_id, course:classification, joined_at, status")
     .single();
 
   if (error || !createdOccupant) {
@@ -283,7 +285,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
       metadata: {
         full_name: createdOccupant.full_name,
         student_id: createdOccupant.student_id,
-        classification: createdOccupant.classification,
+        course: createdOccupant.course,
         joined_at: createdOccupant.joined_at,
         status: createdOccupant.status,
       },
@@ -333,7 +335,7 @@ export async function updateOccupant(
   const { data: previousOccupant, error: previousOccupantError } = await supabase
     .from("occupants")
     .select(
-      "id, full_name, student_id, classification, joined_at, status, home_address, birthdate, contact_mobile, contact_email, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship"
+      "id, full_name, student_id, course:classification, joined_at, status, home_address, birthdate, contact_mobile, contact_email, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship"
     )
     .eq("dorm_id", dormId)
     .eq("id", occupantId)
@@ -346,7 +348,7 @@ export async function updateOccupant(
   const rawData = {
     full_name: formData.get("full_name"),
     student_id: formData.get("student_id"),
-    classification: formData.get("classification"),
+    course: formData.get("classification"),
     joined_at: formData.get("joined_at"),
     status: formData.get("status"),
     home_address: formData.get("home_address"),
@@ -363,7 +365,7 @@ export async function updateOccupant(
   const updates: Record<string, string | number | boolean | null> = {};
   if (rawData.full_name) updates.full_name = String(rawData.full_name).trim();
   if (rawData.student_id !== undefined) updates.student_id = String(rawData.student_id ?? "").trim() || null;
-  if (rawData.classification !== undefined) updates.classification = String(rawData.classification ?? "").trim() || null;
+  if (rawData.course !== undefined) updates.classification = String(rawData.course ?? "").trim() || null;
   if (rawData.joined_at) updates.joined_at = String(rawData.joined_at).trim();
   if (rawData.status) {
     const parsedStatus = occupantStatusSchema.safeParse(

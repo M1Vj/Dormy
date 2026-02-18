@@ -46,7 +46,7 @@ export default async function OccupantEvaluationPage() {
                   <Circle className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
-              <CardDescription>{occupant.classification ? `Course: ${occupant.classification}` : "No course set"}</CardDescription>
+              <CardDescription>{occupant.course ? `Course: ${occupant.course}` : "No course set"}</CardDescription>
             </CardHeader>
             <CardContent>
               {occupant.is_rated ? (

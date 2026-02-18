@@ -14,12 +14,12 @@ const occupantOverrideSchema = z.object({
   reason: reasonSchema,
   full_name: z.string().trim().min(2).max(180).optional(),
   student_id: z.string().trim().max(80).optional(),
-  classification: z.string().trim().max(120).optional(),
+  course: z.string().trim().max(120).optional(),
   joined_at: z.string().trim().optional(),
   left_at: z.string().trim().optional(),
   status: occupantStatusSchema.optional(),
   clear_student_id: z.boolean().optional().default(false),
-  clear_classification: z.boolean().optional().default(false),
+  clear_course: z.boolean().optional().default(false),
   clear_left_at: z.boolean().optional().default(false),
 });
 
@@ -179,12 +179,12 @@ export async function overrideOccupantRecord(
     reason: string;
     full_name?: string;
     student_id?: string;
-    classification?: string;
+    course?: string;
     joined_at?: string;
     left_at?: string;
     status?: "active" | "left" | "removed";
     clear_student_id?: boolean;
-    clear_classification?: boolean;
+    clear_course?: boolean;
     clear_left_at?: boolean;
   }
 ) {
@@ -202,7 +202,7 @@ export async function overrideOccupantRecord(
   const { data: occupant, error: occupantError } = await supabase
     .from("occupants")
     .select(
-      "id, full_name, student_id, classification, joined_at, left_at, status, contact_mobile, contact_email, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship"
+      "id, full_name, student_id, course:classification, joined_at, left_at, status, contact_mobile, contact_email, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship"
     )
     .eq("dorm_id", dormId)
     .eq("id", parsed.data.occupant_id)
@@ -222,10 +222,10 @@ export async function overrideOccupantRecord(
   } else if (parsed.data.student_id !== undefined) {
     updates.student_id = parsed.data.student_id.trim() || null;
   }
-  if (parsed.data.clear_classification) {
-    updates.classification = null;
-  } else if (parsed.data.classification !== undefined) {
-    updates.classification = parsed.data.classification.trim() || null;
+  if (parsed.data.clear_course) {
+    updates.course = null;
+  } else if (parsed.data.course !== undefined) {
+    updates.course = parsed.data.course.trim() || null;
   }
 
   if (parsed.data.joined_at !== undefined) {
@@ -295,7 +295,7 @@ export async function overrideOccupantRecord(
         previous: {
           full_name: occupant.full_name,
           student_id: occupant.student_id,
-          classification: occupant.classification,
+          course: occupant.course,
           joined_at: occupant.joined_at,
           left_at: occupant.left_at,
           status: occupant.status,

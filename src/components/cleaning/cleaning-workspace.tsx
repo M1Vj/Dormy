@@ -324,13 +324,12 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
-                <CalendarDays className="size-3.5 text-emerald-600" />
-                Cleaning Operations
+                Cleaning Operations (SAs can override)
               </div>
               <h1 className="text-2xl font-semibold tracking-tight">Weekly Cleaning Plan</h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Weekday-only assignments with rest-week rotation and exception controls
-                for holidays or no-class days.
+                Weekday-only assignments with rest-week rotation and manual overrides
+                for holidays or custom cleaning days.
               </p>
             </div>
 
@@ -387,11 +386,10 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
 
       {message ? (
         <div
-          className={`rounded-lg border p-3 text-sm ${
-            message.tone === "error"
+          className={`rounded-lg border p-3 text-sm ${message.tone === "error"
               ? "border-destructive/30 bg-destructive/5 text-destructive"
               : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          }`}
+            }`}
         >
           {message.text}
         </div>
@@ -611,20 +609,19 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
         <div className="space-y-6">
           <Card className="border-border/70">
             <CardHeader>
-              <CardTitle className="text-base">Weekday Calendar</CardTitle>
+              <CardTitle className="text-base">Override Calendar</CardTitle>
               <CardDescription>
-                Mark non-class days and holidays as exceptions.
+                Mark no-cleaning days or special holidays as overrides.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {snapshot.weekdays.map((weekday) => (
                 <div
                   key={weekday.date}
-                  className={`rounded-lg border p-3 ${
-                    weekday.has_exception
+                  className={`rounded-lg border p-3 ${weekday.has_exception
                       ? "border-amber-400/50 bg-amber-500/10"
                       : "border-border/70"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">
@@ -633,7 +630,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                     {weekday.has_exception ? (
                       <Badge variant="secondary" className="gap-1">
                         <AlertTriangle className="size-3.5" />
-                        Exception
+                        Override
                       </Badge>
                     ) : (
                       <Badge variant="outline">Scheduled</Badge>
@@ -703,8 +700,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
           {canManage ? (
             <Card className="border-border/70">
               <CardHeader>
-                <CardTitle className="text-base">Exceptions</CardTitle>
-                <CardDescription>Add dates to skip weekday cleaning.</CardDescription>
+                <CardTitle className="text-base">Manual Overrides</CardTitle>
+                <CardDescription>Add dates to skip scheduled cleaning.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <form onSubmit={handleCreateException} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
@@ -735,7 +732,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                     </div>
                   ))}
                   {!snapshot.exceptions.length ? (
-                    <p className="text-xs text-muted-foreground">No exceptions for this week.</p>
+                    <p className="text-xs text-muted-foreground">No manual overrides for this week.</p>
                   ) : null}
                 </div>
               </CardContent>

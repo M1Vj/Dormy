@@ -29,7 +29,7 @@ type AssignmentRef = {
 type OccupantSelf = {
   id: string;
   full_name: string | null;
-  classification: string | null;
+  course: string | null;
   status: string | null;
   room_assignments?: AssignmentRef[] | AssignmentRef | null;
 };
@@ -103,7 +103,7 @@ export default async function HomePage() {
     supabase
       .from("occupants")
       .select(
-        "id, full_name, classification, status, room_assignments(end_date, room:rooms(id, code, level))"
+        "id, full_name, course:classification, status, room_assignments(end_date, room:rooms(id, code, level))"
       )
       .eq("dorm_id", dormId)
       .eq("user_id", user.id)
@@ -139,6 +139,11 @@ export default async function HomePage() {
   const upcomingEvents = events
     .filter((event) => (event.starts_at ? new Date(event.starts_at) >= now : false))
     .slice(0, 4);
+
+  const evaluationAlerts = (() => {
+    // Logic to show pending evaluations if any
+    return 0;
+  })();
 
   const cleaningPlanForRoom = (() => {
     if (!currentRoom?.id) return null;
@@ -246,7 +251,7 @@ export default async function HomePage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-t-4 border-t-emerald-500">
+        <Card className="border-t-4 border-t-sky-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Your account</CardTitle>
             <CardDescription>{getRoleSummary(role)}</CardDescription>
@@ -257,7 +262,7 @@ export default async function HomePage() {
                 <div>
                   <div className="text-muted-foreground">Resident</div>
                   <div className="font-medium">{occupant.full_name ?? "Occupant profile"}</div>
-                  <div className="text-xs text-muted-foreground">{occupant.classification ?? ""}</div>
+                  <div className="text-xs text-muted-foreground">{occupant.course ?? ""}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-md border bg-muted/30 px-2 py-1 text-xs">{roomLabel}</span>
@@ -344,7 +349,7 @@ export default async function HomePage() {
           </CardContent>
         </Card>
 
-        <Card className="border-t-4 border-t-lime-500">
+        <Card className="border-t-4 border-t-emerald-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">This week</CardTitle>
             <CardDescription>Cleaning and deadlines at a glance.</CardDescription>
@@ -419,7 +424,7 @@ export default async function HomePage() {
         </Card>
       </div>
 
-      <Card className="border-l-4 border-l-sky-500">
+      <Card className="border-l-4 border-l-blue-500">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div className="space-y-1">
             <CardTitle className="text-base text-sky-600 dark:text-sky-400">Announcements</CardTitle>

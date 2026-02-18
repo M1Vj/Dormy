@@ -11,7 +11,7 @@ type Occupant = {
   id: string;
   full_name: string;
   student_id?: string | null;
-  classification?: string | null;
+  course?: string | null;
   status?: string | null;
   home_address?: string | null;
   birthdate?: string | null;
@@ -80,8 +80,8 @@ export function EditOccupantForm({
           <Input
             id="classification"
             name="classification"
-            defaultValue={occupant.classification ?? ""}
-            placeholder="e.g. BSCS"
+            defaultValue={occupant.course ?? ""}
+            placeholder="e.g. BS Computer Science"
           />
         </div>
 

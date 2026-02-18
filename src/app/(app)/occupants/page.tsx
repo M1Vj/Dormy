@@ -18,7 +18,7 @@ type AssignmentRef = {
 type OccupantRow = {
   id: string;
   full_name?: string | null;
-  classification?: string | null;
+  course?: string | null;
   student_id?: string | null;
   status?: string | null;
   current_room_assignment?: AssignmentRef | null;
@@ -28,7 +28,7 @@ type DirectoryRow = {
   id: string;
   full_name: string | null;
   student_id: string | null;
-  classification: string | null;
+  course: string | null;
   room_code: string | null;
   room_level: number | null;
 };
@@ -125,7 +125,7 @@ export default async function OccupantsPage() {
                 return (
                   <div key={occupant.id} className="rounded-lg border p-3">
                     <p className="font-medium">{occupant.full_name ?? "Unnamed"}</p>
-                    <p className="text-xs text-muted-foreground">{occupant.classification ?? "-"}</p>
+                    <p className="text-xs text-muted-foreground">{occupant.course ?? "-"}</p>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <p className="text-muted-foreground">Student ID</p>
@@ -165,7 +165,7 @@ export default async function OccupantsPage() {
                   {directory.map((occupant) => (
                     <tr key={occupant.id} className="border-b">
                       <td className="px-3 py-2 font-medium">{occupant.full_name ?? "Unnamed"}</td>
-                      <td className="px-3 py-2">{occupant.classification ?? "-"}</td>
+                      <td className="px-3 py-2">{occupant.course ?? "-"}</td>
                       <td className="px-3 py-2">{occupant.student_id ?? "-"}</td>
                       <td className="px-3 py-2">
                         {occupant.room_code ? `Room ${occupant.room_code}` : "Unassigned"}
@@ -221,7 +221,7 @@ export default async function OccupantsPage() {
               return (
                 <div key={occupant.id} className="rounded-lg border p-3">
                   <p className="font-medium">{occupant.full_name ?? "Unnamed"}</p>
-                  <p className="text-xs text-muted-foreground">{occupant.classification ?? "-"}</p>
+                  <p className="text-xs text-muted-foreground">{occupant.course ?? "-"}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="text-muted-foreground">Student ID</p>
@@ -265,7 +265,7 @@ export default async function OccupantsPage() {
                   return (
                     <tr key={occupant.id} className="border-b">
                       <td className="px-3 py-2 font-medium">{occupant.full_name ?? "Unnamed"}</td>
-                      <td className="px-3 py-2">{occupant.classification ?? "-"}</td>
+                      <td className="px-3 py-2">{occupant.course ?? "-"}</td>
                       <td className="px-3 py-2">{occupant.student_id ?? "-"}</td>
                       <td className="px-3 py-2">
                         {roomRef?.code ? `Room ${roomRef.code}` : "Unassigned"}

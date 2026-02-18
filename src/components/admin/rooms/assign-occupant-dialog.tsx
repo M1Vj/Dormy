@@ -18,7 +18,7 @@ export type UnassignedOccupant = {
   id: string;
   full_name?: string | null;
   student_id?: string | null;
-  classification?: string | null;
+  course?: string | null;
 };
 
 type AssignOccupantDialogProps = {
@@ -33,10 +33,10 @@ const initialState = { error: "", success: false };
 const getOccupantLabel = (occupant: UnassignedOccupant) => {
   const name = occupant.full_name?.trim() || "Unnamed occupant";
   const studentId = occupant.student_id ? ` (${occupant.student_id})` : "";
-  const classification = occupant.classification
-    ? ` - ${occupant.classification}`
+  const course = occupant.course
+    ? ` - ${occupant.course}`
     : "";
-  return `${name}${studentId}${classification}`;
+  return `${name}${studentId}${course}`;
 };
 
 export function AssignOccupantDialog({

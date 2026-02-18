@@ -295,7 +295,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     id: string;
     full_name: string;
     student_id: string | null;
-    classification: string | null;
+    course: string | null;
     status: string;
   };
 
@@ -317,7 +317,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
 
   let occupantQuery = context.supabase
     .from("occupants")
-    .select("id, full_name, student_id, classification, status")
+    .select("id, full_name, student_id, course:classification, status")
     .eq("dorm_id", context.dormId)
     .order("full_name", { ascending: true });
 
@@ -371,7 +371,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     {
       occupant_name: string;
       student_id: string;
-      classification: string;
+      course: string;
       maintenance_balance: number;
       fines_balance: number;
       events_balance: number;
@@ -383,7 +383,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     summaryMap.set(occupant.id, {
       occupant_name: occupant.full_name,
       student_id: occupant.student_id ?? "",
-      classification: occupant.classification ?? "",
+      course: occupant.course ?? "",
       maintenance_balance: 0,
       fines_balance: 0,
       events_balance: 0,
@@ -449,7 +449,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
   appendSheet(workbook, "Statement Summary", summaryRows, [
     "occupant_name",
     "student_id",
-    "classification",
+    "course",
     "maintenance_balance",
     "fines_balance",
     "events_balance",

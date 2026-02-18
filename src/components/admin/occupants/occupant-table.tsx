@@ -19,7 +19,7 @@ type OccupantAssignment = {
 export type OccupantRow = {
   id: string;
   full_name?: string | null;
-  classification?: string | null;
+  course?: string | null;
   student_id?: string | null;
   status?: string | null;
   joined_at?: string | null;
@@ -165,7 +165,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="text-muted-foreground">Course</p>
-                      <p>{occupant.classification ?? "—"}</p>
+                      <p>{occupant.course ?? "—"}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Student ID</p>
@@ -238,18 +238,17 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         {occupant.full_name ?? "Unnamed occupant"}
                       </td>
                       <td className="px-3 py-2">
-                        {occupant.classification ?? "—"}
+                        {occupant.course ?? "—"}
                       </td>
                       <td className="px-3 py-2">
                         {occupant.student_id ?? "—"}
                       </td>
                       <td className="px-3 py-2">
                         <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                            roomCode
-                              ? "border-primary/20 bg-primary/10 text-primary"
-                              : "border-muted bg-muted text-muted-foreground"
-                          }`}
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${roomCode
+                            ? "border-primary/20 bg-primary/10 text-primary"
+                            : "border-muted bg-muted text-muted-foreground"
+                            }`}
                         >
                           {roomCode ?? "Unassigned"}
                         </span>
