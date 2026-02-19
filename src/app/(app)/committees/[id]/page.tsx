@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { format } from "date-fns";
 
 import { getEventDormOptions } from "@/app/actions/events";
@@ -57,6 +58,8 @@ export default async function CommitteeDetailsPage({
     .maybeSingle();
 
   const viewerRole = membership?.role ?? null;
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
   const { data: committee, error } = await getCommittee(id);
   if (error || !committee) {
@@ -67,28 +70,31 @@ export default async function CommitteeDetailsPage({
     committee.members.find((member) => member.user_id === user.id)?.role ?? null;
 
   const canManageCommittee =
-    (viewerRole ? STAFF_MANAGE_ROLES.has(viewerRole) : false) ||
-    (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+    !isOccupantMode &&
+    ((viewerRole ? STAFF_MANAGE_ROLES.has(viewerRole) : false) ||
+      (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 
   const canCreateCommitteeEvent =
-    (viewerRole ? new Set(["admin", "officer"]).has(viewerRole) : false) ||
-    (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+    !isOccupantMode &&
+    ((viewerRole ? new Set(["admin", "officer"]).has(viewerRole) : false) ||
+      (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 
   const canSubmitExpense =
-    (viewerRole ? new Set(["admin", "treasurer", "officer"]).has(viewerRole) : false) ||
-    (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false);
+    !isOccupantMode &&
+    ((viewerRole ? new Set(["admin", "treasurer", "officer"]).has(viewerRole) : false) ||
+      (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 
   const dormOptions = canCreateCommitteeEvent ? await getEventDormOptions() : [];
 
   const memberUserIds = new Set(committee.members.map((member) => member.user_id));
   const eligibleOccupants = canManageCommittee
     ? (await getOccupants(dormId, { status: "active" }))
-        .filter((occ) => occ.user_id && !memberUserIds.has(occ.user_id))
-        .map((occ) => ({
-          id: occ.id as string,
-          full_name: occ.full_name as string,
-          user_id: occ.user_id as string,
-        }))
+      .filter((occ) => occ.user_id && !memberUserIds.has(occ.user_id))
+      .map((occ) => ({
+        id: occ.id as string,
+        full_name: occ.full_name as string,
+        user_id: occ.user_id as string,
+      }))
     : [];
 
   const visibleExpenses = canManageCommittee

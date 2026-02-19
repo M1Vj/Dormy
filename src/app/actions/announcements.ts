@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -77,6 +78,27 @@ export async function getDormAnnouncements(
     return { announcements: [] as DormAnnouncement[], error: "" };
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  let role: string | null = null;
+  if (user) {
+    const { data: membership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    role = membership?.role ?? null;
+  }
+
+  const isActuallyStaff = role && STAFF_ROLES.has(role);
+  const effectiveIsStaff = isActuallyStaff && !isOccupantMode;
+
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
     return { announcements: [] as DormAnnouncement[], error: semesterResult.error ?? "Failed to load semester." };
@@ -88,7 +110,13 @@ export async function getDormAnnouncements(
       "id, dorm_id, semester_id, title, body, visibility, audience, committee_id, pinned, starts_at, expires_at, created_by, created_at, updated_at, committee:committees(id, name)"
     )
     .eq("dorm_id", dormId)
-    .eq("semester_id", semesterResult.semesterId)
+    .eq("semester_id", semesterResult.semesterId);
+
+  if (!effectiveIsStaff) {
+    query.eq("visibility", "members");
+  }
+
+  query
     .order("pinned", { ascending: false })
     .order("starts_at", { ascending: false })
     .order("created_at", { ascending: false });
@@ -124,6 +152,27 @@ export async function getCommitteeAnnouncements(
     return { announcements: [] as DormAnnouncement[], error: "" };
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  let role: string | null = null;
+  if (user) {
+    const { data: membership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    role = membership?.role ?? null;
+  }
+
+  const isActuallyStaff = role && STAFF_ROLES.has(role);
+  const effectiveIsStaff = isActuallyStaff && !isOccupantMode;
+
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
     return { announcements: [] as DormAnnouncement[], error: semesterResult.error ?? "Failed to load semester." };
@@ -136,7 +185,13 @@ export async function getCommitteeAnnouncements(
     )
     .eq("dorm_id", dormId)
     .eq("semester_id", semesterResult.semesterId)
-    .eq("committee_id", parsedCommitteeId.data)
+    .eq("committee_id", parsedCommitteeId.data);
+
+  if (!effectiveIsStaff) {
+    query.eq("visibility", "members");
+  }
+
+  query
     .order("pinned", { ascending: false })
     .order("starts_at", { ascending: false })
     .order("created_at", { ascending: false });
@@ -181,7 +236,9 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     return { error: "Forbidden" };
   }
 
-  const isStaff = STAFF_ROLES.has(membership.role);
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const isStaff = !isOccupantMode && STAFF_ROLES.has(membership.role);
 
   const startsAt = parseDateTimeInput(formData.get("starts_at"));
   const expiresAt = parseDateTimeInput(formData.get("expires_at"));
@@ -339,7 +396,9 @@ export async function updateAnnouncement(
     return { error: "Forbidden" };
   }
 
-  const isStaff = STAFF_ROLES.has(membership.role);
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const isStaff = !isOccupantMode && STAFF_ROLES.has(membership.role);
 
   const { data: existing } = await supabase
     .from("dorm_announcements")
@@ -506,7 +565,9 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
     return { error: "Forbidden" };
   }
 
-  const isPowerStaff = new Set(["admin", "adviser", "student_assistant"]).has(membership.role);
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const isPowerStaff = !isOccupantMode && new Set(["admin", "adviser", "student_assistant"]).has(membership.role);
 
   const { data: existing } = await supabase
     .from("dorm_announcements")

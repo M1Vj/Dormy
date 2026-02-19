@@ -65,7 +65,7 @@ export default async function EventDetailPage({
   }
 
   let canManage = context.canManageEvents;
-  if (!canManage) {
+  if (!canManage && context.role !== "occupant") {
     const supabase = await createSupabaseServerClient();
     if (supabase) {
       const { data: eventMeta } = await supabase
@@ -85,7 +85,7 @@ export default async function EventDetailPage({
 
         canManage = Boolean(
           committeeMembership &&
-            new Set(["head", "co-head"]).has(committeeMembership.role)
+          new Set(["head", "co-head"]).has(committeeMembership.role)
         );
       }
     }

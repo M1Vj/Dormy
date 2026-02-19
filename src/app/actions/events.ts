@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -433,11 +434,15 @@ export async function getEventViewerContext(
       (item) => item.dorm_id === requestedDormId
     ) ?? (memberships as MembershipRow[])[0];
 
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const canManageEvents = !isOccupantMode && EVENT_MANAGER_ROLES.has(membership.role);
+
   return {
     userId: user.id,
     dormId: membership.dorm_id,
-    role: membership.role,
-    canManageEvents: EVENT_MANAGER_ROLES.has(membership.role),
+    role: isOccupantMode ? "occupant" : membership.role,
+    canManageEvents,
   };
 }
 

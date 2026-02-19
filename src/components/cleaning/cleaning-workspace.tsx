@@ -324,7 +324,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
-                Cleaning Operations (SAs can override)
+                {canManage ? "Cleaning Operations (SAs can override)" : "Cleaning Plan"}
               </div>
               <h1 className="text-2xl font-semibold tracking-tight">Weekly Cleaning Plan</h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
@@ -387,8 +387,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
       {message ? (
         <div
           className={`rounded-lg border p-3 text-sm ${message.tone === "error"
-              ? "border-destructive/30 bg-destructive/5 text-destructive"
-              : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            ? "border-destructive/30 bg-destructive/5 text-destructive"
+            : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
             }`}
         >
           {message.text}
@@ -619,8 +619,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 <div
                   key={weekday.date}
                   className={`rounded-lg border p-3 ${weekday.has_exception
-                      ? "border-amber-400/50 bg-amber-500/10"
-                      : "border-border/70"
+                    ? "border-amber-400/50 bg-amber-500/10"
+                    : "border-border/70"
                     }`}
                 >
                   <div className="flex items-center justify-between gap-2">

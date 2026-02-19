@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -15,6 +16,10 @@ export default async function AppLayout({
   children: React.ReactNode
 }) {
   const dorms = await getUserDorms()
+
+  if (dorms.length === 0) {
+    redirect("/join")
+  }
   const activeDormId = await getActiveDormId()
   const initialDormId =
     dorms.find((dorm) => dorm.id === activeDormId)?.id ??
