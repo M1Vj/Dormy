@@ -667,8 +667,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                       <option value="3">Level 3</option>
                     </select>
                   </div>
-                  <Button type="submit" variant="secondary" disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+                  <Button type="submit" variant="secondary" isLoading={isPending}>
+                    <Save className="mr-2 size-4" />
                     Save Week Settings
                   </Button>
                 </form>
@@ -677,19 +677,19 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                   <Button
                     type="button"
                     onClick={handleGenerateAssignments}
-                    disabled={isPending}
+                    isLoading={isPending}
                     className="bg-emerald-600 text-white hover:bg-emerald-600/90"
                   >
-                    {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Shuffle className="mr-2 size-4" />}
+                    <Shuffle className="mr-2 size-4" />
                     Generate Plan
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleSeedDefaultAreas}
-                    disabled={isPending}
+                    isLoading={isPending}
                   >
-                    {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
+                    <Sparkles className="mr-2 size-4" />
                     Load Molave Areas
                   </Button>
                 </div>

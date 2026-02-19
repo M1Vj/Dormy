@@ -112,8 +112,8 @@ export function UpdateRoleDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleUpdate} disabled={isLoading || role === currentRole}>
-            {isLoading ? "Updating..." : "Save changes"}
+          <Button onClick={handleUpdate} isLoading={isLoading} disabled={isLoading || role === currentRole}>
+            Save changes
           </Button>
         </DialogFooter>
       </DialogContent>
