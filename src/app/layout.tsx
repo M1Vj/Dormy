@@ -33,9 +33,9 @@ export const metadata: Metadata = {
     title: "Dormy",
   },
   icons: {
-    icon: "/brand/dormy-house-rounded-icon-v2.png",
-    shortcut: "/brand/dormy-house-rounded-icon-v2.png",
-    apple: "/brand/dormy-house-rounded-icon-v2.png",
+    icon: "/brand/dormy-house-rounded-corners.png",
+    shortcut: "/brand/dormy-house-rounded-corners.png",
+    apple: "/brand/dormy-house-rounded-corners.png",
   },
 };
 
