@@ -17,7 +17,8 @@ test.describe('Occupant View', () => {
 
   test('should access fine reports', async ({ page }) => {
     await page.goto('/fines/reports');
-    await expect(page.getByText('Fine reports')).toBeVisible();
+    await page.waitForURL(/\/fines\/reports/);
+    await expect(page.getByRole('heading', { name: 'Fine reports' })).toBeVisible();
     await expect(page.getByText('Submit peer-reported violations')).toBeVisible();
   });
 
