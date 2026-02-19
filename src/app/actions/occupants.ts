@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { AppRole } from "@/lib/auth";
 
 const occupantStatusSchema = z.enum(["active", "left", "removed"]);
 
@@ -87,7 +88,8 @@ export async function getOccupants(
         start_date,
         end_date,
         room:rooms(id, code, level)
-      )
+      ),
+      memberships:dorm_memberships(role)
     `)
     .eq("dorm_id", dormId);
 
@@ -119,7 +121,8 @@ export async function getOccupants(
     return {
       ...occ,
       current_room_assignment: activeAssignment || null,
-      room_assignments: undefined, // cleaner output if we don't need history in list view
+      room_assignments: undefined,
+      role: (occ.memberships as { role: AppRole }[])?.[0]?.role ?? "occupant",
     };
   });
 
@@ -218,7 +221,7 @@ export async function createOccupant(dormId: string, formData: FormData) {
   if (
     membershipError ||
     !membership ||
-    !new Set(["admin", "student_assistant"]).has(membership.role)
+    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
   ) {
     return { error: "You do not have permission to add occupants." };
   }
@@ -327,7 +330,7 @@ export async function updateOccupant(
   if (
     membershipError ||
     !membership ||
-    !new Set(["admin", "student_assistant"]).has(membership.role)
+    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
   ) {
     return { error: "You do not have permission to update occupants." };
   }

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { getCommittees } from "@/app/actions/committees";
 import { CreateCommitteeSlot } from "@/components/admin/committees/create-committee-slot";
@@ -30,6 +31,11 @@ export default async function CommitteesPage() {
     );
   }
 
+  const activeDormId = await getActiveDormId();
+  const cookieStore = await cookies();
+  const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
+  const isOccupantMode = occupantModeCookie === "1";
+
   const { data: membership } = await supabase
     .from("dorm_memberships")
     .select("role")
@@ -38,6 +44,7 @@ export default async function CommitteesPage() {
     .maybeSingle();
 
   const canCreate = Boolean(
+    !isOccupantMode &&
     membership && new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
   );
 

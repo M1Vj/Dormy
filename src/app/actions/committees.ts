@@ -293,8 +293,8 @@ export async function deleteCommittee(committeeId: string) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!membership || !["admin", "adviser"].includes(membership.role)) {
-    return { error: "Only admins and advisers can delete committees." };
+  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+    return { error: "Only admins, advisers, and student assistants can delete committees." };
   }
 
   const { error } = await supabase.from("committees").delete().eq("id", committeeId);

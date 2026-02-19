@@ -19,7 +19,7 @@ import type {
 } from "@/lib/types/cleaning";
 import type { DormRole } from "@/lib/types/events";
 
-const MANAGER_ROLES = new Set<DormRole>(["admin", "student_assistant"]);
+const MANAGER_ROLES = new Set<DormRole>(["admin", "student_assistant", "adviser"]);
 const MOLAVE_DEFAULT_AREAS = [
   "Hallways",
   "Sala/Facade",

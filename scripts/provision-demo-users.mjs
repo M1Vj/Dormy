@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const password = process.env.DORMY_DEMO_PASSWORD || "DormyPass123!";
-const dormSlug = process.env.DORMY_DORM_SLUG || "molave-mens-hall";
+const dormSlug = process.env.DORMY_DORM_SLUG || "alpha-dorm";
 
 if (!url || !serviceRoleKey) {
   console.error(

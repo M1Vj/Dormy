@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
@@ -125,6 +127,15 @@ export default async function PaymentsPage() {
     .maybeSingle();
 
   const role = membership?.role ?? "occupant";
+
+  const cookieStore = await cookies();
+  const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
+  const eligibleForOccupantMode = new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]).has(role);
+  const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
+
+  if (role !== "occupant" && !isOccupantMode) {
+    return <StaffFinanceHub role={role} />;
+  }
 
   const { data: occupant } = await supabase
     .from("occupants")

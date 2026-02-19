@@ -20,6 +20,8 @@ const OCCUPANT_MODE_COOKIE = "dormy_occupant_mode";
 
 /** Roles that are also occupants and can toggle to occupant mode */
 const OCCUPANT_ELIGIBLE_ROLES = new Set<AppRole>([
+  "admin",
+  "adviser",
   "student_assistant",
   "treasurer",
   "officer",
