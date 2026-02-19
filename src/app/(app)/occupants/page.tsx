@@ -5,6 +5,9 @@ import { getOccupants } from "@/app/actions/occupants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getCachedMembership, getCachedUser } from "@/lib/auth-cache";
+
+// ... (types are fine to stay or be moved, keeping them here as per instruction context)
 
 type RoomRef = {
   code?: string | null;
@@ -42,30 +45,12 @@ export default async function OccupantsPage() {
     return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
   }
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return (
-      <div className="p-6 text-sm text-muted-foreground">
-        Supabase is not configured for this environment.
-      </div>
-    );
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getCachedUser();
   if (!user) {
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
+  const membership = await getCachedMembership(dormId);
   const role = membership?.role ?? null;
 
   if (!role) {
@@ -87,6 +72,9 @@ export default async function OccupantsPage() {
   }
 
   if (effectiveRole === "occupant") {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return <div>Supabase error</div>;
+
     const { data, error } = await supabase.rpc("get_dorm_occupant_directory", {
       p_dorm_id: dormId,
     });

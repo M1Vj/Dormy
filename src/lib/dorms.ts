@@ -18,15 +18,16 @@ export async function setActiveDormId(dormId: string) {
   });
 }
 
-export async function getUserDorms() {
+import { cache } from "react";
+import { getCachedUser } from "@/lib/auth-cache";
+
+export const getUserDorms = cache(async () => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return [];
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) {
     return [];
@@ -38,9 +39,10 @@ export async function getUserDorms() {
     .eq("user_id", user.id);
 
   return (data ?? [])
+    // dorms is joined
     .map((row) => (Array.isArray(row.dorms) ? row.dorms[0] : row.dorms))
     .filter(Boolean);
-}
+});
 
 export type DormSummary = {
   id: string;
