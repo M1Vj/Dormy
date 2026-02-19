@@ -119,17 +119,8 @@ export function EventRatingPanel({
             />
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : viewerRating ? (
-                "Update rating"
-              ) : (
-                "Submit rating"
-              )}
+            <Button type="submit" isLoading={isSubmitting}>
+              {viewerRating ? "Update rating" : "Submit rating"}
             </Button>
           </div>
           {formState.error ? <p className="mt-2 text-sm text-destructive">{formState.error}</p> : null}

@@ -179,8 +179,7 @@ export function LedgerOverwriteDialog({
           </div>
 
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" isLoading={isPending}>
               Confirm overwrite
             </Button>
           </DialogFooter>

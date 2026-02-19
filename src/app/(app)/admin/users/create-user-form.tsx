@@ -152,8 +152,8 @@ export function CreateUserForm({
                 ) : null}
 
                 <SheetFooter>
-                  <Button type="submit" disabled={invitePending}>
-                    {invitePending ? "Inviting..." : "Create invite"}
+                  <Button type="submit" isLoading={invitePending}>
+                    Create invite
                   </Button>
                 </SheetFooter>
               </form>
@@ -228,8 +228,8 @@ export function CreateUserForm({
                   <p className="text-sm text-primary">Account provisioned successfully.</p>
                 ) : null}
                 <SheetFooter>
-                  <Button type="submit" disabled={isPending}>
-                    {isPending ? "Provisioning..." : "Provision account"}
+                  <Button type="submit" isLoading={isPending}>
+                    Provision account
                   </Button>
                 </SheetFooter>
               </form>

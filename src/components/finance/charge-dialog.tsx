@@ -110,10 +110,10 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
                 <FormItem>
                   <FormLabel>Amount (₱)</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      {...field} 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                     />
                   </FormControl>
@@ -148,8 +148,7 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
               )}
             />
             <DialogFooter>
-              <Button type="submit" disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" isLoading={isPending}>
                 Add Charge
               </Button>
             </DialogFooter>

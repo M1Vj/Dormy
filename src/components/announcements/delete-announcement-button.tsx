@@ -36,18 +36,9 @@ export function DeleteAnnouncementButton({
   };
 
   return (
-    <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}>
-      {isPending ? (
-        <>
-          <Loader2 className="mr-2 size-4 animate-spin" />
-          Deleting...
-        </>
-      ) : (
-        <>
-          <Trash2 className="mr-2 size-4" />
-          Delete
-        </>
-      )}
+    <Button type="button" variant="destructive" size="sm" onClick={handleDelete} isLoading={isPending}>
+      <Trash2 className="mr-2 size-4" />
+      Delete
     </Button>
   );
 }

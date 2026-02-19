@@ -48,8 +48,8 @@ export function FineReportCommentForm({
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex justify-end">
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Posting…" : "Post comment"}
+        <Button type="submit" isLoading={isPending}>
+          Post comment
         </Button>
       </div>
     </form>

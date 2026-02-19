@@ -239,8 +239,8 @@ export function SubmitFineReportDialog({
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Submitting…" : "Submit report"}
+            <Button type="submit" isLoading={isPending}>
+              Submit report
             </Button>
           </div>
         </form>

@@ -211,13 +211,13 @@ export function EditOccupantForm({
         <Button
           type="button"
           variant="outline"
-          disabled={isPending}
+          isLoading={isPending}
           onClick={() => router.push(`/admin/occupants/${occupant.id}`)}
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving..." : "Save Changes"}
+        <Button type="submit" isLoading={isPending}>
+          Save Changes
         </Button>
       </div>
     </form>

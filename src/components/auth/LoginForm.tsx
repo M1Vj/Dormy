@@ -92,20 +92,20 @@ export function LoginForm() {
       </div>
 
       <form action={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required autoComplete="current-password" />
-      </div>
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Signing in…" : "Sign in"}
-      </Button>
-      <p className="text-xs text-muted-foreground">
-        Admin tip: provision accounts in Admin → Users, then assign a dorm role.
-      </p>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required autoComplete="email" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required autoComplete="current-password" />
+        </div>
+        <Button type="submit" className="w-full" isLoading={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Admin tip: provision accounts in Admin → Users, then assign a dorm role.
+        </p>
       </form>
     </div>
   );

@@ -232,7 +232,7 @@ export function JoinDorm({
                   </div>
                   <Button
                     onClick={() => acceptInvite(invite.id)}
-                    disabled={isAcceptingInvite}
+                    isLoading={isAcceptingInvite}
                     className="sm:w-auto"
                   >
                     {isAcceptingInvite ? "Accepting…" : "Accept invite"}
@@ -332,7 +332,7 @@ export function JoinDorm({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={isCancelling}
+                        isLoading={isCancelling}
                         onClick={() => cancelApplication(app.id)}
                       >
                         {isCancelling ? "Cancelling…" : "Cancel request"}
@@ -511,7 +511,7 @@ export function JoinDorm({
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={submitApplication} disabled={!selectedDorm || isApplying}>
+            <Button type="button" onClick={submitApplication} disabled={!selectedDorm} isLoading={isApplying}>
               {isApplying ? "Submitting…" : "Submit request"}
             </Button>
           </DialogFooter>

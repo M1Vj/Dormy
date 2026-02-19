@@ -34,18 +34,9 @@ export function DeleteEventButton({ eventId }: { eventId: string }) {
   };
 
   return (
-    <Button type="button" variant="destructive" onClick={handleDelete} disabled={isPending}>
-      {isPending ? (
-        <>
-          <Loader2 className="mr-2 size-4 animate-spin" />
-          Deleting...
-        </>
-      ) : (
-        <>
-          <Trash2 className="mr-2 size-4" />
-          Delete event
-        </>
-      )}
+    <Button type="button" variant="destructive" onClick={handleDelete} isLoading={isPending}>
+      <Trash2 className="mr-2 size-4" />
+      Delete event
     </Button>
   );
 }

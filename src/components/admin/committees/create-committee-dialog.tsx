@@ -83,8 +83,8 @@ export function CreateCommitteeDialog({ dormId }: { dormId: string }) {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create"}
+            <Button type="submit" isLoading={isPending}>
+              Create
             </Button>
           </div>
         </form>
