@@ -115,7 +115,7 @@ export async function getMyDormApplications() {
   const { data, error } = await supabase
     .from("dorm_applications")
     .select(
-      "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at"
+      "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -539,7 +539,7 @@ export async function getDormApplicationsForActiveDorm(dormId: string, status?: 
   let query = supabase
     .from("dorm_applications")
     .select(
-      "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at"
+      "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
     )
     .eq("dorm_id", parsedDormId.data)
     .order("created_at", { ascending: false });
