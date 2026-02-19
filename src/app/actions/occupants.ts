@@ -88,8 +88,7 @@ export async function getOccupants(
         start_date,
         end_date,
         room:rooms(id, code, level)
-      ),
-      memberships:dorm_memberships(role)
+      )
     `)
     .eq("dorm_id", dormId);
 
@@ -110,6 +109,21 @@ export async function getOccupants(
     return [];
   }
 
+  const userIds = data.map((occ) => occ.user_id).filter(Boolean) as string[];
+  const membershipsMap = new Map<string, AppRole>();
+
+  if (userIds.length > 0) {
+    const { data: memData, error: memError } = await supabase
+      .from("dorm_memberships")
+      .select("user_id, role")
+      .eq("dorm_id", dormId)
+      .in("user_id", userIds);
+
+    if (!memError && memData) {
+      memData.forEach((m) => membershipsMap.set(m.user_id, m.role as AppRole));
+    }
+  }
+
   let mapped = data.map((occ) => {
     // Find the active assignment (no end_date)
     // If multiple (shouldn't happen with DB constraint), take the first one
@@ -122,7 +136,7 @@ export async function getOccupants(
       ...occ,
       current_room_assignment: activeAssignment || null,
       room_assignments: undefined,
-      role: (occ.memberships as { role: AppRole }[])?.[0]?.role ?? "occupant",
+      role: (occ.user_id && membershipsMap.get(occ.user_id)) || "occupant",
     };
   });
 
