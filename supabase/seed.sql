@@ -1,6 +1,8 @@
 with dorm as (
   insert into public.dorms (slug, name, attributes)
-  values ('molave-mens-hall', 'Molave Men''s Hall', '{"dorm_type":"men"}'::jsonb)
+  values 
+    ('molave-mens-hall', 'Molave Men''s Hall', '{"dorm_type":"men"}'::jsonb),
+    ('alpha-dorm', 'Alpha Dorm', '{"dorm_type":"mock"}'::jsonb)
   on conflict (slug)
   do update set name = excluded.name
   returning id

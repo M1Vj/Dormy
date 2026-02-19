@@ -506,7 +506,7 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
     return { error: "Forbidden" };
   }
 
-  const isStaff = STAFF_ROLES.has(membership.role);
+  const isPowerStaff = new Set(["admin", "adviser", "student_assistant"]).has(membership.role);
 
   const { data: existing } = await supabase
     .from("dorm_announcements")
@@ -522,7 +522,7 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
   const existingCommitteeId = (existing as { committee_id?: string | null }).committee_id ?? null;
   const existingVisibility = (existing as { visibility?: string | null }).visibility ?? null;
 
-  if (!isStaff) {
+  if (!isPowerStaff) {
     if (!existingCommitteeId) {
       return { error: "Only staff can delete dorm-wide announcements." };
     }

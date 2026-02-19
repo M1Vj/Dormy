@@ -492,6 +492,17 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+    return { error: "You do not have permission to delete evaluation cycles." };
+  }
+
   const { data: cycle, error: cycleError } = await supabase
     .from("evaluation_cycles")
     .select("id, school_year, semester, label, counts_for_retention, is_active")
@@ -699,6 +710,17 @@ export async function deleteEvaluationTemplate(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+    return { error: "You do not have permission to delete evaluation templates." };
+  }
+
   const { error } = await supabase
     .from("evaluation_templates")
     .delete()
@@ -896,6 +918,17 @@ export async function deleteEvaluationMetric(
   }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+    return { error: "You do not have permission to delete evaluation metrics." };
+  }
 
   const { data: metric, error: metricError } = await supabase
     .from("evaluation_metrics")

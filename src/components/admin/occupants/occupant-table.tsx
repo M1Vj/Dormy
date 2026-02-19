@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CreateOccupantForm } from "./create-occupant-form";
+import { UpdateRoleDialog } from "./update-role-dialog";
+import { AppRole, getRoleLabel } from "@/lib/roles";
 
 type RoomRef = {
   id: string;
@@ -18,10 +20,12 @@ type OccupantAssignment = {
 
 export type OccupantRow = {
   id: string;
+  user_id?: string | null;
   full_name?: string | null;
   course?: string | null;
   student_id?: string | null;
   status?: string | null;
+  role: AppRole;
   joined_at?: string | null;
   current_room_assignment?: OccupantAssignment | null;
 };
@@ -179,6 +183,10 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       <p className="text-muted-foreground">Joined</p>
                       <p>{formatDate(occupant.joined_at)}</p>
                     </div>
+                    <div>
+                      <p className="text-muted-foreground">Role</p>
+                      <p>{getRoleLabel(occupant.role)}</p>
+                    </div>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
@@ -209,6 +217,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                 <th className="px-3 py-2 font-medium">Student ID</th>
                 <th className="px-3 py-2 font-medium">Room</th>
                 <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Role</th>
                 <th className="px-3 py-2 font-medium">Joined date</th>
                 <th className="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
@@ -263,6 +272,11 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         </span>
                       </td>
                       <td className="px-3 py-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {getRoleLabel(occupant.role)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
                         {formatDate(occupant.joined_at)}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -279,6 +293,14 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                               Edit
                             </Link>
                           </Button>
+                          {occupant.user_id ? (
+                            <UpdateRoleDialog
+                              dormId={dormId}
+                              userId={occupant.user_id}
+                              occupantName={occupant.full_name ?? "User"}
+                              currentRole={occupant.role}
+                            />
+                          ) : null}
                         </div>
                       </td>
                     </tr>

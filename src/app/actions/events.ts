@@ -17,7 +17,8 @@ import type {
   EventViewerContext,
 } from "@/lib/types/events";
 
-const EVENT_MANAGER_ROLES = new Set<DormRole>(["admin", "officer"]);
+const EVENT_MANAGER_ROLES = new Set<DormRole>(["admin", "officer", "student_assistant", "adviser"]);
+const DELETE_ACCESS_ROLES = new Set<DormRole>(["admin", "student_assistant", "adviser"]);
 const VALID_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -898,6 +899,13 @@ export async function deleteEvent(formData: FormData) {
     "committeeId" in contextResult && typeof contextResult.committeeId === "string"
       ? contextResult.committeeId
       : null;
+
+  const isGlobalDeleteAllowed = DELETE_ACCESS_ROLES.has(context.role);
+  const isCommitteeLead = Boolean(committeeId);
+
+  if (!isGlobalDeleteAllowed && !isCommitteeLead) {
+    return { error: "Only admins, advisers, and student assistants can delete events." };
+  }
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {

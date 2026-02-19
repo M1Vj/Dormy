@@ -106,9 +106,9 @@ type MemberRow = {
   display_name: string | null;
   created_at: string;
   occupant:
-    | { full_name: string | null; student_id: string | null }
-    | { full_name: string | null; student_id: string | null }[]
-    | null;
+  | { full_name: string | null; student_id: string | null }
+  | { full_name: string | null; student_id: string | null }[]
+  | null;
 };
 
 function normalizeJoin<T>(value: T | T[] | null): T | null {
@@ -203,13 +203,40 @@ async function requireCompetitionManager(eventId: string) {
   if ("error" in context) {
     return { error: context.error } as const;
   }
-  if (!context.canManageEvents) {
-    return { error: "You do not have permission to manage competition data." } as const;
-  }
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." } as const;
+  }
+
+  let canManage = context.canManageEvents;
+  let committeeId: string | null = null;
+
+  if (!canManage) {
+    // Check if user is committee lead for this event's committee
+    const { data: event } = await supabase
+      .from("events")
+      .select("committee_id")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    if (event?.committee_id) {
+      const { data: membership } = await supabase
+        .from("committee_members")
+        .select("role")
+        .eq("committee_id", event.committee_id)
+        .eq("user_id", context.userId)
+        .maybeSingle();
+
+      if (membership && ["head", "co-head"].includes(membership.role)) {
+        canManage = true;
+        committeeId = event.committee_id;
+      }
+    }
+  }
+
+  if (!canManage) {
+    return { error: "You do not have permission to manage competition data." } as const;
   }
 
   const { data: event } = await supabase
@@ -227,6 +254,7 @@ async function requireCompetitionManager(eventId: string) {
     context,
     event: event as EventRow,
     supabase,
+    committeeId,
   } as const;
 }
 
@@ -287,16 +315,16 @@ export async function getCompetitionSnapshot(
 
   const memberRows = teams.length
     ? (
-        await supabase
-          .from("event_team_members")
-          .select("id, team_id, occupant_id, display_name, created_at, occupant:occupants(full_name, student_id)")
-          .eq("dorm_id", dormId)
-          .in(
-            "team_id",
-            teams.map((team) => team.id)
-          )
-          .order("created_at", { ascending: true })
-      ).data ?? []
+      await supabase
+        .from("event_team_members")
+        .select("id, team_id, occupant_id, display_name, created_at, occupant:occupants(full_name, student_id)")
+        .eq("dorm_id", dormId)
+        .in(
+          "team_id",
+          teams.map((team) => team.id)
+        )
+        .order("created_at", { ascending: true })
+    ).data ?? []
     : [];
 
   const membersByTeam = new Map<string, CompetitionMember[]>();

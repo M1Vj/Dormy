@@ -141,7 +141,7 @@ export default async function FinesPage({
 
   const cookieStore = await cookies();
   const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
-  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
+  const eligibleForOccupantMode = new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]).has(role);
   const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
   const effectiveRole = isOccupantMode ? "occupant" : role;
 
@@ -253,8 +253,8 @@ export default async function FinesPage({
                     </div>
                     <span
                       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
-                          ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                          : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                        : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                         }`}
                     >
                       {isVoided ? "Voided" : "Active"}
@@ -329,8 +329,8 @@ export default async function FinesPage({
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
-                              ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                              : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                            : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                             }`}
                         >
                           {isVoided ? "Voided" : "Active"}

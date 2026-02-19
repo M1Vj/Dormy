@@ -69,7 +69,7 @@ export async function assignOccupant(
   if (
     membershipError ||
     !membership ||
-    !new Set(["admin", "student_assistant"]).has(membership.role)
+    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
   ) {
     return { error: "You do not have permission to assign occupants." };
   }
@@ -227,7 +227,7 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
   if (
     membershipError ||
     !membership ||
-    !new Set(["admin", "student_assistant"]).has(membership.role)
+    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
   ) {
     return { error: "You do not have permission to remove assignments." };
   }

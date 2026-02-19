@@ -43,6 +43,22 @@ export async function createFineRule(dormId: string, formData: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    !membership ||
+    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to manage fine rules." };
+  }
+
   const rawData = {
     title: formData.get("title"),
     severity: formData.get("severity"),
@@ -94,6 +110,22 @@ export async function updateFineRule(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    !membership ||
+    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to manage fine rules." };
+  }
 
   // Handle checkbox carefully (if present = true, else false? Or just updates?)
   // For strictness, let's assume active is passed as 'true'/'false' string or via checkbox logic
@@ -256,6 +288,20 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    !membership ||
+    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to issue fines." };
+  }
+
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
@@ -326,6 +372,20 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
   }
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    !membership ||
+    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to void fines." };
+  }
 
   const { error } = await supabase
     .from("fines")
