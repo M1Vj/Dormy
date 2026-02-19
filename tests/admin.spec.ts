@@ -6,7 +6,7 @@ test.describe('Admin Finance & Reporting', () => {
   test('should load reporting dashboard with key stats', async ({ page }) => {
     await page.goto('/admin/reporting');
     await expect(page.getByText('Reporting Dashboard')).toBeVisible();
-    await expect(page.getByText('Total Charged')).toBeVisible();
+    await expect(page.getByText('Cash on Hand')).toBeVisible();
     await expect(page.getByText('Total Collected')).toBeVisible();
     await expect(page.getByText('Use the profile menu to switch')).not.toBeVisible(); // Ensure not stuck in occupant view
   });
