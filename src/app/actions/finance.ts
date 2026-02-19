@@ -21,6 +21,7 @@ const transactionSchema = z.object({
       enabled: z.boolean().default(true),
       subject: z.string().trim().min(1).max(140).optional(),
       message: z.string().trim().max(2000).optional(),
+      signature: z.string().trim().max(100).optional(),
     })
     .optional(),
 });
@@ -34,11 +35,11 @@ const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
   treasurer_events: ["admin", "treasurer"],
 };
 
-const eventPayableBatchSchema = z.object({
-  event_id: z.string().uuid(),
+const contributionBatchSchema = z.object({
   amount: z.number().positive(),
   description: z.string().trim().min(2).max(200),
   deadline: z.string().datetime().nullable(),
+  event_id: z.string().uuid().optional().nullable(),
   include_already_charged: z.boolean().default(false),
 });
 
@@ -200,6 +201,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         eventTitle,
         customMessage: receiptConfig?.message?.trim() || null,
         subjectOverride: receiptConfig?.subject?.trim() || null,
+        signatureOverride: receiptConfig?.signature?.trim() || null,
       });
 
       const result = await sendEmail({
@@ -381,21 +383,21 @@ export async function overwriteLedgerEntry(
   };
 }
 
-export async function createEventPayableBatch(
+export async function createContributionBatch(
   dormId: string,
   payload: {
-    event_id: string;
     amount: number;
     description: string;
     deadline?: string | null;
+    event_id?: string | null;
     include_already_charged?: boolean;
   }
 ) {
-  const parsed = eventPayableBatchSchema.safeParse({
-    event_id: payload.event_id,
+  const parsed = contributionBatchSchema.safeParse({
     amount: payload.amount,
     description: payload.description,
     deadline: payload.deadline ?? null,
+    event_id: payload.event_id ?? null,
     include_already_charged: payload.include_already_charged ?? false,
   });
 
@@ -433,16 +435,20 @@ export async function createEventPayableBatch(
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
-  const { data: event, error: eventError } = await supabase
-    .from("events")
-    .select("id, title")
-    .eq("id", parsed.data.event_id)
-    .eq("dorm_id", dormId)
-    .eq("semester_id", semesterResult.semesterId)
-    .maybeSingle();
+  let eventTitle: string | null = null;
+  if (parsed.data.event_id) {
+    const { data: event, error: eventError } = await supabase
+      .from("events")
+      .select("id, title")
+      .eq("id", parsed.data.event_id)
+      .eq("dorm_id", dormId)
+      .eq("semester_id", semesterResult.semesterId)
+      .maybeSingle();
 
-  if (eventError || !event) {
-    return { error: "Event not found for this dorm." };
+    if (eventError || !event) {
+      return { error: "Event not found for this dorm." };
+    }
+    eventTitle = event.title;
   }
 
   const { data: occupants, error: occupantsError } = await supabase
@@ -462,7 +468,7 @@ export async function createEventPayableBatch(
   const activeOccupantIds = occupants.map((occupant) => occupant.id);
   let targetOccupantIds = activeOccupantIds;
 
-  if (!parsed.data.include_already_charged) {
+  if (!parsed.data.include_already_charged && parsed.data.event_id) {
     const { data: existingCharges, error: chargesError } = await supabase
       .from("ledger_entries")
       .select("occupant_id")
@@ -504,7 +510,7 @@ export async function createEventPayableBatch(
       ledger: "treasurer_events",
       entry_type: "charge",
       occupant_id: occupantId,
-      event_id: parsed.data.event_id,
+      event_id: parsed.data.event_id || null,
       amount_pesos: Math.abs(parsed.data.amount),
       method: "manual_charge",
       note: parsed.data.description,
@@ -525,11 +531,12 @@ export async function createEventPayableBatch(
     await logAuditEvent({
       dormId,
       actorUserId: user.id,
-      action: "finance.event_payable_created",
-      entityType: "event",
-      entityId: parsed.data.event_id,
+      action: "finance.contribution_batch_created",
+      entityType: "finance",
+      entityId: batchId,
       metadata: {
-        event_title: event.title,
+        event_id: parsed.data.event_id || null,
+        event_title: eventTitle,
         amount_pesos: Math.abs(parsed.data.amount),
         description: parsed.data.description,
         deadline: deadlineIso,
@@ -538,11 +545,13 @@ export async function createEventPayableBatch(
       },
     });
   } catch (auditError) {
-    console.error("Failed to write audit event for payable event creation:", auditError);
+    console.error("Failed to write audit event for contribution batch creation:", auditError);
   }
 
   revalidatePath("/admin/finance/events");
-  revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+  if (parsed.data.event_id) {
+    revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+  }
   revalidatePath("/payments");
 
   return {

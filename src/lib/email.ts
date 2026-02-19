@@ -180,6 +180,7 @@ export function renderPaymentReceiptEmail(input: {
   eventTitle: string | null;
   customMessage: string | null;
   subjectOverride?: string | null;
+  signatureOverride?: string | null;
 }) {
   const subject =
     input.subjectOverride?.trim() ||
@@ -218,15 +219,15 @@ export function renderPaymentReceiptEmail(input: {
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
       <tbody>
         ${detailRows
-          .map(
-            ([label, value]) => `
+      .map(
+        ([label, value]) => `
             <tr>
               <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:140px;">${label}</td>
               <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; font-weight:600; color:#0f172a;">${value}</td>
             </tr>
           `.trim()
-          )
-          .join("")}
+      )
+      .join("")}
       </tbody>
     </table>
   `.trim();
@@ -237,6 +238,7 @@ export function renderPaymentReceiptEmail(input: {
     greeting,
     messageHtml || defaultMessageHtml,
     tableHtml,
+    input.signatureOverride?.trim() ? `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(input.signatureOverride.trim())}</strong></p>` : "",
   ].join("");
 
   const textParts = [
@@ -249,6 +251,7 @@ export function renderPaymentReceiptEmail(input: {
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
     input.note?.trim() ? `Note: ${input.note.trim()}` : "",
+    input.signatureOverride?.trim() ? `\n—\n${input.signatureOverride.trim()}` : "",
   ].filter(Boolean);
 
   return {

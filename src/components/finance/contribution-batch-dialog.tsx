@@ -7,7 +7,7 @@ import * as z from "zod";
 import { CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { createEventPayableBatch } from "@/app/actions/finance";
+import { createContributionBatch } from "@/app/actions/finance";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,13 +38,13 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function EventPayableDialog({
+export function ContributionBatchDialog({
   dormId,
   eventId,
   trigger,
 }: {
   dormId: string;
-  eventId: string;
+  eventId?: string;
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -73,7 +73,7 @@ export function EventPayableDialog({
         deadlineIso = parsed.toISOString();
       }
 
-      const response = await createEventPayableBatch(dormId, {
+      const response = await createContributionBatch(dormId, {
         event_id: eventId,
         amount: values.amount,
         description: values.description,
@@ -110,13 +110,13 @@ export function EventPayableDialog({
         {trigger || (
           <Button size="sm" variant="outline">
             <CalendarClock className="mr-2 h-4 w-4" />
-            Create payable event
+            Create contribution
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>Create payable event</DialogTitle>
+          <DialogTitle>Create contribution</DialogTitle>
           <DialogDescription>
             Treasurer-only workflow: issue contribution charges with an optional deadline.
           </DialogDescription>
@@ -192,7 +192,7 @@ export function EventPayableDialog({
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Create payable event
+                Create contribution
               </Button>
             </DialogFooter>
           </form>

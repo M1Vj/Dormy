@@ -6,6 +6,7 @@ import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
+import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import {
   Table,
   TableBody,
@@ -213,6 +214,10 @@ export default async function EventsFinancePage({
             includeDormSelector={canFilterDorm}
           />
           <LedgerOverwriteDialog dormId={activeDormId} />
+          <ContributionBatchDialog
+            dormId={activeDormId}
+            trigger={<Button>Add Contribution</Button>}
+          />
         </div>
       </div>
 
@@ -319,9 +324,8 @@ export default async function EventsFinancePage({
                 <TableCell className="text-right">₱{event.charged.toFixed(2)}</TableCell>
                 <TableCell className="text-right text-emerald-600">₱{event.collected.toFixed(2)}</TableCell>
                 <TableCell
-                  className={`text-right font-medium ${
-                    event.balance > 0 ? "text-rose-600" : "text-muted-foreground"
-                  }`}
+                  className={`text-right font-medium ${event.balance > 0 ? "text-rose-600" : "text-muted-foreground"
+                    }`}
                 >
                   ₱{event.balance.toFixed(2)}
                 </TableCell>

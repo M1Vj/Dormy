@@ -9,6 +9,7 @@ import { Loader2, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,7 @@ const formSchema = z.object({
   sendReceiptEmail: z.boolean(),
   receiptSubject: z.string().trim().max(140).optional(),
   receiptMessage: z.string().trim().max(2000).optional(),
+  receiptSignature: z.string().trim().max(100).optional(),
 });
 
 interface PaymentDialogProps {
@@ -72,6 +74,7 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
       sendReceiptEmail: true,
       receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
       receiptMessage: "",
+      receiptSignature: "Dormy Admin",
     },
   });
 
@@ -129,10 +132,11 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
         event_id: eventId,
         receipt_email: values.sendReceiptEmail
           ? {
-              enabled: true,
-              subject: values.receiptSubject?.trim() || undefined,
-              message: values.receiptMessage?.trim() || undefined,
-            }
+            enabled: true,
+            subject: values.receiptSubject?.trim() || undefined,
+            message: values.receiptMessage?.trim() || undefined,
+            signature: values.receiptSignature?.trim() || undefined,
+          }
           : { enabled: false },
       });
 
@@ -177,10 +181,10 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
                 <FormItem>
                   <FormLabel>Amount (₱)</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      {...field} 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                     />
                   </FormControl>
@@ -248,46 +252,64 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
               />
 
               {sendReceiptEmail ? (
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-4 rounded-md border p-4 bg-muted/20">
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="font-medium text-sm">Compose Receipt</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={onDraftReceipt}
+                      disabled={isDrafting}
+                      className="h-7 text-xs"
+                    >
+                      {isDrafting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : "✨ AI Draft"}
+                    </Button>
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="receiptSubject"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Subject</FormLabel>
+                      <FormItem className="flex flex-col sm:flex-row sm:items-center gap-2 space-y-0">
+                        <FormLabel className="sm:w-20 text-muted-foreground">Subject:</FormLabel>
                         <FormControl>
-                          <Input placeholder="Payment receipt" {...field} />
+                          <Input className="h-8 shadow-none border-transparent hover:border-input focus-visible:border-input bg-transparent" placeholder="Payment receipt" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <Separator />
+
+                  <FormField
+                    control={form.control}
+                    name="receiptMessage"
+                    render={({ field }) => (
+                      <FormItem className="space-y-1">
+                        <FormControl>
+                          <Textarea
+                            className="resize-none shadow-none border-transparent hover:border-input focus-visible:border-input bg-transparent min-h-[120px]"
+                            placeholder={eventTitle ? `Type your message here... Thanks for paying for ${eventTitle}.` : "Type your message here..."}
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
+                  <Separator />
+
                   <FormField
                     control={form.control}
-                    name="receiptMessage"
+                    name="receiptSignature"
                     render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center justify-between gap-2">
-                          <FormLabel>Message (Optional)</FormLabel>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onDraftReceipt}
-                            disabled={isDrafting}
-                          >
-                            {isDrafting ? "Drafting..." : "AI Draft"}
-                          </Button>
-                        </div>
+                      <FormItem className="flex flex-col sm:flex-row sm:items-center gap-2 space-y-0 pt-1">
+                        <FormLabel className="sm:w-20 text-muted-foreground">Sign-off:</FormLabel>
                         <FormControl>
-                          <Textarea
-                            placeholder={eventTitle ? `Example: Thanks for paying for ${eventTitle}.` : "Add a short note to include in the email."}
-                            rows={5}
-                            {...field}
-                          />
+                          <Input className="h-8 shadow-none border-transparent hover:border-input focus-visible:border-input bg-transparent" placeholder="Dormy Admin" {...field} />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />

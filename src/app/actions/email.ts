@@ -133,11 +133,11 @@ export async function draftPaymentReceiptEmail(payload: unknown) {
       .maybeSingle(),
     parsed.data.event_id
       ? supabase
-          .from("events")
-          .select("title")
-          .eq("dorm_id", parsed.data.dorm_id)
-          .eq("id", parsed.data.event_id)
-          .maybeSingle()
+        .from("events")
+        .select("title")
+        .eq("dorm_id", parsed.data.dorm_id)
+        .eq("id", parsed.data.event_id)
+        .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -159,7 +159,9 @@ export async function draftPaymentReceiptEmail(payload: unknown) {
     "Constraints:",
     "- subject: <= 140 chars",
     "- message: plain text, <= 700 chars",
-    "- do not include a greeting or signature (we add it in the template)",
+    "- strictly do NOT include a greeting (e.g. Hi, Dear)",
+    "- strictly do NOT include a sign-off or signature (e.g. Thanks, Best, Dormy Admin)",
+    "- the greeting and signature are added automatically in the email template",
     "- do not include secrets or passwords",
     "- do not repeat the full receipt table; that will be appended automatically",
     "",

@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
-import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
+import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { PublicShareDialog } from "@/components/finance/public-share-dialog";
@@ -302,10 +302,10 @@ export default async function EventDetailsPage({
             entityType="event"
             title={event.title}
           />
-          <EventPayableDialog
+          <ContributionBatchDialog
             dormId={dormId}
             eventId={eventId}
-            trigger={<Button>Create payable event</Button>}
+            trigger={<Button>Create contribution</Button>}
           />
         </div>
       </div>
