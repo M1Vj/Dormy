@@ -7,7 +7,9 @@ export type DashboardStats = {
   // Finance summary
   totalCharged: number;
   totalPaid: number;
-  totalBalanceOutstanding: number;
+  totalExpenses: number;
+  cashOnHand: number;
+  totalCollectibles: number;
   occupantsCleared: number;
   occupantsNotCleared: number;
   totalOccupants: number;
@@ -63,20 +65,43 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     student_id: string | null;
   }>;
 
-  // Get all ledger entries for this semester
-  const { data: ledgerEntries } = await supabase
+  const { data: activeSemester } = await supabase
+    .from("dorm_semesters")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  const { data: entries } = await supabase
     .from("ledger_entries")
-    .select("occupant_id, amount_pesos, ledger, entry_type, voided_at")
+    .select("occupant_id, amount_pesos, ledger, entry_type, voided_at, semester_id")
     .eq("dorm_id", dormId)
     .is("voided_at", null);
 
-  const entries = (ledgerEntries ?? []) as Array<{
+  const entryList = (entries ?? []) as Array<{
     occupant_id: string;
     amount_pesos: number;
     ledger: string;
     entry_type: string;
     voided_at: string | null;
+    semester_id: string | null;
   }>;
+
+  // Get ALL approved expenses for the dorm (all time) for Cash on Hand
+  const { data: allApprovedExpenses } = await supabase
+    .from("expenses")
+    .select("amount_pesos, semester_id")
+    .eq("dorm_id", dormId)
+    .eq("status", "approved");
+
+  const totalAllTimeExpenses = (allApprovedExpenses ?? []).reduce(
+    (sum, exp) => sum + Number(exp.amount_pesos),
+    0
+  );
+
+  const totalThisSemExpenses = (allApprovedExpenses ?? [])
+    .filter(exp => exp.semester_id === semesterResult.semesterId)
+    .reduce((sum, exp) => sum + Number(exp.amount_pesos), 0);
 
   // Get fines for this semester
   const { data: fines } = await supabase
@@ -105,6 +130,7 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     occupantBalances.set(occ.id, 0);
   }
 
+  let totalAllTimePaid = 0;
   let totalCharged = 0;
   let totalPaid = 0;
   let maintenanceCharged = 0;
@@ -114,16 +140,23 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
   let eventsCharged = 0;
   let eventsPaid = 0;
 
-  for (const entry of entries) {
+  for (const entry of entryList) {
     const amount = Number(entry.amount_pesos);
     const isPayment = entry.entry_type === "payment" || amount < 0;
+    const isThisSem = entry.semester_id === semesterResult.semesterId;
     const ledger = entry.ledger;
 
-    // Update occupant balance
+    if (isPayment) {
+      totalAllTimePaid += Math.abs(amount);
+    }
+
+    if (!isThisSem) continue;
+
+    // Update occupant balance (Only this semester for clearance)
     const current = occupantBalances.get(entry.occupant_id) ?? 0;
     occupantBalances.set(entry.occupant_id, current + amount);
 
-    if (isPayment || amount < 0) {
+    if (isPayment) {
       const absAmount = Math.abs(amount);
       totalPaid += absAmount;
       if (ledger.includes("maintenance")) maintenancePaid += absAmount;
@@ -157,7 +190,9 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
   return {
     totalCharged,
     totalPaid,
-    totalBalanceOutstanding: totalCharged - totalPaid,
+    totalExpenses: totalThisSemExpenses,
+    cashOnHand: totalAllTimePaid - totalAllTimeExpenses,
+    totalCollectibles: totalCharged - totalPaid,
     occupantsCleared,
     occupantsNotCleared,
     totalOccupants: occupantList.length,

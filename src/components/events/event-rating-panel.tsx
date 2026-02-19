@@ -90,7 +90,7 @@ export function EventRatingPanel({
           <div className="space-y-2">
             <p className="text-sm font-medium">Your rating</p>
             <div className="flex flex-wrap gap-2">
-              {[1, 2, 3, 4, 5].map((value) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
                 <label
                   key={value}
                   className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-sm"

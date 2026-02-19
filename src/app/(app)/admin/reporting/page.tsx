@@ -140,31 +140,32 @@ export default async function ReportingDashboardPage() {
       {/* Quick Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Total Charged"
-          value={`₱${stats.totalCharged.toFixed(2)}`}
-          sublabel="All ledger charges"
+          label="Cash on Hand"
+          value={`₱${stats.cashOnHand.toFixed(2)}`}
+          sublabel="Payments - Approved Expenses"
           icon={CircleDollarSign}
+          variant="success"
+        />
+        <StatCard
+          label="Total Expenses"
+          value={`-₱${stats.totalExpenses.toFixed(2)}`}
+          sublabel="Approved expenditures"
+          icon={BarChart3}
+          variant="danger"
+        />
+        <StatCard
+          label="Collectibles"
+          value={`₱${stats.totalCollectibles.toFixed(2)}`}
+          sublabel="Unpaid occupant charges"
+          icon={AlertTriangle}
+          variant={stats.totalCollectibles > 0 ? "warn" : "success"}
         />
         <StatCard
           label="Total Collected"
           value={`₱${stats.totalPaid.toFixed(2)}`}
-          sublabel="Payments received"
-          icon={BarChart3}
-          variant="success"
-        />
-        <StatCard
-          label="Outstanding Balance"
-          value={`₱${stats.totalBalanceOutstanding.toFixed(2)}`}
-          sublabel="Remaining to collect"
-          icon={AlertTriangle}
-          variant={stats.totalBalanceOutstanding > 0 ? "danger" : "success"}
-        />
-        <StatCard
-          label="Clearance Rate"
-          value={`${clearancePercentage}%`}
-          sublabel={`${stats.occupantsCleared}/${stats.totalOccupants} cleared`}
+          sublabel="Gross payments received"
           icon={CheckCircle2}
-          variant={clearancePercentage >= 80 ? "success" : "warn"}
+          variant="success"
         />
       </div>
 
@@ -263,7 +264,7 @@ export default async function ReportingDashboardPage() {
                     ₱{stats.totalPaid.toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    ₱{stats.totalBalanceOutstanding.toFixed(2)}
+                    ₱{stats.totalCollectibles.toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
@@ -338,8 +339,8 @@ export default async function ReportingDashboardPage() {
                     </td>
                     <td
                       className={`px-3 py-2 text-right font-medium ${item.total_balance > 0
-                          ? "text-red-600"
-                          : "text-emerald-600"
+                        ? "text-red-600"
+                        : "text-emerald-600"
                         }`}
                     >
                       ₱{item.total_balance.toFixed(2)}
@@ -347,8 +348,8 @@ export default async function ReportingDashboardPage() {
                     <td className="px-3 py-2">
                       <span
                         className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${item.is_cleared
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                            : "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400"
+                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400"
                           }`}
                       >
                         {item.is_cleared ? "Cleared" : "Not Cleared"}

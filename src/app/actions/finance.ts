@@ -87,8 +87,13 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     ? -Math.abs(tx.amount)
     : Math.abs(tx.amount);
 
+  // Ensure we have the active semester for this transaction
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  const semesterId = "semesterId" in semesterResult ? semesterResult.semesterId : null;
+
   const { error } = await supabase.from("ledger_entries").insert({
     dorm_id: dormId,
+    semester_id: semesterId,
     ledger: tx.category,
     entry_type: tx.entry_type,
     occupant_id: tx.occupant_id,
@@ -612,4 +617,105 @@ export async function getClearanceStatus(dormId: string, occupantId: string) {
   // Cleared if total balance is <= 0 (meaning paid up or overpaid).
   // Assuming positive balance = debt.
   return balances.total <= 0;
+}
+
+export async function createPublicViewToken(
+  dormId: string,
+  entityType: 'event' | 'finance_ledger',
+  entityId: string,
+  expiresInDays?: number
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Permission check
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership || !['admin', 'treasurer', 'adviser', 'assistant_adviser'].includes(membership.role)) {
+    return { error: "Forbidden" };
+  }
+
+  const expires_at = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  const { data, error } = await supabase
+    .from("public_view_tokens")
+    .insert({
+      dorm_id: dormId,
+      entity_type: entityType,
+      entity_id: entityId,
+      expires_at,
+      created_by: user.id
+    })
+    .select("token")
+    .single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/finance/events/${entityId}`);
+  return { success: true, token: data.token };
+}
+
+export async function getPublicContributionSummaryAction(token: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  // Use the RPC/Function we created in migration
+  const { data, error } = await supabase.rpc('get_public_contribution_summary', {
+    token_uuid: token
+  });
+
+  if (error) {
+    console.error("Public summary error:", error);
+    return { error: "Link is invalid or expired." };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "No data found for this link." };
+  }
+
+  return { success: true, summary: data[0] };
+}
+
+export async function getEntityPublicTokens(dormId: string, entityId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await supabase
+    .from("public_view_tokens")
+    .select("*")
+    .eq("dorm_id", dormId)
+    .eq("entity_id", entityId)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data;
+}
+
+export async function togglePublicViewToken(dormId: string, tokenId: string, active: boolean) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("public_view_tokens")
+    .update({ is_active: active })
+    .eq("dorm_id", dormId)
+    .eq("id", tokenId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/finance");
+  return { success: true };
 }

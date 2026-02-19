@@ -152,12 +152,12 @@ export function OverrideWorkspace({
         reason: String(formData.get("reason") ?? ""),
         full_name: getText(formData, "full_name"),
         student_id: getText(formData, "student_id"),
-        classification: getText(formData, "classification"),
+        course: getText(formData, "course"),
         joined_at: getText(formData, "joined_at"),
         left_at: getText(formData, "left_at"),
         status: (getText(formData, "status") as "active" | "left" | "removed" | undefined) ?? undefined,
         clear_student_id: isChecked(formData, "clear_student_id"),
-        clear_classification: isChecked(formData, "clear_classification"),
+        clear_course: isChecked(formData, "clear_course"),
         clear_left_at: isChecked(formData, "clear_left_at"),
       });
 
@@ -322,11 +322,10 @@ export function OverrideWorkspace({
             key={tab.value}
             type="button"
             onClick={() => setActiveTab(tab.value)}
-            className={`h-10 rounded-md border px-3 text-sm font-medium transition ${
-              activeTab === tab.value
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-input bg-background hover:bg-muted"
-            }`}
+            className={`h-10 rounded-md border px-3 text-sm font-medium transition ${activeTab === tab.value
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-input bg-background hover:bg-muted"
+              }`}
           >
             {tab.label}
           </button>
@@ -393,13 +392,13 @@ export function OverrideWorkspace({
                   </label>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="classification">
-                    Classification
+                  <label className="text-sm font-medium" htmlFor="course">
+                    Course
                   </label>
-                  <Input id="classification" name="classification" placeholder="Set new value" />
+                  <Input id="course" name="course" placeholder="Set new value" />
                   <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" name="clear_classification" className="h-4 w-4" />
-                    Clear classification
+                    <input type="checkbox" name="clear_course" className="h-4 w-4" />
+                    Clear course
                   </label>
                 </div>
                 <div className="space-y-2">
@@ -534,283 +533,283 @@ export function OverrideWorkspace({
 
       {activeTab === "payments" ? (
         <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Ledger occupant override</CardTitle>
-            <CardDescription>Move a ledger entry to the correct occupant account.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={ledgerAction} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="entry_id">
-                    Ledger entry
-                  </label>
-                  <select
-                    id="entry_id"
-                    name="entry_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={ledgerEntries[0]?.id ?? ""}
-                    required
-                  >
-                    {ledgerEntries.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.label}
-                      </option>
-                    ))}
-                  </select>
+          <Card>
+            <CardHeader>
+              <CardTitle>Ledger occupant override</CardTitle>
+              <CardDescription>Move a ledger entry to the correct occupant account.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={ledgerAction} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium" htmlFor="entry_id">
+                      Ledger entry
+                    </label>
+                    <select
+                      id="entry_id"
+                      name="entry_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={ledgerEntries[0]?.id ?? ""}
+                      required
+                    >
+                      {ledgerEntries.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium" htmlFor="ledger_occupant_id">
+                      New occupant
+                    </label>
+                    <select
+                      id="ledger_occupant_id"
+                      name="occupant_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={occupants[0]?.id ?? ""}
+                      required
+                    >
+                      {occupants.map((occupant) => (
+                        <option key={occupant.id} value={occupant.id}>
+                          {occupant.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="ledger_occupant_id">
-                    New occupant
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="ledger_reason">
+                    Reason
                   </label>
-                  <select
-                    id="ledger_occupant_id"
-                    name="occupant_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={occupants[0]?.id ?? ""}
-                    required
-                  >
-                    {occupants.map((occupant) => (
-                      <option key={occupant.id} value={occupant.id}>
-                        {occupant.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Textarea id="ledger_reason" name="reason" required />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="ledger_reason">
-                  Reason
-                </label>
-                <Textarea id="ledger_reason" name="reason" required />
-              </div>
-              {ledgerState.error ? (
-                <p className="text-sm text-destructive">{ledgerState.error}</p>
-              ) : null}
-              {ledgerState.success ? (
-                <p className="text-sm text-emerald-600">{ledgerState.success}</p>
-              ) : null}
-              <Button type="submit" disabled={ledgerPending}>
-                {ledgerPending ? "Saving..." : "Reassign ledger entry"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                {ledgerState.error ? (
+                  <p className="text-sm text-destructive">{ledgerState.error}</p>
+                ) : null}
+                {ledgerState.success ? (
+                  <p className="text-sm text-emerald-600">{ledgerState.success}</p>
+                ) : null}
+                <Button type="submit" disabled={ledgerPending}>
+                  {ledgerPending ? "Saving..." : "Reassign ledger entry"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Event payable deadline override</CardTitle>
-            <CardDescription>Update or clear contribution deadlines across all event charges.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={deadlineAction} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="deadline_event_id">
-                    Event
-                  </label>
-                  <select
-                    id="deadline_event_id"
-                    name="event_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={events[0]?.id ?? ""}
-                    required
-                  >
-                    {events.map((event) => (
-                      <option key={event.id} value={event.id}>
-                        {event.label}
-                      </option>
-                    ))}
-                  </select>
+          <Card>
+            <CardHeader>
+              <CardTitle>Event payable deadline override</CardTitle>
+              <CardDescription>Update or clear contribution deadlines across all event charges.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={deadlineAction} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium" htmlFor="deadline_event_id">
+                      Event
+                    </label>
+                    <select
+                      id="deadline_event_id"
+                      name="event_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={events[0]?.id ?? ""}
+                      required
+                    >
+                      {events.map((event) => (
+                        <option key={event.id} value={event.id}>
+                          {event.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium" htmlFor="deadline">
+                      New deadline
+                    </label>
+                    <Input id="deadline" name="deadline" type="datetime-local" />
+                    <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <input type="checkbox" name="clear_deadline" className="h-4 w-4" />
+                      Clear deadline
+                    </label>
+                  </div>
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="deadline">
-                    New deadline
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="deadline_reason">
+                    Reason
                   </label>
-                  <Input id="deadline" name="deadline" type="datetime-local" />
-                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" name="clear_deadline" className="h-4 w-4" />
-                    Clear deadline
-                  </label>
+                  <Textarea id="deadline_reason" name="reason" required />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="deadline_reason">
-                  Reason
-                </label>
-                <Textarea id="deadline_reason" name="reason" required />
-              </div>
-              {deadlineState.error ? (
-                <p className="text-sm text-destructive">{deadlineState.error}</p>
-              ) : null}
-              {deadlineState.success ? (
-                <p className="text-sm text-emerald-600">{deadlineState.success}</p>
-              ) : null}
-              <Button type="submit" disabled={deadlinePending}>
-                {deadlinePending ? "Saving..." : "Apply deadline override"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                {deadlineState.error ? (
+                  <p className="text-sm text-destructive">{deadlineState.error}</p>
+                ) : null}
+                {deadlineState.success ? (
+                  <p className="text-sm text-emerald-600">{deadlineState.success}</p>
+                ) : null}
+                <Button type="submit" disabled={deadlinePending}>
+                  {deadlinePending ? "Saving..." : "Apply deadline override"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 
       {activeTab === "cleaning" ? (
         <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Cleaning assignment override</CardTitle>
-            <CardDescription>Force assignment changes for exceptional week conditions.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={cleaningAssignmentAction} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="assignment_week_id">
-                    Week
+          <Card>
+            <CardHeader>
+              <CardTitle>Cleaning assignment override</CardTitle>
+              <CardDescription>Force assignment changes for exceptional week conditions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={cleaningAssignmentAction} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="assignment_week_id">
+                      Week
+                    </label>
+                    <select
+                      id="assignment_week_id"
+                      name="week_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={cleaningWeeks[0]?.id ?? ""}
+                      required
+                    >
+                      {cleaningWeeks.map((week) => (
+                        <option key={week.id} value={week.id}>
+                          {week.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="assignment_room_id">
+                      Room
+                    </label>
+                    <select
+                      id="assignment_room_id"
+                      name="room_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={rooms[0]?.id ?? ""}
+                      required
+                    >
+                      {rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium" htmlFor="area_id">
+                      Area
+                    </label>
+                    <select
+                      id="area_id"
+                      name="area_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={cleaningAreas[0]?.id ?? "__clear__"}
+                    >
+                      <option value="__clear__">Clear assignment</option>
+                      {cleaningAreas.map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" name="allow_rest_level" className="h-4 w-4" />
+                    Allow rest-level room assignment
                   </label>
-                  <select
-                    id="assignment_week_id"
-                    name="week_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={cleaningWeeks[0]?.id ?? ""}
-                    required
-                  >
-                    {cleaningWeeks.map((week) => (
-                      <option key={week.id} value={week.id}>
-                        {week.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="assignment_room_id">
-                    Room
+                  <label className="text-sm font-medium" htmlFor="cleaning_assignment_reason">
+                    Reason
                   </label>
-                  <select
-                    id="assignment_room_id"
-                    name="room_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={rooms[0]?.id ?? ""}
-                    required
-                  >
-                    {rooms.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Textarea id="cleaning_assignment_reason" name="reason" required />
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="area_id">
-                    Area
-                  </label>
-                  <select
-                    id="area_id"
-                    name="area_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={cleaningAreas[0]?.id ?? "__clear__"}
-                  >
-                    <option value="__clear__">Clear assignment</option>
-                    {cleaningAreas.map((area) => (
-                      <option key={area.id} value={area.id}>
-                        {area.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  <input type="checkbox" name="allow_rest_level" className="h-4 w-4" />
-                  Allow rest-level room assignment
-                </label>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="cleaning_assignment_reason">
-                  Reason
-                </label>
-                <Textarea id="cleaning_assignment_reason" name="reason" required />
-              </div>
-              {cleaningAssignmentState.error ? (
-                <p className="text-sm text-destructive">{cleaningAssignmentState.error}</p>
-              ) : null}
-              {cleaningAssignmentState.success ? (
-                <p className="text-sm text-emerald-600">{cleaningAssignmentState.success}</p>
-              ) : null}
-              <Button type="submit" disabled={cleaningAssignmentPending}>
-                {cleaningAssignmentPending ? "Saving..." : "Apply cleaning assignment override"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                {cleaningAssignmentState.error ? (
+                  <p className="text-sm text-destructive">{cleaningAssignmentState.error}</p>
+                ) : null}
+                {cleaningAssignmentState.success ? (
+                  <p className="text-sm text-emerald-600">{cleaningAssignmentState.success}</p>
+                ) : null}
+                <Button type="submit" disabled={cleaningAssignmentPending}>
+                  {cleaningAssignmentPending ? "Saving..." : "Apply cleaning assignment override"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Rest-level override</CardTitle>
-            <CardDescription>Override or clear weekly rest-level settings.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={cleaningRestAction} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="rest_week_id">
-                    Week
-                  </label>
-                  <select
-                    id="rest_week_id"
-                    name="week_id"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue={cleaningWeeks[0]?.id ?? ""}
-                    required
-                  >
-                    {cleaningWeeks.map((week) => (
-                      <option key={week.id} value={week.id}>
-                        {week.label}
-                      </option>
-                    ))}
-                  </select>
+          <Card>
+            <CardHeader>
+              <CardTitle>Rest-level override</CardTitle>
+              <CardDescription>Override or clear weekly rest-level settings.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={cleaningRestAction} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="rest_week_id">
+                      Week
+                    </label>
+                    <select
+                      id="rest_week_id"
+                      name="week_id"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue={cleaningWeeks[0]?.id ?? ""}
+                      required
+                    >
+                      {cleaningWeeks.map((week) => (
+                        <option key={week.id} value={week.id}>
+                          {week.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="rest_level">
+                      Rest level
+                    </label>
+                    <select
+                      id="rest_level"
+                      name="rest_level"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      defaultValue=""
+                    >
+                      <option value="">No change</option>
+                      <option value="1">Level 1</option>
+                      <option value="2">Level 2</option>
+                      <option value="3">Level 3</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="rest_level">
-                    Rest level
-                  </label>
-                  <select
-                    id="rest_level"
-                    name="rest_level"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    defaultValue=""
-                  >
-                    <option value="">No change</option>
-                    <option value="1">Level 1</option>
-                    <option value="2">Level 2</option>
-                    <option value="3">Level 3</option>
-                  </select>
-                </div>
-              </div>
-              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" name="clear_rest_level" className="h-4 w-4" />
-                Clear rest level
-              </label>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="cleaning_rest_reason">
-                  Reason
+                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" name="clear_rest_level" className="h-4 w-4" />
+                  Clear rest level
                 </label>
-                <Textarea id="cleaning_rest_reason" name="reason" required />
-              </div>
-              {cleaningRestState.error ? (
-                <p className="text-sm text-destructive">{cleaningRestState.error}</p>
-              ) : null}
-              {cleaningRestState.success ? (
-                <p className="text-sm text-emerald-600">{cleaningRestState.success}</p>
-              ) : null}
-              <Button type="submit" disabled={cleaningRestPending}>
-                {cleaningRestPending ? "Saving..." : "Apply rest-level override"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="cleaning_rest_reason">
+                    Reason
+                  </label>
+                  <Textarea id="cleaning_rest_reason" name="reason" required />
+                </div>
+                {cleaningRestState.error ? (
+                  <p className="text-sm text-destructive">{cleaningRestState.error}</p>
+                ) : null}
+                {cleaningRestState.success ? (
+                  <p className="text-sm text-emerald-600">{cleaningRestState.success}</p>
+                ) : null}
+                <Button type="submit" disabled={cleaningRestPending}>
+                  {cleaningRestPending ? "Saving..." : "Apply rest-level override"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 

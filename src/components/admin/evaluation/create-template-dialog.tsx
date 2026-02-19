@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
@@ -51,7 +51,7 @@ export function CreateTemplateDialog({ dormId, cycleId }: Props) {
     },
   });
 
-  function onSubmit(values: FormValues) {
+  const onSubmit: SubmitHandler<FormValues> = (values) => {
     startTransition(async () => {
       const result = await createEvaluationTemplate(dormId, {
         cycle_id: cycleId,
@@ -71,7 +71,7 @@ export function CreateTemplateDialog({ dormId, cycleId }: Props) {
         toast.error(result.error || "Failed to create template");
       }
     });
-  }
+  };
 
   return (
     <Dialog>

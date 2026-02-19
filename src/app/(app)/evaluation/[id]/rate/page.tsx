@@ -62,7 +62,7 @@ export default async function RateOccupantPage({ params }: Props) {
   // 3. Get ratee info
   const { data: ratee } = await supabase
     .from("occupants")
-    .select("id, full_name, classification")
+    .select("id, full_name, course:classification")
     .eq("id", rateeId)
     .eq("dorm_id", dormId)
     .single();

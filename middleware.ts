@@ -33,18 +33,19 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
   const isLoginRoute = pathname === "/login";
   const isAuthCallbackRoute = pathname === "/auth/callback";
+  const isOAuthConsentRoute = pathname === "/oauth/consent";
   const isJoinRoute = pathname === "/join";
   const isDashboardLegacyRoute =
     pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
-  if (!user && !isLoginRoute && !isAuthCallbackRoute) {
+  if (!user && !isLoginRoute && !isAuthCallbackRoute && !isOAuthConsentRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isLoginRoute) {
+  if (user && (isLoginRoute || isOAuthConsentRoute)) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/home";
     redirectUrl.search = "";
