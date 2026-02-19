@@ -7,6 +7,7 @@ import { getOccupants } from "@/app/actions/occupants";
 import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
+import { PublicShareDialog } from "@/components/finance/public-share-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -295,6 +296,12 @@ export default async function EventDetailsPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <LedgerOverwriteDialog dormId={dormId} />
+          <PublicShareDialog
+            dormId={dormId}
+            entityId={eventId}
+            entityType="event"
+            title={event.title}
+          />
           <EventPayableDialog
             dormId={dormId}
             eventId={eventId}
