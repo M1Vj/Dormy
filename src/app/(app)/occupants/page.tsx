@@ -78,7 +78,7 @@ export default async function OccupantsPage() {
 
   const cookieStore = await cookies();
   const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
-  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
+  const eligibleForOccupantMode = new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]).has(role);
   const isOccupantMode = occupantModeCookie === "1" && eligibleForOccupantMode;
   const effectiveRole = isOccupantMode ? "occupant" : role;
 

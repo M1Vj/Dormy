@@ -212,7 +212,7 @@ async function requireCompetitionManager(eventId: string) {
   let canManage = context.canManageEvents;
   let committeeId: string | null = null;
 
-  if (!canManage) {
+  if (!canManage && context.role !== "occupant") {
     // Check if user is committee lead for this event's committee
     const { data: event } = await supabase
       .from("events")
