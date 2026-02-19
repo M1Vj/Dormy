@@ -109,7 +109,7 @@ export function ReviewFineReportPanel({
         </Button>
         <Button
           className="bg-emerald-600 hover:bg-emerald-700"
-          disabled={isPending}
+          isLoading={isPending}
           onClick={() => submit("approve")}
         >
           Approve and issue fine

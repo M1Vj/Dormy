@@ -138,7 +138,7 @@ export function ReviewExpenseDialog({
           <div className="flex justify-end gap-2">
             <Button
               variant="destructive"
-              disabled={isPending}
+              isLoading={isPending}
               onClick={() => handleAction("reject")}
             >
               Reject
@@ -146,7 +146,7 @@ export function ReviewExpenseDialog({
             <Button
               variant="default"
               className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={isPending}
+              isLoading={isPending}
               onClick={() => handleAction("approve")}
             >
               Approve

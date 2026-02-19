@@ -69,8 +69,8 @@ export function CreateDormDialog() {
             <p className="text-sm text-primary">Dorm created successfully.</p>
           ) : null}
           <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create dorm"}
+            <Button type="submit" isLoading={isPending}>
+              Create dorm
             </Button>
           </SheetFooter>
         </form>

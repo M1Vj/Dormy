@@ -164,18 +164,8 @@ export function CompetitionWorkspace({
                     required
                   />
                 </div>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 size-4" />
-                      Add team
-                    </>
-                  )}
+                <Button type="submit" isLoading={isPending}>
+                  Add team
                 </Button>
               </form>
             ) : null}
@@ -196,7 +186,7 @@ export function CompetitionWorkspace({
                         size="icon"
                         variant="ghost"
                         onClick={() => handleDeleteTeam(snapshot.event.id, team.id)}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         <Trash2 className="size-4 text-destructive" />
                       </Button>
@@ -248,7 +238,7 @@ export function CompetitionWorkspace({
                         ))}
                       </select>
                       <Input name="display_name" placeholder="Or external member name" />
-                      <Button type="submit" variant="outline" disabled={isPending}>
+                      <Button type="submit" variant="outline" isLoading={isPending}>
                         Add member
                       </Button>
                     </form>

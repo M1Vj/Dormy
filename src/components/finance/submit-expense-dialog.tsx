@@ -136,8 +136,8 @@ export function SubmitExpenseDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Submitting…" : "Submit"}
+            <Button type="submit" isLoading={isPending}>
+              Submit
             </Button>
           </div>
         </form>

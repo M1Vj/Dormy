@@ -338,7 +338,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 type="button"
                 variant="outline"
                 onClick={() => moveWeek(-1)}
-                disabled={isPending}
+                isLoading={isPending}
               >
                 <ChevronLeft className="mr-1 size-4" />
                 Previous
@@ -347,7 +347,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 type="button"
                 variant="outline"
                 onClick={() => moveWeek(1)}
-                disabled={isPending}
+                isLoading={isPending}
               >
                 Next
                 <ChevronRight className="ml-1 size-4" />
@@ -377,7 +377,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 className="w-[180px] bg-background/80"
               />
             </div>
-            <Button type="submit" variant="secondary" disabled={isPending}>
+            <Button type="submit" variant="secondary" isLoading={isPending}>
               Open Week
             </Button>
           </form>
@@ -486,7 +486,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                             </option>
                           ))}
                         </select>
-                        <Button size="sm" variant="outline" disabled={isPending} className="w-full">
+                        <Button size="sm" variant="outline" isLoading={isPending} className="w-full">
                           <Save className="mr-1.5 size-3.5" />
                           Save Assignment
                         </Button>
@@ -535,7 +535,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                                   </option>
                                 ))}
                               </select>
-                              <Button size="sm" variant="outline" disabled={isPending}>
+                              <Button size="sm" variant="outline" isLoading={isPending}>
                                 <Save className="mr-1.5 size-3.5" />
                                 Save
                               </Button>
@@ -707,7 +707,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 <form onSubmit={handleCreateException} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <Input name="date" type="date" required />
                   <Input name="reason" placeholder="Holiday / no classes" />
-                  <Button type="submit" variant="outline" disabled={isPending}>
+                  <Button type="submit" variant="outline" isLoading={isPending}>
                     <Plus className="mr-2 size-4" />
                     Add
                   </Button>
@@ -725,7 +725,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                         size="icon"
                         variant="ghost"
                         onClick={() => handleDeleteException(exception.id)}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         <Trash2 className="size-4 text-destructive" />
                       </Button>
@@ -753,7 +753,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
             <form onSubmit={handleCreateArea} className="grid gap-2 md:grid-cols-[1fr_120px_auto]">
               <Input name="name" placeholder="Area name" required />
               <Input name="sort_order" type="number" min={0} defaultValue={snapshot.areas.length + 1} />
-              <Button type="submit" variant="outline" disabled={isPending}>
+              <Button type="submit" variant="outline" isLoading={isPending}>
                 <Plus className="mr-2 size-4" />
                 Add Area
               </Button>
@@ -773,7 +773,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                     <input type="checkbox" name="active" defaultChecked={area.active} />
                     Active
                   </label>
-                  <Button type="submit" variant="secondary" size="sm" disabled={isPending}>
+                  <Button type="submit" variant="secondary" size="sm" isLoading={isPending}>
                     Save
                   </Button>
                   <Button
@@ -781,7 +781,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteArea(area.id)}
-                    disabled={isPending}
+                    isLoading={isPending}
                   >
                     <Trash2 className="mr-1.5 size-3.5 text-destructive" />
                     Delete

@@ -57,7 +57,7 @@ export function CreateOccupantForm({
         </label>
         <Input id="joined_at" name="joined_at" type="date" className="w-full sm:w-40" />
       </div>
-      <Button type="submit" size="sm" isLoading={isPending} disabled={isPending} className="w-full sm:w-auto">
+      <Button type="submit" size="sm" isLoading={isPending} className="w-full sm:w-auto">
         Add occupant
       </Button>
       {state.error ? (
