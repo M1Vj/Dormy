@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -326,13 +327,15 @@ async function getViewerContext() {
     return { error: "No dorm membership found for this account." } as const;
   }
 
-  const role = activeMembership.role;
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const role = isOccupantMode ? "occupant" : activeMembership.role;
 
   const viewer: ViewerContext = {
     userId: user.id,
     dormId: activeMembership.dorm_id,
     role,
-    canManage: MANAGER_ROLES.has(role),
+    canManage: !isOccupantMode && MANAGER_ROLES.has(role),
   };
 
   return { supabase, viewer } as const;

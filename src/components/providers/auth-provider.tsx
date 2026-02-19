@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -97,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const role = isOccupantMode && canToggleOccupantMode ? "occupant" : actualRole;
 
+  const router = useRouter();
   const toggleOccupantMode = useCallback(() => {
     if (!canToggleOccupantMode) return;
     setIsOccupantMode((prev) => {
@@ -104,7 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       writeCookie(OCCUPANT_MODE_COOKIE, next ? "1" : "0", 60 * 60 * 24 * 30);
       return next;
     });
-  }, [canToggleOccupantMode]);
+    router.refresh();
+  }, [canToggleOccupantMode, router]);
 
   const refresh = useCallback(async () => {
     if (!supabase) {

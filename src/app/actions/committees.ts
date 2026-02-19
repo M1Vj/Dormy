@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -90,7 +91,10 @@ export async function createCommittee(dormId: string, formData: FormData) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
     return { error: "Only admins, advisers, and student assistants can create committees." };
   }
 
@@ -166,7 +170,10 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
 
   const isHead = userCommitteeRole && ["head", "co-head"].includes(userCommitteeRole.role);
 
-  if (!isAdminOrSA && !isHead) {
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
     return { error: "You do not have permission to manage members." };
   }
 
@@ -255,7 +262,10 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
 
   const isHead = userCommitteeRole && ["head", "co-head"].includes(userCommitteeRole.role);
 
-  if (!isAdminOrSA && !isHead) {
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
     return { error: "Permission denied." };
   }
 
@@ -293,7 +303,10 @@ export async function deleteCommittee(committeeId: string) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+  const cookieStore = await cookies();
+  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+
+  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
     return { error: "Only admins, advisers, and student assistants can delete committees." };
   }
 
