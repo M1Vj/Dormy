@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { Button } from "@/components/ui/button";
+import { BackToAppButton } from "@/components/nav/back-to-app-button";
 
 export default function NotFound() {
   return (
@@ -10,9 +8,7 @@ export default function NotFound() {
         <p className="text-sm text-muted-foreground">
           The page you requested does not exist or is no longer available.
         </p>
-        <Button asChild>
-          <Link href="/occupant/events">Back to app</Link>
-        </Button>
+        <BackToAppButton text="Back to app" />
       </div>
     </div>
   );
