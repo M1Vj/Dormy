@@ -100,6 +100,7 @@ type CleaningRoomRow = {
   id: string;
   code: string;
   level: number;
+  level_override: string | null;
   capacity: number;
   sort_order: number;
 };
@@ -477,6 +478,7 @@ function buildRoomPlans(
       room_id: room.id,
       room_code: room.code,
       room_level: room.level,
+      level_override: room.level_override,
       occupant_count: room.occupant_count,
       area_id: assignment?.area_id ?? null,
       area_name: assignment?.area_name ?? null,
@@ -537,7 +539,7 @@ export async function getCleaningSnapshot(
       .order("name", { ascending: true }),
     supabase
       .from("rooms")
-      .select("id, code, level, capacity, sort_order")
+      .select("id, code, level, level_override, capacity, sort_order")
       .eq("dorm_id", viewer.dormId)
       .order("level", { ascending: true })
       .order("sort_order", { ascending: true }),
@@ -575,6 +577,7 @@ export async function getCleaningSnapshot(
     id: room.id,
     code: room.code,
     level: room.level,
+    level_override: room.level_override,
     capacity: room.capacity,
     sort_order: room.sort_order,
     occupant_count: roomOccupantCount.get(room.id) ?? 0,
