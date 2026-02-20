@@ -269,3 +269,67 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
   revalidatePath(`/admin/occupants/${assignment.occupant_id}`);
   return { success: true };
 }
+
+export async function overrideRoomLevel(
+  dormId: string,
+  roomId: string,
+  levelOverride: string | null
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    membershipError ||
+    !membership ||
+    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
+  ) {
+    return { error: "You do not have permission to edit rooms." };
+  }
+
+  const { data: room, error: roomError } = await supabase
+    .from("rooms")
+    .update({ level_override: levelOverride })
+    .eq("id", roomId)
+    .eq("dorm_id", dormId)
+    .select("id, code, level_override")
+    .single();
+
+  if (roomError || !room) {
+    return { error: roomError?.message ?? "Failed to override room level." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId: dormId,
+      actorUserId: user.id,
+      action: "rooms.override_level",
+      entityType: "room",
+      entityId: roomId,
+      metadata: {
+        room_code: room.code,
+        level_override: levelOverride,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for room level override:", auditError);
+  }
+
+  revalidatePath("/admin/rooms");
+  return { success: true };
+}
