@@ -339,6 +339,5 @@ export async function createUser(formData: FormData) {
     console.error("Failed to send account email:", emailError);
   }
 
-  revalidatePath("/admin/users");
   return { success: true };
 }
