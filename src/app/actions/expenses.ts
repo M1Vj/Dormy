@@ -32,17 +32,19 @@ export async function submitExpense(dormId: string, formData: FormData) {
   const committeeId = committeeIdInput ? committeeIdInput : null;
 
   // Verify officer/treasurer role
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
   const staffSubmitRoles = new Set(["admin", "treasurer", "officer"]);
-  const isStaffSubmitter = Boolean(membership && staffSubmitRoles.has(membership.role));
+  const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
 
-  if (!membership) {
+  if (!memberships || memberships.length === 0) {
     return { error: "No dorm membership found for this account." };
   }
 
@@ -187,17 +189,14 @@ export async function reviewExpense(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
+  const roles = memberships?.map(m => m.role) ?? [];
 
-  if (
-    !membership ||
-    !new Set(["admin", "treasurer"]).has(membership.role)
-  ) {
+  if (!roles.some(r => new Set(["admin", "treasurer"]).has(r))) {
     return { error: "Only treasurer or admin can approve expenses." };
   }
 

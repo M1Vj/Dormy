@@ -28,7 +28,7 @@ export function DeleteEventButton({ eventId }: { eventId: string }) {
         return;
       }
 
-      router.push("/events");
+      router.push("/occupant/events");
       router.refresh();
     });
   };

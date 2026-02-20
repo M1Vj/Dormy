@@ -49,7 +49,7 @@ export function RatingForm({ raterId, rateeId, templateId, metrics }: Props) {
 
       if (result.success) {
         toast.success("Evaluation submitted successfully");
-        router.push("/evaluation");
+        router.push("/occupant/evaluation");
         router.refresh();
       } else {
         toast.error(result.error || "Failed to submit evaluation");

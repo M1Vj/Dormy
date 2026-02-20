@@ -33,7 +33,7 @@ export default async function JoinPage() {
     .limit(1);
 
   if (existingMembership?.length) {
-    redirect("/home");
+    redirect("/occupant/home");
   }
 
   const [dorms, applications, invites] = await Promise.all([

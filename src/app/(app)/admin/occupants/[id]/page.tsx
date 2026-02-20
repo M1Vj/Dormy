@@ -92,14 +92,9 @@ export default async function AdminOccupantProfilePage(props: {
     .select("role, dorm_id")
     .eq("user_id", user.id);
 
-  const activeMembership =
-    memberships?.find((membership) => membership.dorm_id === activeDormId) ??
-    memberships?.[0];
-
-  if (
-    !activeMembership ||
-    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
-  ) {
+  const activeMemberships = memberships?.filter(m => m.dorm_id === activeDormId!) ?? [];
+  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant"]).has(m.role));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -107,7 +102,7 @@ export default async function AdminOccupantProfilePage(props: {
     );
   }
 
-  const occupant = await getOccupant(activeMembership.dorm_id, params.id);
+  const occupant = await getOccupant(activeDormId!, params.id);
 
   if (!occupant) {
     return (
@@ -120,7 +115,7 @@ export default async function AdminOccupantProfilePage(props: {
     );
   }
 
-  const fineRules = await getFineRules(activeMembership.dorm_id);
+  const fineRules = await getFineRules(activeDormId!);
   const occupantOptions = [
     {
       id: occupant.id,
@@ -146,7 +141,7 @@ export default async function AdminOccupantProfilePage(props: {
 
   let committeesRaw: { id: string; dorm_id: string; name: string; description: string | null; created_at: string; members: { role: "member" | "head" | "co-head"; user_id: string; display_name: string | null; }[] }[] = [];
   if (isEditMode) {
-    const commRes = await getCommittees(activeMembership.dorm_id);
+    const commRes = await getCommittees(activeDormId!);
     if (!commRes.error) {
       committeesRaw = commRes.data ?? [];
     }
@@ -166,7 +161,7 @@ export default async function AdminOccupantProfilePage(props: {
         <div className="flex gap-2">
           {!isEditMode && (
             <IssueFineDialog
-              dormId={activeMembership.dorm_id}
+              dormId={activeDormId!}
               occupants={occupantOptions}
               rules={fineRules}
               defaultOccupantId={occupant.id}
@@ -183,7 +178,7 @@ export default async function AdminOccupantProfilePage(props: {
               report="occupant-statement"
               title="Export Occupant Statement"
               description="Download balances and transaction history for this occupant."
-              defaultDormId={activeMembership.dorm_id}
+              defaultDormId={activeDormId!}
               dormOptions={dormOptions}
               includeDormSelector
               defaultParams={{ occupant_id: occupant.id }}
@@ -203,7 +198,7 @@ export default async function AdminOccupantProfilePage(props: {
         <CardContent>
           {isEditMode ? (
             <EditOccupantForm
-              dormId={activeMembership.dorm_id}
+              dormId={activeDormId!}
               occupant={occupant}
               committees={committeesRaw}
             />

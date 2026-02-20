@@ -26,13 +26,15 @@ export default async function Page() {
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r));
 
-  if (!membership || !new Set(["admin", "adviser"]).has(membership.role)) {
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -63,7 +65,7 @@ export default async function Page() {
           </div>
         </CardContent>
       </Card>
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Dorms</CardTitle>
@@ -78,7 +80,7 @@ export default async function Page() {
           </CardContent>
         </Card>
       ) : null}
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Audit logs</CardTitle>
@@ -103,7 +105,7 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Overrides</CardTitle>

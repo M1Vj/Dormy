@@ -48,14 +48,9 @@ export default async function AdminOccupantsPage({
     .select("role, dorm_id")
     .eq("user_id", user.id);
 
-  const activeMembership =
-    memberships?.find((membership) => membership.dorm_id === activeDormId) ??
-    memberships?.[0];
-
-  if (
-    !activeMembership ||
-    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
-  ) {
+  const activeMemberships = memberships?.filter(m => m.dorm_id === activeDormId) ?? [];
+  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant"]).has(m.role));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -72,7 +67,7 @@ export default async function AdminOccupantsPage({
   const trimmedRoom = room?.trim() || undefined;
   const trimmedLevel = level?.trim() || undefined;
 
-  const occupants = await getOccupants(activeMembership.dorm_id, {
+  const occupants = await getOccupants(activeDormId!, {
     search: trimmedSearch,
     status: trimmedStatus,
     room: trimmedRoom,
@@ -88,7 +83,7 @@ export default async function AdminOccupantsPage({
         </p>
       </div>
       <OccupantTable
-        dormId={activeMembership.dorm_id}
+        dormId={activeDormId!}
         occupants={occupants}
         filters={{
           search: trimmedSearch,

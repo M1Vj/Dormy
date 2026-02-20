@@ -79,7 +79,7 @@ export default async function RateOccupantPage({ params }: Props) {
     .single();
 
   if (existing) {
-    redirect("/evaluation");
+    redirect("/occupant/evaluation");
   }
 
   // 5. Get metrics

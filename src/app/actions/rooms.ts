@@ -59,18 +59,14 @@ export async function assignOccupant(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to assign occupants." };
   }
 
@@ -217,18 +213,14 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
     return { error: assignmentError?.message ?? "Room assignment not found." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", assignment.dorm_id)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to remove assignments." };
   }
 
@@ -287,18 +279,14 @@ export async function overrideRoomLevel(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to edit rooms." };
   }
 

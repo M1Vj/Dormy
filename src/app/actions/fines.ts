@@ -45,17 +45,16 @@ export async function createFineRule(dormId: string, formData: FormData) {
 
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to manage fine rules." };
   }
 
@@ -113,17 +112,16 @@ export async function updateFineRule(
 
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to manage fine rules." };
   }
 
@@ -288,17 +286,16 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to issue fines." };
   }
 
@@ -373,17 +370,16 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to void fines." };
   }
 

@@ -289,18 +289,14 @@ export async function createOccupant(dormId: string, formData: FormData) {
     return { error: "You must be logged in to add occupants." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to add occupants." };
   }
 
@@ -398,18 +394,14 @@ export async function updateOccupant(
     return { error: "You must be logged in to update occupants." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to update occupants." };
   }
 

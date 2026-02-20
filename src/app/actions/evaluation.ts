@@ -355,14 +355,16 @@ export async function createEvaluationCycle(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", auth.user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (!membership || !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)) {
+  if (!hasAccess) {
     return { error: "You do not have permission to manage evaluation cycles." };
   }
 
