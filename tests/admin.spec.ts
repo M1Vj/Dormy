@@ -44,7 +44,7 @@ test.describe('Admin Events', () => {
 
 test.describe('Committees', () => {
   test('should load committees page', async ({ page }) => {
-    await page.goto('/committees');
+    await page.goto('/occupant/committees');
     await expect(page.getByRole('heading', { name: 'Committees', exact: true })).toBeVisible();
   });
 });
