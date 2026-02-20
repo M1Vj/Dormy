@@ -216,6 +216,7 @@ export default async function EventsFinancePage({
           <LedgerOverwriteDialog dormId={activeDormId} />
           <ContributionBatchDialog
             dormId={activeDormId}
+            events={typedEvents}
             trigger={<Button>Add Contribution</Button>}
           />
         </div>
