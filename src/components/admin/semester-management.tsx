@@ -2,16 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Plus, Edit2, Trash2 } from "lucide-react";
 
-import {
-  activateSemesterPlan,
-  archiveSemesterAndStartNext,
-  createSemesterPlan,
-} from "@/app/actions/semesters";
+import { createSemester, updateSemester, deleteSemester } from "@/app/actions/semesters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { DormSemester, DormSemesterArchive } from "@/lib/semesters";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { DormSemester } from "@/lib/semesters";
 
 type ActiveOccupant = {
   id: string;
@@ -24,7 +23,6 @@ type SemesterManagementProps = {
   dormId: string;
   activeSemester: DormSemester | null;
   semesters: DormSemester[];
-  archives: DormSemesterArchive[];
   activeOccupants: ActiveOccupant[];
   outstandingMoney: {
     total: number;
@@ -36,86 +34,97 @@ type SemesterManagementProps = {
   };
 };
 
-function inferNextSemester(activeSemester: DormSemester | null) {
-  if (!activeSemester) {
-    return {
-      schoolYear: "",
-      semester: "1st",
-      label: "",
-    };
+function generateSchoolYears(aroundYear: number = new Date().getFullYear(), range: number = 2) {
+  const years = [];
+  for (let i = -range; i <= range; i++) {
+    const start = aroundYear + i;
+    years.push(`${start}-${start + 1}`);
   }
-
-  const normalizedSemester = activeSemester.semester.toLowerCase();
-  const isFirst = normalizedSemester.includes("1");
-  const [startYearRaw, endYearRaw] = activeSemester.school_year.split("-");
-  const startYear = Number(startYearRaw);
-  const endYear = Number(endYearRaw);
-
-  if (
-    Number.isFinite(startYear) &&
-    Number.isFinite(endYear) &&
-    startYear > 0 &&
-    endYear > startYear
-  ) {
-    if (isFirst) {
-      return {
-        schoolYear: `${startYear}-${endYear}`,
-        semester: "2nd",
-        label: `${startYear}-${endYear} 2nd Semester`,
-      };
-    }
-
-    return {
-      schoolYear: `${endYear}-${endYear + 1}`,
-      semester: "1st",
-      label: `${endYear}-${endYear + 1} 1st Semester`,
-    };
-  }
-
-  return {
-    schoolYear: activeSemester.school_year,
-    semester: isFirst ? "2nd" : "1st",
-    label: "",
-  };
-}
-
-function getSummaryValue(snapshot: Record<string, unknown> | null, key: string) {
-  const summary = snapshot?.summary;
-  if (!summary || typeof summary !== "object") {
-    return "-";
-  }
-
-  const rawValue = (summary as Record<string, unknown>)[key];
-  if (rawValue === null || rawValue === undefined) {
-    return "-";
-  }
-
-  if (typeof rawValue === "number") {
-    return rawValue.toString();
-  }
-
-  return String(rawValue);
+  return years;
 }
 
 export function SemesterManagement({
   dormId,
   activeSemester,
   semesters,
-  archives,
   activeOccupants,
   outstandingMoney,
 }: SemesterManagementProps) {
-  const [isCreatingPlan, startCreatePlan] = useTransition();
-  const [isActivating, startActivate] = useTransition();
-  const [isArchiving, startArchive] = useTransition();
-  const [turnoverEnabled, setTurnoverEnabled] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  const plannedSemesters = useMemo(
-    () => semesters.filter((semester) => semester.status === "planned"),
-    [semesters]
-  );
+  // Modals state
+  const [isAddOpen, setIsAddOpen] = useState(false);
 
-  const nextDefaults = useMemo(() => inferNextSemester(activeSemester), [activeSemester]);
+  const [editingSemester, setEditingSemester] = useState<DormSemester | null>(null);
+  const [deletingSemester, setDeletingSemester] = useState<DormSemester | null>(null);
+
+  // Form values for Add/Edit
+  const [formValues, setFormValues] = useState({
+    title: "1st",
+    schoolYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+  });
+
+  const schoolYears = useMemo(() => generateSchoolYears(new Date().getFullYear(), 2), []);
+
+  const handleCreate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const label = `${formData.get("school_year")} ${formData.get("semester")} Semester`;
+    formData.set("label", label);
+
+    startTransition(async () => {
+      const result = await createSemester(dormId, formData);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Semester created successfully.");
+      setIsAddOpen(false);
+    });
+  };
+
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const label = `${formData.get("school_year")} ${formData.get("semester")} Semester`;
+    formData.set("label", label);
+
+    startTransition(async () => {
+      const result = await updateSemester(dormId, formData);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Semester updated successfully.");
+      setEditingSemester(null);
+    });
+  };
+
+  const handleDelete = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    startTransition(async () => {
+      const result = await deleteSemester(dormId, formData);
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Semester deleted successfully.");
+      setDeletingSemester(null);
+    });
+  };
+
+  const getStatusBadge = (semester: DormSemester) => {
+    const today = new Date().toISOString().split("T")[0];
+    if (activeSemester?.id === semester.id) {
+      return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">Active</span>;
+    }
+    if (semester.ends_on < today) {
+      return <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-800">Archived</span>;
+    }
+    return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">Future</span>;
+  };
 
   return (
     <div className="space-y-6">
@@ -125,12 +134,14 @@ export function SemesterManagement({
             <CardTitle className="text-sm font-medium">Active semester</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">{activeSemester?.label ?? "Not set"}</p>
+            <p className="text-lg font-semibold">{activeSemester?.label ?? "No active semester"}</p>
             {activeSemester ? (
               <p className="text-xs text-muted-foreground">
                 {activeSemester.starts_on} to {activeSemester.ends_on}
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">Based on current date</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -139,7 +150,7 @@ export function SemesterManagement({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{activeOccupants.length}</p>
-            <p className="text-xs text-muted-foreground">Persistent roster with overwrite controls</p>
+            <p className="text-xs text-muted-foreground">Persistent roster</p>
           </CardContent>
         </Card>
         <Card>
@@ -148,282 +159,132 @@ export function SemesterManagement({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">₱{outstandingMoney.total.toFixed(2)}</p>
-            <p className="text-xs text-muted-foreground">Finance remains persistent across semesters</p>
+            <p className="text-xs text-muted-foreground">Persists across semesters</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Create semester plan</CardTitle>
-          <CardDescription>Prepare the next semester without changing the active term yet.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid gap-3 md:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const formData = new FormData(event.currentTarget);
-              startCreatePlan(async () => {
-                const result = await createSemesterPlan(dormId, formData);
-                if (result?.error) {
-                  toast.error(result.error);
-                  return;
-                }
-                toast.success("Semester plan created.");
-              });
-            }}
-          >
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="plan-school-year">
-                School year
-              </label>
-              <Input id="plan-school-year" name="school_year" defaultValue={nextDefaults.schoolYear} required />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="plan-semester">
-                Semester
-              </label>
-              <Input id="plan-semester" name="semester" defaultValue={nextDefaults.semester} required />
-            </div>
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-sm font-medium" htmlFor="plan-label">
-                Label
-              </label>
-              <Input id="plan-label" name="label" defaultValue={nextDefaults.label} required />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="plan-starts-on">
-                Starts on
-              </label>
-              <Input id="plan-starts-on" type="date" name="starts_on" required />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="plan-ends-on">
-                Ends on
-              </label>
-              <Input id="plan-ends-on" type="date" name="ends_on" required />
-            </div>
-            <div className="md:col-span-2">
-              <Button type="submit" disabled={isCreatingPlan}>
-                {isCreatingPlan ? "Creating..." : "Create plan"}
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Semesters</CardTitle>
+            <CardDescription>Manage your dorm semesters. Archiving happens automatically based on dates.</CardDescription>
+          </div>
+
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add Semester
               </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {plannedSemesters.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Activate planned semester</CardTitle>
-            <CardDescription>
-              Use this when there is no active semester and you only need to activate an existing plan.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="flex flex-col gap-3 sm:flex-row sm:items-end"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const formData = new FormData(event.currentTarget);
-                startActivate(async () => {
-                  const result = await activateSemesterPlan(dormId, formData);
-                  if (result?.error) {
-                    toast.error(result.error);
-                    return;
-                  }
-                  toast.success("Semester activated.");
-                });
-              }}
-            >
-              <div className="w-full space-y-1 sm:max-w-sm">
-                <label className="text-sm font-medium" htmlFor="activate-semester-id">
-                  Planned semester
-                </label>
-                <select
-                  id="activate-semester-id"
-                  name="semester_id"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue={plannedSemesters[0]?.id}
-                  required
-                >
-                  {plannedSemesters.map((semester) => (
-                    <option key={semester.id} value={semester.id}>
-                      {semester.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button type="submit" disabled={isActivating}>
-                {isActivating ? "Activating..." : "Activate"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {activeSemester ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Archive current semester and start next</CardTitle>
-            <CardDescription>
-              Archives events, fines, cleaning, and evaluation into semester history, then activates the new term.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const formData = new FormData(event.currentTarget);
-                if (!turnoverEnabled) {
-                  formData.set("apply_occupant_turnover", "false");
-                }
-
-                startArchive(async () => {
-                  const result = await archiveSemesterAndStartNext(dormId, formData);
-                  if (result?.error) {
-                    toast.error(result.error);
-                    return;
-                  }
-
-                  toast.success("Semester archived and rollover completed.");
-                });
-              }}
-            >
-              <input type="hidden" name="active_semester_id" value={activeSemester.id} />
-              <div className="space-y-1">
-                <label className="text-sm font-medium" htmlFor="archive-label">
-                  Archive label (optional)
-                </label>
-                <Input id="archive-label" name="archive_label" placeholder={activeSemester.label} />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="next-school-year">
-                    Next school year
-                  </label>
-                  <Input
-                    id="next-school-year"
-                    name="next_school_year"
-                    defaultValue={nextDefaults.schoolYear}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="next-semester">
-                    Next semester
-                  </label>
-                  <Input
-                    id="next-semester"
-                    name="next_semester"
-                    defaultValue={nextDefaults.semester}
-                    required
-                  />
-                </div>
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-sm font-medium" htmlFor="next-label">
-                    Next label
-                  </label>
-                  <Input id="next-label" name="next_label" defaultValue={nextDefaults.label} required />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="next-starts-on">
-                    Next starts on
-                  </label>
-                  <Input id="next-starts-on" type="date" name="next_starts_on" required />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium" htmlFor="next-ends-on">
-                    Next ends on
-                  </label>
-                  <Input id="next-ends-on" type="date" name="next_ends_on" required />
-                </div>
-              </div>
-
-              <div className="rounded-md border p-3">
-                <label className="inline-flex items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    name="apply_occupant_turnover"
-                    checked={turnoverEnabled}
-                    onChange={(event) => setTurnoverEnabled(event.target.checked)}
-                  />
-                  Apply new-school-year occupant turnover
-                </label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Money persists. Occupants not retained below will be marked removed and their active room assignments will be closed.
-                </p>
-
-                {turnoverEnabled ? (
-                  <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-md border p-2">
-                    {activeOccupants.map((occupant) => (
-                      <label
-                        key={occupant.id}
-                        className="flex items-start gap-2 rounded-md border p-2 text-sm"
-                      >
-                        <input type="checkbox" name="retain_occupant_ids" value={occupant.id} />
-                        <span>
-                          <span className="font-medium">{occupant.full_name}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {occupant.student_id ?? "No ID"}
-                            {occupant.course ? ` · ${occupant.course}` : ""}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                    {!activeOccupants.length ? (
-                      <p className="text-xs text-muted-foreground">No active occupants available.</p>
-                    ) : null}
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreate}>
+                <DialogHeader>
+                  <DialogTitle>Add New Semester</DialogTitle>
+                  <DialogDescription>Define the dates and details for the semester.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Title</label>
+                    <Select name="semester" value={formValues.title} onValueChange={(val) => setFormValues(prev => ({ ...prev, title: val }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select title" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1st">1st</SelectItem>
+                        <SelectItem value="2nd">2nd</SelectItem>
+                        <SelectItem value="Midyear">Midyear</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                ) : null}
-              </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">School Year</label>
+                    <Select name="school_year" value={formValues.schoolYear} onValueChange={(val) => setFormValues(prev => ({ ...prev, schoolYear: val }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select school year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {schoolYears.map(year => (
+                          <SelectItem key={year} value={year}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium" htmlFor="starts_on">Starts on</label>
+                      <Input id="starts_on" name="starts_on" type="date" required />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium" htmlFor="ends_on">Ends on</label>
+                      <Input id="ends_on" name="ends_on" type="date" required />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={isPending}>
+                    {isPending ? "Saving..." : "Save Semester"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
-              <Button type="submit" disabled={isArchiving}>
-                {isArchiving ? "Processing rollover..." : "Archive and start next semester"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Semester history</CardTitle>
-          <CardDescription>Archived records grouped by semester snapshots.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
+          <div className="overflow-x-auto border rounded-md">
+            <table className="w-full text-sm">
+              <thead className="bg-muted bg-opacity-50">
                 <tr className="border-b text-left">
-                  <th className="px-2 py-2 font-medium">Label</th>
-                  <th className="px-2 py-2 font-medium">Archived at</th>
-                  <th className="px-2 py-2 font-medium">Events</th>
-                  <th className="px-2 py-2 font-medium">Fines</th>
-                  <th className="px-2 py-2 font-medium">Cleaning weeks</th>
-                  <th className="px-2 py-2 font-medium">Cycles</th>
+                  <th className="px-4 py-3 font-medium">School Year</th>
+                  <th className="px-4 py-3 font-medium">Semester</th>
+                  <th className="px-4 py-3 font-medium">Duration</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {archives.map((archive) => (
-                  <tr key={archive.id} className="border-b">
-                    <td className="px-2 py-2">{archive.label}</td>
-                    <td className="px-2 py-2 text-xs text-muted-foreground">
-                      {new Date(archive.created_at).toLocaleString()}
+                {semesters.map((semester) => (
+                  <tr key={semester.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <td className="px-4 py-3 font-medium">{semester.school_year}</td>
+                    <td className="px-4 py-3">{semester.semester}</td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                      {semester.starts_on} to {semester.ends_on}
                     </td>
-                    <td className="px-2 py-2">{getSummaryValue(archive.snapshot, "events_count")}</td>
-                    <td className="px-2 py-2">{getSummaryValue(archive.snapshot, "fines_count")}</td>
-                    <td className="px-2 py-2">{getSummaryValue(archive.snapshot, "cleaning_weeks_count")}</td>
-                    <td className="px-2 py-2">{getSummaryValue(archive.snapshot, "evaluation_cycles_count")}</td>
+                    <td className="px-4 py-3">
+                      {getStatusBadge(semester)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-primary"
+                          onClick={() => {
+                            setEditingSemester(semester);
+                            setFormValues({ title: semester.semester, schoolYear: semester.school_year });
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => setDeletingSemester(semester)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {!archives.length ? (
+                {!semesters.length ? (
                   <tr>
-                    <td colSpan={6} className="px-2 py-8 text-center text-muted-foreground">
-                      No archived semester yet.
+                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                      No semesters found.
                     </td>
                   </tr>
                 ) : null}
@@ -432,6 +293,85 @@ export function SemesterManagement({
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingSemester} onOpenChange={(open) => !open && setEditingSemester(null)}>
+        <DialogContent>
+          <form onSubmit={handleUpdate}>
+            <input type="hidden" name="id" value={editingSemester?.id} />
+            <DialogHeader>
+              <DialogTitle>Edit Semester</DialogTitle>
+              <DialogDescription>Update details for {editingSemester?.label}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Title</label>
+                <Select name="semester" value={formValues.title} onValueChange={(val) => setFormValues(prev => ({ ...prev, title: val }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select title" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1st">1st</SelectItem>
+                    <SelectItem value="2nd">2nd</SelectItem>
+                    <SelectItem value="Midyear">Midyear</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">School Year</label>
+                <Select name="school_year" value={formValues.schoolYear} onValueChange={(val) => setFormValues(prev => ({ ...prev, schoolYear: val }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select school year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schoolYears.map(year => (
+                      <SelectItem key={year} value={year}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium" htmlFor="edit_starts_on">Starts on</label>
+                  <Input id="edit_starts_on" name="starts_on" type="date" defaultValue={editingSemester?.starts_on} required />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium" htmlFor="edit_ends_on">Ends on</label>
+                  <Input id="edit_ends_on" name="ends_on" type="date" defaultValue={editingSemester?.ends_on} required />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingSemester(null)}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletingSemester} onOpenChange={(open) => !open && setDeletingSemester(null)}>
+        <DialogContent>
+          <form onSubmit={handleDelete}>
+            <input type="hidden" name="id" value={deletingSemester?.id} />
+            <DialogHeader>
+              <DialogTitle>Delete Semester</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the semester <span className="font-semibold text-foreground">{deletingSemester?.label}</span>?
+                This action cannot be undone. It will only succeed if there are no records (events, fines, etc.) tied to this semester.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setDeletingSemester(null)}>Cancel</Button>
+              <Button type="submit" variant="destructive" disabled={isPending}>
+                {isPending ? "Deleting..." : "Delete Semester"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
