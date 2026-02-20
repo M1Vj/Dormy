@@ -17,10 +17,10 @@ type RoomAssignment = {
 
 export type RoomWithAssignments = {
   id: string;
-  code?: string | null;
-  level?: number | string | null;
-  level_override?: string | null;
-  capacity?: number | null;
+  code: string;
+  level: number;
+  level_override?: number | null;
+  capacity: number | null;
   current_assignments?: RoomAssignment[] | null;
 };
 
@@ -73,12 +73,7 @@ export function RoomGrid({
   const sortedLevels = Object.keys(groupedRooms).sort((a, b) => {
     if (a === "Unassigned") return 1;
     if (b === "Unassigned") return -1;
-    const aNum = Number(a);
-    const bNum = Number(b);
-    if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
-      return aNum - bNum;
-    }
-    return a.localeCompare(b, undefined, { numeric: true });
+    return Number(a) - Number(b);
   });
 
   return (

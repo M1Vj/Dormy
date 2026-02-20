@@ -504,16 +504,18 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
             <CardContent className="p-0">
               {/* Group rooms by level */}
               <div className="divide-y divide-border/50">
-                {Array.from(new Set(snapshot.room_plans.map((p) => p.room_level)))
+                {Array.from(new Set(snapshot.room_plans.map((p) => p.level_override ?? p.room_level)))
                   .sort((a, b) => a - b)
                   .map((level) => {
-                    const roomsInLevel = snapshot.room_plans.filter((p) => p.room_level === level);
+                    const roomsInLevel = snapshot.room_plans.filter((p) => (p.level_override ?? p.room_level) === level);
 
                     return (
                       <details key={level} className="group" open={level === 1}>
                         <summary className="flex cursor-pointer list-none items-center justify-between bg-muted/20 px-4 py-3 font-medium transition-colors hover:bg-muted/40">
                           <div className="flex items-center gap-3">
-                            <span className="text-sm">Level {level} Rooms</span>
+                            <span className="text-sm">
+                              Level {level} Rooms
+                            </span>
                             <Badge variant="outline" className="text-[10px] font-normal">
                               {roomsInLevel.length} rooms
                             </Badge>

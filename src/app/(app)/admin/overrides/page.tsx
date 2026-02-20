@@ -21,13 +21,13 @@ type FineRow = {
   issued_at: string | null;
   voided_at: string | null;
   occupant:
-    | {
-        full_name: string | null;
-      }
-    | {
-        full_name: string | null;
-      }[]
-    | null;
+  | {
+    full_name: string | null;
+  }
+  | {
+    full_name: string | null;
+  }[]
+  | null;
 };
 
 type FineRuleRow = {
@@ -52,6 +52,7 @@ type RoomRow = {
   id: string;
   code: string;
   level: number;
+  level_override: number | null;
 };
 
 type CleaningAreaRow = {
@@ -185,7 +186,7 @@ export default async function AdminOverridesPage() {
 
   const roomsPromise = supabase
     .from("rooms")
-    .select("id, code, level")
+    .select("id, code, level, level_override")
     .eq("dorm_id", activeDormId)
     .order("level", { ascending: true })
     .order("code", { ascending: true });
@@ -324,7 +325,7 @@ export default async function AdminOverridesPage() {
         }))}
         rooms={rooms.map((room) => ({
           id: room.id,
-          label: `${room.code} • level ${room.level}`,
+          label: `${room.code} • level ${room.level_override ?? room.level}`,
         }))}
         cleaningAreas={cleaningAreas.map((area) => ({
           id: area.id,
