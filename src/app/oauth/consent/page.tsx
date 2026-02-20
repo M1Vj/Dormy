@@ -23,7 +23,7 @@ export default function OAuthConsentPage() {
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button asChild className="w-full">
-            <Link href="/home">Continue to App</Link>
+            <Link href="/occupant/home">Continue to App</Link>
           </Button>
         </CardFooter>
       </Card>

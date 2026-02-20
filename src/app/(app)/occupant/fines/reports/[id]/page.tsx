@@ -125,7 +125,7 @@ export default async function FineReportDetailPage({
           </p>
         </div>
         <Button asChild variant="secondary">
-          <Link href="/fines/reports">Back to reports</Link>
+          <Link href="/occupant/fines/reports">Back to reports</Link>
         </Button>
       </div>
     );
@@ -197,7 +197,7 @@ export default async function FineReportDetailPage({
           </p>
         </div>
         <Button asChild variant="secondary">
-          <Link href="/fines/reports">Back</Link>
+          <Link href="/occupant/fines/reports">Back</Link>
         </Button>
       </div>
 
