@@ -482,7 +482,7 @@ function buildRoomPlans(
       occupant_count: room.occupant_count,
       area_id: assignment?.area_id ?? null,
       area_name: assignment?.area_name ?? null,
-      is_rest_week: Boolean(restLevel && room.level === restLevel),
+      is_rest_week: Boolean(restLevel && (room.level_override ?? room.level) === restLevel),
     };
   });
 }
@@ -1131,7 +1131,7 @@ export async function generateCleaningAssignments(formData: FormData) {
       .order("name", { ascending: true }),
     supabase
       .from("rooms")
-      .select("id, level, sort_order")
+      .select("id, level, level_override, sort_order")
       .eq("dorm_id", viewer.dormId)
       .order("level", { ascending: true })
       .order("sort_order", { ascending: true }),
@@ -1159,8 +1159,9 @@ export async function generateCleaningAssignments(formData: FormData) {
   const activeRooms = ((roomsResult.data ?? []) as Array<{
     id: string;
     level: number;
+    level_override: number | null;
     sort_order: number;
-  }>).filter((room) => room.level !== ensuredWeek.week.rest_level);
+  }>).filter((room) => (room.level_override ?? room.level) !== ensuredWeek.week.rest_level);
 
   if (!activeRooms.length) {
     return {

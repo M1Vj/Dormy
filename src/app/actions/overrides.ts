@@ -878,7 +878,7 @@ export async function overrideCleaningAssignment(
       .maybeSingle(),
     supabase
       .from("rooms")
-      .select("id, code, level")
+      .select("id, code, level, level_override")
       .eq("dorm_id", dormId)
       .eq("id", parsed.data.room_id)
       .maybeSingle(),
@@ -896,7 +896,7 @@ export async function overrideCleaningAssignment(
 
   if (
     week.rest_level &&
-    room.level === week.rest_level &&
+    (room.level_override ?? room.level) === week.rest_level &&
     !parsed.data.allow_rest_level &&
     targetAreaId
   ) {
@@ -961,7 +961,7 @@ export async function overrideCleaningAssignment(
         week_start: week.week_start,
         room_id: parsed.data.room_id,
         room_code: room.code,
-        room_level: room.level,
+        room_level: room.level_override ?? room.level,
         rest_level: week.rest_level,
         allow_rest_level: parsed.data.allow_rest_level,
         previous_area_id: previousAssignment?.area_id ?? null,
