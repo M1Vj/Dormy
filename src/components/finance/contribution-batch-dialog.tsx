@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { CalendarClock, Loader2 } from "lucide-react";
+import { CalendarClock, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { createContributionBatch } from "@/app/actions/finance";
@@ -27,9 +27,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 const formSchema = z.object({
+  eventId: z.string().nullable().optional(),
   amount: z.number().positive("Amount must be greater than 0"),
   description: z.string().trim().min(2, "Description is required"),
   deadline: z.string().optional(),
@@ -41,10 +49,12 @@ type FormValues = z.infer<typeof formSchema>;
 export function ContributionBatchDialog({
   dormId,
   eventId,
+  events = [],
   trigger,
 }: {
   dormId: string;
   eventId?: string;
+  events?: { id: string; title: string }[];
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,12 +63,16 @@ export function ContributionBatchDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      eventId: eventId ?? "none",
       amount: 0,
       description: "Event contribution",
       deadline: "",
       includeAlreadyCharged: false,
     },
   });
+
+  const selectedEventId = form.watch("eventId");
+  const isEventSelected = !!selectedEventId && selectedEventId !== "none";
 
   async function onSubmit(values: FormValues) {
     setIsPending(true);
@@ -74,11 +88,11 @@ export function ContributionBatchDialog({
       }
 
       const response = await createContributionBatch(dormId, {
-        event_id: eventId,
+        event_id: isEventSelected ? selectedEventId : null,
         amount: values.amount,
         description: values.description,
         deadline: deadlineIso,
-        include_already_charged: values.includeAlreadyCharged,
+        include_already_charged: isEventSelected ? values.includeAlreadyCharged : false,
       });
 
       if (response && "error" in response) {
@@ -92,6 +106,7 @@ export function ContributionBatchDialog({
       );
       setOpen(false);
       form.reset({
+        eventId: eventId ?? "none",
         amount: 0,
         description: "Event contribution",
         deadline: "",
@@ -124,6 +139,37 @@ export function ContributionBatchDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {events.length > 0 && (
+              <FormField
+                control={form.control}
+                name="eventId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link to Event (Optional)</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || "none"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select an event" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {events.map((e) => (
+                          <SelectItem key={e.id} value={e.id}>
+                            {e.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="amount"
@@ -171,23 +217,25 @@ export function ContributionBatchDialog({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="includeAlreadyCharged"
-              render={({ field }) => (
-                <FormItem>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={field.value}
-                      onChange={(event) => field.onChange(event.target.checked)}
-                      className="size-4 rounded border"
-                    />
-                    Include occupants already charged for this event
-                  </label>
-                </FormItem>
-              )}
-            />
+            {isEventSelected && (
+              <FormField
+                control={form.control}
+                name="includeAlreadyCharged"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={field.value}
+                        onChange={(event) => field.onChange(event.target.checked)}
+                        className="size-4 rounded border"
+                      />
+                      Include occupants already charged for this event
+                    </label>
+                  </FormItem>
+                )}
+              />
+            )}
 
             <DialogFooter>
               <Button type="submit" isLoading={isPending}>
