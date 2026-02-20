@@ -14,6 +14,7 @@ import {
   Wallet,
   UserPlus,
   Building2,
+  DoorOpen,
 } from "lucide-react"
 
 import {
@@ -36,6 +37,7 @@ const items = [
   { title: "Join", url: "/join", icon: Building2, color: "text-slate-500" },
   { title: "Applications", url: "/applications", icon: UserPlus, color: "text-indigo-500" },
   { title: "Occupants", url: "/occupants", icon: Users, color: "text-emerald-500" },
+  { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
   { title: "Committees", url: "/committees", icon: Users, color: "text-violet-500" },
   { title: "Fines", url: "/fines", icon: FileText, color: "text-rose-500" },
   { title: "Payments", url: "/payments", icon: Wallet, color: "text-amber-500" },
@@ -98,6 +100,10 @@ export function AppSidebar() {
 
     if (item.url === "/ai") {
       return role ? aiRoles.has(role) : false
+    }
+
+    if (item.url === "/admin/rooms") {
+      return new Set(["admin", "student_assistant", "adviser"]).has(role)
     }
 
     if (item.url === "/admin/reporting") {
