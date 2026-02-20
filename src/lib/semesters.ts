@@ -66,13 +66,17 @@ export async function getActiveSemester(
     return null;
   }
 
+  // Find the semester where today is between starts_on and ends_on
+  const today = new Date().toISOString().split("T")[0];
+
   const { data, error } = await supabase
     .from("dorm_semesters")
     .select(
       "id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at"
     )
     .eq("dorm_id", dormId)
-    .eq("status", "active")
+    .lte("starts_on", today)
+    .gte("ends_on", today)
     .order("starts_on", { ascending: false })
     .limit(1)
     .maybeSingle();

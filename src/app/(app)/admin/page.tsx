@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getActiveDormId } from "@/lib/dorms";
+import { createOccupant } from "@/app/actions/occupants";
+import { CreateOccupantForm } from "@/components/admin/occupants/create-occupant-form";
 
 export default async function Page() {
   const supabase = await createSupabaseServerClient();
@@ -37,6 +40,11 @@ export default async function Page() {
     );
   }
 
+  const activeDormId = await getActiveDormId();
+  const createOccupantAction = activeDormId
+    ? createOccupant.bind(null, activeDormId)
+    : undefined;
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Admin</h1>
@@ -45,9 +53,14 @@ export default async function Page() {
           <CardTitle className="text-base">User management</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button asChild>
-            <Link href="/admin/users">Manage users</Link>
-          </Button>
+          <div className="flex flex-wrap gap-4">
+            <Button asChild>
+              <Link href="/admin/occupants">Manage occupants</Link>
+            </Button>
+            {createOccupantAction && (
+              <CreateOccupantForm action={createOccupantAction} />
+            )}
+          </div>
         </CardContent>
       </Card>
       {membership.role === "admin" ? (
@@ -55,9 +68,12 @@ export default async function Page() {
           <CardHeader>
             <CardTitle className="text-base">Dorms</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-4">
             <Button asChild>
               <Link href="/admin/dorms">Manage dorms</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/dorms/add">Add new dorm</Link>
             </Button>
           </CardContent>
         </Card>

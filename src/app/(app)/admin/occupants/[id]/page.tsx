@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getFineRules } from "@/app/actions/fines";
 import { getOccupant } from "@/app/actions/occupants";
+import { getCommittees } from "@/app/actions/committees";
 import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
@@ -143,6 +144,14 @@ export default async function AdminOccupantProfilePage(props: {
   const assignments = (occupant.room_assignments as RoomAssignment[]) ?? [];
   const dormOptions = await getUserDorms();
 
+  let committeesRaw: { id: string; dorm_id: string; name: string; description: string | null; created_at: string; members: { role: "member" | "head" | "co-head"; user_id: string; display_name: string | null; }[] }[] = [];
+  if (isEditMode) {
+    const commRes = await getCommittees(activeMembership.dorm_id);
+    if (!commRes.error) {
+      committeesRaw = commRes.data ?? [];
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -193,7 +202,11 @@ export default async function AdminOccupantProfilePage(props: {
         </CardHeader>
         <CardContent>
           {isEditMode ? (
-            <EditOccupantForm dormId={activeMembership.dorm_id} occupant={occupant} />
+            <EditOccupantForm
+              dormId={activeMembership.dorm_id}
+              occupant={occupant}
+              committees={committeesRaw}
+            />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
