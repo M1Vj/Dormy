@@ -106,7 +106,7 @@ export default async function FineReportsPage() {
           </p>
         </div>
         <Button asChild variant="secondary">
-          <Link href="/home">Back to home</Link>
+          <Link href="/occupant/home">Back to home</Link>
         </Button>
       </div>
     );

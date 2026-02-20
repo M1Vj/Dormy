@@ -177,7 +177,7 @@ export default async function FinesPage({
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link href="/fines/reports">Report a violation</Link>
+          <Link href="/occupant/fines/reports">Report a violation</Link>
         </Button>
       </div>
 
@@ -231,7 +231,7 @@ export default async function FinesPage({
             </Button>
             {hasFilters ? (
               <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/fines">Reset</Link>
+                <Link href="/occupant/fines">Reset</Link>
               </Button>
             ) : null}
           </form>

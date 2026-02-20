@@ -11,7 +11,7 @@ export default function NotFound() {
           The page you requested does not exist or is no longer available.
         </p>
         <Button asChild>
-          <Link href="/events">Back to app</Link>
+          <Link href="/occupant/events">Back to app</Link>
         </Button>
       </div>
     </div>

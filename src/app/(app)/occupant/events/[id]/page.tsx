@@ -143,7 +143,7 @@ export default async function EventDetailPage({
             </>
           ) : null}
           <Button asChild variant="outline">
-            <Link href="/events">Back to events</Link>
+            <Link href="/occupant/events">Back to events</Link>
           </Button>
         </div>
       </div>

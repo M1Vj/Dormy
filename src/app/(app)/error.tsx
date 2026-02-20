@@ -43,7 +43,7 @@ export default function AppError({
               Try again
             </Button>
             <Button asChild type="button" variant="outline" className="sm:w-auto">
-              <Link href="/home">Back to Home</Link>
+              <Link href="/occupant/home">Back to Home</Link>
             </Button>
           </div>
         </CardContent>
