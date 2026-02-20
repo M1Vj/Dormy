@@ -1,10 +1,8 @@
 import Link from "next/link";
 
-import { createOccupant } from "@/app/actions/occupants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { CreateOccupantForm } from "./create-occupant-form";
 import { UpdateRoleDialog } from "./update-role-dialog";
 import { AppRole, getRoleLabel } from "@/lib/roles";
 
@@ -77,7 +75,6 @@ const getStatusClass = (status?: string | null) => {
 };
 
 export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps) {
-  const createOccupantAction = createOccupant.bind(null, dormId);
   const hasFilters =
     Boolean(filters?.search) ||
     Boolean(filters?.status) ||
@@ -91,10 +88,9 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
           <div>
             <CardTitle className="text-base">Occupant roster</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Add occupants, search by name or student ID, and filter by status, room, or level.
+              Search by name or student ID, and filter by status, room, or level.
             </p>
           </div>
-          <CreateOccupantForm action={createOccupantAction} />
         </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div />
@@ -188,7 +184,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       <p>{getRoleLabel(occupant.role)}</p>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
                       <Link href={`/admin/occupants/${occupant.id}`}>
                         View
@@ -201,6 +197,14 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         Edit
                       </Link>
                     </Button>
+                    <div className="flex justify-center">
+                      <UpdateRoleDialog
+                        dormId={dormId}
+                        userId={occupant.user_id}
+                        occupantName={occupant.full_name ?? "User"}
+                        currentRole={occupant.role}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -293,14 +297,12 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                               Edit
                             </Link>
                           </Button>
-                          {occupant.user_id ? (
-                            <UpdateRoleDialog
-                              dormId={dormId}
-                              userId={occupant.user_id}
-                              occupantName={occupant.full_name ?? "User"}
-                              currentRole={occupant.role}
-                            />
-                          ) : null}
+                          <UpdateRoleDialog
+                            dormId={dormId}
+                            userId={occupant.user_id}
+                            occupantName={occupant.full_name ?? "User"}
+                            currentRole={occupant.role}
+                          />
                         </div>
                       </td>
                     </tr>
