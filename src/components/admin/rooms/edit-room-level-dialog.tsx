@@ -30,14 +30,18 @@ import {
 import { Input } from "@/components/ui/input";
 
 const formSchema = z.object({
-  level: z.string().max(50, "Level override is too long").optional(),
+  level: z.string().refine((val) => {
+    if (!val || val.trim() === "") return true;
+    const n = Number(val);
+    return !Number.isNaN(n) && Number.isInteger(n) && n > 0 && n <= 10;
+  }, "Level must be an integer between 1 and 10").optional(),
 });
 
 type EditRoomLevelDialogProps = {
   dormId: string;
   roomId: string;
   roomCode: string;
-  currentOverride: string | null;
+  currentOverride: number | null;
 };
 
 export function EditRoomLevelDialog({
@@ -51,16 +55,14 @@ export function EditRoomLevelDialog({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      level: currentOverride ?? "",
+      level: currentOverride !== null ? String(currentOverride) : "",
     },
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      // If the override is an empty string, we set it to null to clear the override.
-      const overrideVal = values.level?.trim() || null;
-
-      const result = await overrideRoomLevel(dormId, roomId, overrideVal);
+      const parsedOverride = values.level?.trim() ? Number(values.level.trim()) : null;
+      const result = await overrideRoomLevel(dormId, roomId, parsedOverride);
 
       if (result?.error) {
         toast.error(result.error);
@@ -102,7 +104,7 @@ export function EditRoomLevelDialog({
                 <FormItem>
                   <FormLabel>Level Display Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Mezzanine, Ground, or 2" {...field} />
+                    <Input type="number" placeholder="e.g., 2" {...field} />
                   </FormControl>
                   <FormDescription>
                     This label will be used to group rooms visually.

@@ -14,7 +14,7 @@ export type CleaningRoom = {
   id: string;
   code: string;
   level: number;
-  level_override?: string | null;
+  level_override?: number | null;
   capacity: number;
   sort_order: number;
   occupant_count: number;
@@ -61,7 +61,7 @@ export type CleaningRoomPlan = {
   room_id: string;
   room_code: string;
   room_level: number;
-  level_override?: string | null;
+  level_override?: number | null;
   occupant_count: number;
   area_id: string | null;
   area_name: string | null;

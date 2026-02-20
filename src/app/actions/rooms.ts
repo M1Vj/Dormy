@@ -273,7 +273,7 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
 export async function overrideRoomLevel(
   dormId: string,
   roomId: string,
-  levelOverride: string | null
+  levelOverride: number | null
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {

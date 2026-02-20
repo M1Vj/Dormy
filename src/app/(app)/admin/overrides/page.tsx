@@ -52,7 +52,7 @@ type RoomRow = {
   id: string;
   code: string;
   level: number;
-  level_override: string | null;
+  level_override: number | null;
 };
 
 type CleaningAreaRow = {
