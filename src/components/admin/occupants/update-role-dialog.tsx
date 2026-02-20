@@ -13,22 +13,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { updateMembershipRole } from "@/app/actions/memberships";
+import { updateMembershipRoles } from "@/app/actions/memberships";
 import { AppRole, getRoleLabel } from "@/lib/roles";
 
 interface UpdateRoleDialogProps {
   dormId: string;
   userId?: string | null;
   occupantName: string;
-  currentRole: AppRole;
+  currentRoles: AppRole[];
 }
 
 const ROLES: AppRole[] = [
@@ -45,10 +38,10 @@ export function UpdateRoleDialog({
   dormId,
   userId,
   occupantName,
-  currentRole,
+  currentRoles,
 }: UpdateRoleDialogProps) {
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<AppRole>(currentRole);
+  const [roles, setRoles] = useState<AppRole[]>(currentRoles);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleUpdate = async () => {
@@ -56,9 +49,9 @@ export function UpdateRoleDialog({
 
     setIsLoading(true);
     try {
-      const result = await updateMembershipRole(dormId, userId, role);
+      const result = await updateMembershipRoles(dormId, userId, roles);
       if (result.success) {
-        toast.success(`Updated ${occupantName}'s role to ${getRoleLabel(role)}`);
+        toast.success(`Updated ${occupantName}'s roles`);
         setOpen(false);
       } else {
         toast.error(result.error ?? "Failed to update role");
@@ -90,22 +83,29 @@ export function UpdateRoleDialog({
         <div className="grid gap-4 py-4">
           {userId ? (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Select Role</label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as AppRole)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
+              <label className="text-sm font-medium">Select Roles</label>
+              <div className="flex flex-wrap gap-2">
+                {ROLES.map((r) => {
+                  const isSelected = roles.includes(r);
+                  return (
+                    <Button
+                      key={r}
+                      type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        if (isSelected) {
+                          setRoles(roles.filter((selectedRole) => selectedRole !== r));
+                        } else {
+                          setRoles([...roles, r]);
+                        }
+                      }}
+                    >
                       {getRoleLabel(r)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="rounded-md bg-muted p-4 text-sm text-balance text-muted-foreground">
@@ -122,7 +122,7 @@ export function UpdateRoleDialog({
             {userId ? "Cancel" : "Close"}
           </Button>
           {userId && (
-            <Button onClick={handleUpdate} isLoading={isLoading} disabled={isLoading || role === currentRole}>
+            <Button onClick={handleUpdate} isLoading={isLoading} disabled={isLoading || (roles.length === currentRoles.length && roles.every(r => currentRoles.includes(r)))}>
               Save changes
             </Button>
           )}

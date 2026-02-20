@@ -124,7 +124,7 @@ export async function getOccupants(
   }
 
   const userIds = data.map((occ) => occ.user_id).filter(Boolean) as string[];
-  const membershipsMap = new Map<string, AppRole>();
+  const membershipsMap = new Map<string, AppRole[]>();
 
   if (userIds.length > 0) {
     const { data: memData, error: memError } = await supabase
@@ -134,7 +134,11 @@ export async function getOccupants(
       .in("user_id", userIds);
 
     if (!memError && memData) {
-      memData.forEach((m) => membershipsMap.set(m.user_id, m.role as AppRole));
+      memData.forEach((m) => {
+        const roles = membershipsMap.get(m.user_id) || [];
+        roles.push(m.role as AppRole);
+        membershipsMap.set(m.user_id, roles);
+      });
     }
   }
 
@@ -150,7 +154,7 @@ export async function getOccupants(
       ...occ,
       current_room_assignment: activeAssignment || null,
       room_assignments: undefined,
-      role: (occ.user_id && membershipsMap.get(occ.user_id)) || "occupant",
+      roles: (occ.user_id && membershipsMap.get(occ.user_id)) || ["occupant"],
     };
   });
 
@@ -210,7 +214,7 @@ export async function getOccupant(dormId: string, occupantId: string) {
   }
 
   // Fetch the role and committee info if user_id exists
-  let memRole: AppRole = "occupant";
+  let memRoles: AppRole[] = ["occupant"];
   let committeeMemberships: { committee_id: string; role: string; committee_name: string }[] = [];
 
   if (data.user_id) {
@@ -218,11 +222,10 @@ export async function getOccupant(dormId: string, occupantId: string) {
       .from("dorm_memberships")
       .select("role")
       .eq("dorm_id", dormId)
-      .eq("user_id", data.user_id)
-      .maybeSingle();
+      .eq("user_id", data.user_id);
 
-    if (memData) {
-      memRole = memData.role as AppRole;
+    if (memData && memData.length > 0) {
+      memRoles = memData.map((m) => m.role as AppRole);
     }
 
     const { data: commData } = await supabase
@@ -265,7 +268,7 @@ export async function getOccupant(dormId: string, occupantId: string) {
 
   return {
     ...data,
-    role: memRole,
+    roles: memRoles,
     committee_memberships: committeeMemberships,
     room_assignments: sortedAssignments,
     current_room_assignment: sortedAssignments.find((a) => !a.end_date) || null,

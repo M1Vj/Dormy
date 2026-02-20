@@ -23,7 +23,7 @@ export type OccupantRow = {
   course?: string | null;
   student_id?: string | null;
   status?: string | null;
-  role: AppRole;
+  roles: AppRole[];
   joined_at?: string | null;
   current_room_assignment?: OccupantAssignment | null;
 };
@@ -181,7 +181,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                     </div>
                     <div>
                       <p className="text-muted-foreground">Role</p>
-                      <p>{getRoleLabel(occupant.role)}</p>
+                      <p>{occupant.roles.map(getRoleLabel).join(", ")}</p>
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
@@ -202,7 +202,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         dormId={dormId}
                         userId={occupant.user_id}
                         occupantName={occupant.full_name ?? "User"}
-                        currentRole={occupant.role}
+                        currentRoles={occupant.roles}
                       />
                     </div>
                   </div>
@@ -277,7 +277,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       </td>
                       <td className="px-3 py-2">
                         <span className="text-xs font-medium text-muted-foreground">
-                          {getRoleLabel(occupant.role)}
+                          {occupant.roles.map(getRoleLabel).join(", ")}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -301,7 +301,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                             dormId={dormId}
                             userId={occupant.user_id}
                             occupantName={occupant.full_name ?? "User"}
-                            currentRole={occupant.role}
+                            currentRoles={occupant.roles}
                           />
                         </div>
                       </td>
