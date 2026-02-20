@@ -45,16 +45,33 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && (isLoginRoute || isOAuthConsentRoute)) {
+  if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
+    let targetRole = req.cookies.get("dormy_active_role")?.value;
+
+    // If no active role cookie, try to find a valid role from the DB
+    if (!targetRole) {
+      const { data: memberships } = await supabase
+        .from("dorm_memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      targetRole = memberships?.role || "occupant";
+    }
+
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/home";
+    redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isDashboardLegacyRoute) {
+  // Also redirect if they try to visit the old flat /home route
+  if (user && pathname === "/home") {
+    const targetRole = req.cookies.get("dormy_active_role")?.value || "occupant";
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/home";
+    redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
