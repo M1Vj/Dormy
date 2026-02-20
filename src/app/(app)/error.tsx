@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
+import { BackToAppButton } from "@/components/nav/back-to-app-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AppError({
@@ -42,9 +43,7 @@ export default function AppError({
             <Button type="button" onClick={reset} className="sm:w-auto">
               Try again
             </Button>
-            <Button asChild type="button" variant="outline" className="sm:w-auto">
-              <Link href="/occupant/home">Back to Home</Link>
-            </Button>
+            <BackToAppButton text="Back to Home" />
           </div>
         </CardContent>
       </Card>

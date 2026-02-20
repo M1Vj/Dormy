@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
 import { HeaderRoleChip } from "@/components/nav/header-role-chip"
+import { HeaderLogo } from "@/components/nav/header-logo"
 import { UserNav } from "@/components/nav/user-nav"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { DormProvider } from "@/components/providers/dorm-provider"
@@ -35,19 +36,7 @@ export default async function AppLayout({
             <header className="flex h-16 items-center justify-between border-b px-4">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
-                <Link href="/occupant/home" className="flex items-center gap-2">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-muted/35">
-                    <Image
-                      src="/brand/dormy-house.png"
-                      alt="Dormy mark"
-                      width={20}
-                      height={20}
-                      className="h-5 w-5"
-                      priority
-                    />
-                  </span>
-                  <span className="font-semibold">Dormy</span>
-                </Link>
+                <HeaderLogo />
                 <HeaderRoleChip />
               </div>
               <div className="flex items-center gap-2">
