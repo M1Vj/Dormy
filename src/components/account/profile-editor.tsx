@@ -33,7 +33,7 @@ export function ProfileEditor() {
   const [avatarUrl, setAvatarUrl] = useState("");
 
   // Occupant fields
-  const [occupant, setOccupant] = useState<any | null>(null);
+  const [occupant, setOccupant] = useState<Record<string, unknown> | null>(null);
   const [studentId, setStudentId] = useState("");
   const [course, setCourse] = useState("");
   const [contactMobile, setContactMobile] = useState("");

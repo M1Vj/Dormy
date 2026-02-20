@@ -60,13 +60,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             {...props}
           >
             {React.cloneElement(
-              children as React.ReactElement<any>,
+              children as React.ReactElement<{ className?: string; children?: React.ReactNode }>,
               {
-                className: cn("inline-flex items-center justify-center gap-2", (children.props as any).className)
+                className: cn("inline-flex items-center justify-center gap-2", (children.props as { className?: string }).className)
               },
               <>
                 <Loader2 className="animate-spin" />
-                {(children.props as any).children}
+                {(children.props as { children?: React.ReactNode }).children}
               </>
             )}
           </Comp>
