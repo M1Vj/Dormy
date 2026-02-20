@@ -90,15 +90,14 @@ export default async function MaintenancePage({
     return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", activeDormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = membership?.role ?? null;
-  if (!role || !new Set(["admin", "adviser", "assistant_adviser"]).has(role)) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "assistant_adviser"]).has(r));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -106,7 +105,7 @@ export default async function MaintenancePage({
     );
   }
 
-  const canFilterDorm = role === "admin";
+  const canFilterDorm = roles.includes("admin");
 
   const [{ data: occupants, error }, dormOptions] = await Promise.all([
     supabase

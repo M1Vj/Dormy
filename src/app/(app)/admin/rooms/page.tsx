@@ -30,14 +30,9 @@ export default async function AdminRoomsPage() {
     .select("role, dorm_id")
     .eq("user_id", user.id);
 
-  const activeMembership =
-    memberships?.find((membership) => membership.dorm_id === activeDormId) ??
-    memberships?.[0];
-
-  if (
-    !activeMembership ||
-    !new Set(["admin", "student_assistant"]).has(activeMembership.role)
-  ) {
+  const activeMemberships = memberships?.filter(m => m.dorm_id === activeDormId!) ?? [];
+  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant"]).has(m.role));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -45,8 +40,8 @@ export default async function AdminRoomsPage() {
     );
   }
 
-  const rooms = await getRoomsWithOccupants(activeMembership.dorm_id);
-  const occupants = await getOccupants(activeMembership.dorm_id, {
+  const rooms = await getRoomsWithOccupants(activeDormId!);
+  const occupants = await getOccupants(activeDormId!, {
     status: "active",
   });
   const unassignedOccupants = occupants.filter(
@@ -63,7 +58,7 @@ export default async function AdminRoomsPage() {
       </div>
       <RoomGrid
         rooms={rooms}
-        dormId={activeMembership.dorm_id}
+        dormId={activeDormId!}
         unassignedOccupants={unassignedOccupants}
       />
     </div>
