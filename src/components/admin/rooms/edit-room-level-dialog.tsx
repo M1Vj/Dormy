@@ -78,9 +78,9 @@ export function EditRoomLevelDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="h-8 w-8 text-muted-foreground hover:text-primary shrink-0"
         >
           <Pencil className="h-4 w-4" />
           <span className="sr-only">Edit level for room {roomCode}</span>
