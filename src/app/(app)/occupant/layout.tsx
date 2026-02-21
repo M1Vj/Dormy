@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getUserRolesAllDorms } from "@/lib/access";
 
 export default async function OccupantLayout({
   children,
@@ -17,14 +18,9 @@ export default async function OccupantLayout({
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (!membership) {
+  // Any dorm membership grants access to occupant pages
+  const memberships = await getUserRolesAllDorms(supabase, user.id);
+  if (memberships.length === 0) {
     redirect("/settings");
   }
 
