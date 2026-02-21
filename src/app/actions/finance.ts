@@ -560,6 +560,127 @@ export async function createContributionBatch(
   };
 }
 
+export async function createMaintenanceBatch(
+  dormId: string,
+  payload: {
+    amount: number;
+    description: string;
+    deadline?: string | null;
+  }
+) {
+  // We can reuse the same schema logic as contribution
+  const parsed = contributionBatchSchema.safeParse({
+    amount: payload.amount,
+    description: payload.description,
+    deadline: payload.deadline ?? null,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid maintenance charge input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  // Allowed roles for maintenance fee bulk charge
+  if (!new Set(["admin", "adviser"]).has(membership.role)) {
+    return { error: "Only admins and advisers can create maintenance charges." };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
+  const { data: occupants, error: occupantsError } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("status", "active");
+
+  if (occupantsError) {
+    return { error: occupantsError.message };
+  }
+
+  if (!occupants?.length) {
+    return { error: "No active occupants found to charge." };
+  }
+
+  const targetOccupantIds = occupants.map((occupant) => occupant.id);
+
+  const batchId = crypto.randomUUID();
+  const deadlineIso = parsed.data.deadline
+    ? new Date(parsed.data.deadline).toISOString()
+    : null;
+
+  const { error: insertError } = await supabase.from("ledger_entries").insert(
+    targetOccupantIds.map((occupantId) => ({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      ledger: "maintenance_fee",
+      entry_type: "charge",
+      occupant_id: occupantId,
+      amount_pesos: Math.abs(parsed.data.amount),
+      method: "manual_charge",
+      note: parsed.data.description,
+      metadata: {
+        payable_batch_id: batchId,
+        payable_deadline: deadlineIso,
+        payable_label: parsed.data.description,
+      },
+      created_by: user.id,
+    }))
+  );
+
+  if (insertError) {
+    return { error: insertError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.maintenance_batch_created",
+      entityType: "finance",
+      entityId: batchId,
+      metadata: {
+        amount_pesos: Math.abs(parsed.data.amount),
+        description: parsed.data.description,
+        deadline: deadlineIso,
+        charged_count: targetOccupantIds.length,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for maintenance batch creation:", auditError);
+  }
+
+  revalidatePath("/admin/finance/maintenance");
+  revalidatePath("/payments");
+
+  return {
+    success: true,
+    chargedCount: targetOccupantIds.length,
+  };
+}
+
 export async function getLedgerBalance(dormId: string, occupantId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
