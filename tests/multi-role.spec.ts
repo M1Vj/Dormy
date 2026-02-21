@@ -93,7 +93,7 @@ test.describe('Adviser Role Access', () => {
     await page.getByLabel('Email').fill('adviser@dormy.local');
     await page.getByLabel('Password').fill('DormyPass123!');
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForURL(/\/adviser\/home|\/admin\/home/);
+    await page.waitForURL(/\/home/);
 
     await page.goto('/admin/finance/maintenance');
     await page.waitForLoadState('networkidle');
