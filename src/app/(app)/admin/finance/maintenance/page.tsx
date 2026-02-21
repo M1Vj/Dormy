@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { format } from "date-fns";
 
 import { ChargeDialog } from "@/components/finance/charge-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
+import { MaintenanceBulkChargeDialog } from "@/components/finance/maintenance-bulk-charge-dialog";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
+import { getExpenses } from "@/app/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,24 +110,50 @@ export default async function MaintenancePage({
 
   const canFilterDorm = roles.includes("admin");
 
-  const [{ data: occupants, error }, dormOptions] = await Promise.all([
+  const [{ data: occupants, error }, dormOptions, expensesResult] = await Promise.all([
     supabase
       .from("occupants")
       .select(`
         id,
         full_name,
         room_assignments(room:rooms(code)),
-        ledger_entries!left(amount_pesos, ledger, voided_at)
+        ledger_entries!left(amount_pesos, ledger, voided_at, entry_type)
       `)
       .eq("dorm_id", activeDormId)
       .eq("status", "active")
       .order("full_name"),
     getUserDorms(),
+    getExpenses(activeDormId, { status: "approved" }),
   ]);
 
   if (error) {
     return <div className="p-6 text-sm text-destructive">Error loading occupants.</div>;
   }
+
+  // Calculate total collected across ALL occupants (even inactive)
+  const { data: allLedgers } = await supabase
+    .from("ledger_entries")
+    .select("amount_pesos")
+    .eq("dorm_id", activeDormId)
+    .eq("ledger", "maintenance_fee")
+    .eq("entry_type", "payment")
+    .is("voided_at", null);
+
+  const totalCollectedMaintenance = (allLedgers ?? []).reduce(
+    (sum, entry) => sum + Math.abs(Number(entry.amount_pesos ?? 0)),
+    0
+  );
+
+  const approvedExpenses = "data" in expensesResult && expensesResult.data
+    ? expensesResult.data.filter(e => e.category === "maintenance_fee")
+    : [];
+
+  const totalMaintenanceExpenses = approvedExpenses.reduce(
+    (sum, e) => sum + Number(e.amount_pesos),
+    0
+  );
+
+  const netMaintenanceFund = totalCollectedMaintenance - totalMaintenanceExpenses;
 
   const normalizedSearch = search.toLowerCase();
 
@@ -212,7 +241,7 @@ export default async function MaintenancePage({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Visible Occupants</CardTitle>
@@ -223,11 +252,22 @@ export default async function MaintenancePage({
         </Card>
         <Card>
           <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Net Maintenance Fund</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-semibold ${netMaintenanceFund < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+              ₱{netMaintenanceFund.toFixed(2)}
+            </div>
+            <p className="text-xs text-muted-foreground">Collected minus expenses</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Collectible</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">₱{totalCollectible.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Outstanding maintenance fees</p>
+            <p className="text-xs text-muted-foreground">Outstanding balances</p>
           </CardContent>
         </Card>
         <Card>
@@ -235,9 +275,13 @@ export default async function MaintenancePage({
             <CardTitle className="text-sm font-medium">Operations</CardTitle>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" disabled className="w-full">
-              Bulk Charge (Soon)
-            </Button>
+            {roles.some(r => new Set(["admin", "adviser"]).has(r)) ? (
+              <MaintenanceBulkChargeDialog dormId={activeDormId} />
+            ) : (
+              <Button variant="outline" disabled className="w-full">
+                Only for Admin/Adviser
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -254,9 +298,8 @@ export default async function MaintenancePage({
                   </p>
                 </div>
                 <p
-                  className={`text-right text-sm font-semibold ${
-                    row.balance > 0 ? "text-rose-600" : "text-emerald-600"
-                  }`}
+                  className={`text-right text-sm font-semibold ${row.balance > 0 ? "text-rose-600" : "text-emerald-600"
+                    }`}
                 >
                   ₱{row.balance.toFixed(2)}
                 </p>
@@ -311,9 +354,8 @@ export default async function MaintenancePage({
                 <TableCell className="font-medium">{row.full_name}</TableCell>
                 <TableCell>{row.roomCode ?? "No room"}</TableCell>
                 <TableCell
-                  className={`text-right font-medium ${
-                    row.balance > 0 ? "text-rose-600" : "text-emerald-600"
-                  }`}
+                  className={`text-right font-medium ${row.balance > 0 ? "text-rose-600" : "text-emerald-600"
+                    }`}
                 >
                   ₱{row.balance.toFixed(2)}
                 </TableCell>
@@ -334,6 +376,82 @@ export default async function MaintenancePage({
             ) : null}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Maintenance Expenses</h2>
+          <p className="text-sm text-muted-foreground">
+            Approved expenses deducted from the maintenance fund.
+          </p>
+        </div>
+
+        <div className="hidden rounded-md border md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Description</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {approvedExpenses.map((exp) => (
+                <TableRow key={exp.id}>
+                  <TableCell className="font-medium">{exp.title}</TableCell>
+                  <TableCell>
+                    {format(new Date(exp.purchased_at), "MMM d, yyyy")}
+                  </TableCell>
+                  <TableCell className="text-right font-medium text-rose-600">
+                    -₱{Number(exp.amount_pesos).toFixed(2)}
+                  </TableCell>
+                  <TableCell className="max-w-[300px] truncate text-xs text-muted-foreground">
+                    {exp.description || "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {approvedExpenses.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                    No approved maintenance expenses found.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="space-y-3 md:hidden">
+          {approvedExpenses.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                No approved maintenance expenses found.
+              </CardContent>
+            </Card>
+          ) : (
+            approvedExpenses.map((exp) => (
+              <Card key={exp.id}>
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{exp.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(exp.purchased_at), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <span className="font-semibold text-rose-600">
+                      -₱{Number(exp.amount_pesos).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {exp.description || "—"}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
