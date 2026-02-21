@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUserRolesAllDorms } from "@/lib/access";
 
-const ALLOWED_ROLES = new Set(["treasurer", "admin"]);
+const ALLOWED_ROLES = new Set(["admin", "adviser", "treasurer"]);
 
 export default async function TreasurerLayout({
   children,

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUserRolesAllDorms } from "@/lib/access";
 
-const ALLOWED_ROLES = new Set(["student_assistant", "admin"]);
+const ALLOWED_ROLES = new Set(["admin", "adviser", "student_assistant"]);
 
 export default async function StudentAssistantLayout({
   children,

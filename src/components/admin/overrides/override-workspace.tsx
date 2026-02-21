@@ -599,7 +599,7 @@ export function OverrideWorkspace({
 
           <Card>
             <CardHeader>
-              <CardTitle>Event payable deadline override</CardTitle>
+              <CardTitle>Contribution deadline override</CardTitle>
               <CardDescription>Update or clear contribution deadlines across all event charges.</CardDescription>
             </CardHeader>
             <CardContent>
