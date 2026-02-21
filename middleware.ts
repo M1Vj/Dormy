@@ -53,29 +53,41 @@ export async function middleware(req: NextRequest) {
     return redirect(redirectUrl);
   }
 
+  /**
+   * Fetch the user's first membership safely — never uses .maybeSingle() so
+   * multi-role users (who have multiple rows) don't get an error that resolves
+   * to null, which previously caused spurious /join redirects.
+   */
+  const getFirstMembership = async (): Promise<{
+    role: string;
+    dorm_id: string;
+  } | null> => {
+    const { data } = await supabase
+      .from("dorm_memberships")
+      .select("role, dorm_id")
+      .eq("user_id", user!.id)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    return data?.[0] ?? null;
+  };
+
   if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
     let targetDorm = req.cookies.get("dorm_id")?.value;
 
     // If no active role cookie, try to find a valid role from the DB
     if (!targetRole || !targetDorm) {
-      const { data: memberships } = await supabase
-        .from("dorm_memberships")
-        .select("role, dorm_id")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const membership = await getFirstMembership();
 
-      targetRole = targetRole || memberships?.role || "occupant";
-      if (!targetDorm && memberships?.dorm_id) {
-        targetDorm = memberships.dorm_id;
-        res.cookies.set("dorm_id", memberships.dorm_id, {
+      targetRole = targetRole || membership?.role || "occupant";
+      if (!targetDorm && membership?.dorm_id) {
+        targetDorm = membership.dorm_id;
+        res.cookies.set("dorm_id", membership.dorm_id, {
           path: "/",
           httpOnly: true,
           sameSite: "lax",
         });
-      } else if (!memberships?.dorm_id) {
+      } else if (!membership?.dorm_id) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
@@ -95,23 +107,17 @@ export async function middleware(req: NextRequest) {
     let targetDorm = req.cookies.get("dorm_id")?.value;
 
     if (!targetRole || !targetDorm) {
-      const { data: memberships } = await supabase
-        .from("dorm_memberships")
-        .select("role, dorm_id")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const membership = await getFirstMembership();
 
-      targetRole = targetRole || memberships?.role || "occupant";
-      if (!targetDorm && memberships?.dorm_id) {
-        targetDorm = memberships.dorm_id;
-        res.cookies.set("dorm_id", memberships.dorm_id, {
+      targetRole = targetRole || membership?.role || "occupant";
+      if (!targetDorm && membership?.dorm_id) {
+        targetDorm = membership.dorm_id;
+        res.cookies.set("dorm_id", membership.dorm_id, {
           path: "/",
           httpOnly: true,
           sameSite: "lax",
         });
-      } else if (!memberships?.dorm_id) {
+      } else if (!membership?.dorm_id) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
@@ -126,18 +132,25 @@ export async function middleware(req: NextRequest) {
   }
 
   // Globally ensure `dorm_id` is set for all valid application routes if missing
-  if (user && !pathname.startsWith("/_next") && !pathname.startsWith("/api") && !isLoginRoute && !isJoinRoute) {
+  if (
+    user &&
+    !pathname.startsWith("/_next") &&
+    !pathname.startsWith("/api") &&
+    !isLoginRoute &&
+    !isJoinRoute
+  ) {
     if (!req.cookies.has("dorm_id")) {
-      const { data: memberships } = await supabase
+      const { data } = await supabase
         .from("dorm_memberships")
         .select("dorm_id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
 
-      if (memberships?.dorm_id) {
-        res.cookies.set("dorm_id", memberships.dorm_id, {
+      const dormId = data?.[0]?.dorm_id ?? null;
+
+      if (dormId) {
+        res.cookies.set("dorm_id", dormId, {
           path: "/",
           httpOnly: true,
           sameSite: "lax",
