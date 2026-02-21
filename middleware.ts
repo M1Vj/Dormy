@@ -38,11 +38,19 @@ export async function middleware(req: NextRequest) {
   const isDashboardLegacyRoute =
     pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
+  const redirect = (url: URL | string) => {
+    const redirectResponse = NextResponse.redirect(url);
+    res.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  };
+
   if (!user && !isLoginRoute && !isAuthCallbackRoute && !isOAuthConsentRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
 
   if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
@@ -71,14 +79,14 @@ export async function middleware(req: NextRequest) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return NextResponse.redirect(redirectUrl);
+        return redirect(redirectUrl);
       }
     }
 
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
 
   // Also redirect if they try to visit the old flat /home route or root /
@@ -107,14 +115,14 @@ export async function middleware(req: NextRequest) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return NextResponse.redirect(redirectUrl);
+        return redirect(redirectUrl);
       }
     }
 
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
 
   // Globally ensure `dorm_id` is set for all valid application routes if missing
@@ -134,11 +142,14 @@ export async function middleware(req: NextRequest) {
           httpOnly: true,
           sameSite: "lax",
         });
+        // Force an immediate redirect to the same URL so Server Components
+        // will receive the newly baked `dorm_id` within `next/headers` cookies().
+        return redirect(req.nextUrl.clone());
       } else {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return NextResponse.redirect(redirectUrl);
+        return redirect(redirectUrl);
       }
     }
   }

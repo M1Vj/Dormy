@@ -49,7 +49,7 @@ export default async function AdminOccupantsPage({
     .eq("user_id", user.id);
 
   const activeMemberships = memberships?.filter(m => m.dorm_id === activeDormId) ?? [];
-  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant"]).has(m.role));
+  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant", "adviser"]).has(m.role));
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
