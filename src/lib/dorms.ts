@@ -6,7 +6,15 @@ const DORM_COOKIE = "dorm_id";
 
 export async function getActiveDormId() {
   const cookieStore = await cookies();
-  return cookieStore.get(DORM_COOKIE)?.value ?? null;
+  const rawId = cookieStore.get(DORM_COOKIE)?.value;
+
+  if (!rawId) return null;
+
+  const dorms = await getUserDorms();
+  const isValid = dorms.some((d) => d.id === rawId);
+
+  if (isValid) return rawId;
+  return dorms[0]?.id ?? null;
 }
 
 export async function setActiveDormId(dormId: string) {
