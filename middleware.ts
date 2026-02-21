@@ -38,7 +38,12 @@ export async function middleware(req: NextRequest) {
   const isDashboardLegacyRoute =
     pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
-  const redirect = (url: URL | string) => {
+  console.log(`\n[Middleware] [${new Date().toISOString()}] Request: ${pathname}`);
+  console.log(`[Middleware] User ID: ${user?.id ? user.id : "NO_USER"}`);
+  console.log(`[Middleware] Cookies incoming:`, JSON.stringify(req.cookies.getAll().map(c => c.name)));
+
+  const redirect = (url: URL | string, reason: string) => {
+    console.log(`[Middleware] Redirecting to ${url.toString()} | Reason: ${reason}`);
     const redirectResponse = NextResponse.redirect(url);
     res.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
@@ -50,14 +55,9 @@ export async function middleware(req: NextRequest) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
-    return redirect(redirectUrl);
+    return redirect(redirectUrl, "No user, redirecting to login");
   }
 
-  /**
-   * Fetch the user's first membership safely — never uses .maybeSingle() so
-   * multi-role users (who have multiple rows) don't get an error that resolves
-   * to null, which previously caused spurious /join redirects.
-   */
   const getFirstMembership = async (): Promise<{
     role: string;
     dorm_id: string;
@@ -74,39 +74,43 @@ export async function middleware(req: NextRequest) {
   if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
     let targetDorm = req.cookies.get("dorm_id")?.value;
+    console.log(`[Middleware] Auth/Legacy route logic. Incoming roles - activeRole: ${targetRole}, dorm: ${targetDorm}`);
 
     if (!targetRole || !targetDorm) {
       const membership = await getFirstMembership();
+      console.log(`[Middleware] Fetched membership:`, membership);
 
       targetRole = targetRole || membership?.role || "occupant";
       if (!targetDorm && membership?.dorm_id) {
         targetDorm = membership.dorm_id;
         res.cookies.set("dorm_id", membership.dorm_id, {
           path: "/",
-          httpOnly: true,
+          httpOnly: true, // Safari sometimes drops cookies on localhost if secure rules conflict, but httpOnly+lax is usually ok
           sameSite: "lax",
         });
       } else if (!membership?.dorm_id) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return redirect(redirectUrl);
+        return redirect(redirectUrl, "Auth/Legacy route: No membership found, redirecting to /join");
       }
     }
 
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return redirect(redirectUrl);
+    return redirect(redirectUrl, `Auth/Legacy route: Redirecting heavily to role home -> /${targetRole}/home`);
   }
 
   // Also redirect if they try to visit the old flat /home route or root /
   if (user && (pathname === "/home" || pathname === "/")) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
     let targetDorm = req.cookies.get("dorm_id")?.value;
+    console.log(`[Middleware] /home or / route logic. activeRole: ${targetRole}, dorm: ${targetDorm}`);
 
     if (!targetRole || !targetDorm) {
       const membership = await getFirstMembership();
+      console.log(`[Middleware] Fetched membership for /home:`, membership);
 
       targetRole = targetRole || membership?.role || "occupant";
       if (!targetDorm && membership?.dorm_id) {
@@ -120,14 +124,14 @@ export async function middleware(req: NextRequest) {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return redirect(redirectUrl);
+        return redirect(redirectUrl, "/home route: No membership found, redirecting to /join");
       }
     }
 
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return redirect(redirectUrl);
+    return redirect(redirectUrl, `/home route: redirecting to role path /${targetRole}/home`);
   }
 
   // Globally ensure `dorm_id` is set for all valid application routes if missing
@@ -139,6 +143,7 @@ export async function middleware(req: NextRequest) {
     !isJoinRoute
   ) {
     if (!req.cookies.has("dorm_id")) {
+      console.log(`[Middleware] User has no dorm_id cookie on app route ${pathname}. Attempting to set it...`);
       const { data } = await supabase
         .from("dorm_memberships")
         .select("dorm_id")
@@ -147,6 +152,7 @@ export async function middleware(req: NextRequest) {
         .limit(1);
 
       const dormId = data?.[0]?.dorm_id ?? null;
+      console.log(`[Middleware] Fetched dormId to bake into cookie: ${dormId}`);
 
       if (dormId) {
         res.cookies.set("dorm_id", dormId, {
@@ -154,14 +160,15 @@ export async function middleware(req: NextRequest) {
           httpOnly: true,
           sameSite: "lax",
         });
-        // Force an immediate redirect to the same URL so Server Components
-        // will receive the newly baked `dorm_id` within `next/headers` cookies().
-        return redirect(req.nextUrl.clone());
+        // Now that `getActiveDormId` falls back safely, we don't need to force a redirect.
+        // The cookie will be set for future requests, and the current request will
+        // use the DB fallback gracefully.
+        return res;
       } else {
         const redirectUrl = req.nextUrl.clone();
         redirectUrl.pathname = "/join";
         redirectUrl.search = "";
-        return redirect(redirectUrl);
+        return redirect(redirectUrl, `No dorm membership found for app route ${pathname}, redirecting to /join`);
       }
     }
   }
