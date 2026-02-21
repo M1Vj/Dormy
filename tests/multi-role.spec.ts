@@ -23,7 +23,7 @@ test.describe('Multi-role RBAC Access', () => {
     // Should show content, not error messages
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Maintenance Ledger' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Maintenance ledger' })).toBeVisible();
   });
 
   test('should access admin fines page without errors', async ({ page }) => {
@@ -35,13 +35,15 @@ test.describe('Multi-role RBAC Access', () => {
     await expect(page.getByRole('heading', { name: 'Fines' })).toBeVisible();
   });
 
-  test('should access admin finance events page without errors', async ({ page }) => {
-    await page.goto('/admin/finance/events');
+  test('should access admin finance contributions page without errors', async ({ page }) => {
+    await page.goto('/admin/finance');
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Events ledger' })).toBeVisible();
+    await page.getByRole('link', { name: 'Contributions' }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Contributions', exact: true })).toBeVisible();
   });
 
   test('should access admin occupants page without errors', async ({ page }) => {
@@ -63,6 +65,8 @@ test.describe('Multi-role RBAC Access', () => {
   });
 
   test('should access admin rooms page without errors', async ({ page }) => {
+    await page.goto('/occupant/home');
+    await page.waitForLoadState('networkidle');
     await page.goto('/admin/rooms');
     await page.waitForLoadState('networkidle');
 
@@ -72,8 +76,10 @@ test.describe('Multi-role RBAC Access', () => {
   });
 
   test('should access occupant committees page without errors', async ({ page }) => {
+    await page.goto('/occupant/home');
+    await page.waitForLoadState('load');
     await page.goto('/occupant/committees');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -92,14 +98,22 @@ test.describe('Adviser Role Access', () => {
     await page.goto('/login');
     await page.getByLabel('Email').fill('adviser@dormy.local');
     await page.getByLabel('Password').fill('DormyPass123!');
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForURL(/\/home/);
+    const adviserForm = page.locator('form').first();
+    await adviserForm.evaluate((f: HTMLFormElement) => f.requestSubmit());
 
-    await page.goto('/admin/finance/maintenance');
-    await page.waitForLoadState('networkidle');
+    // Wait for redirect to happen and ensure dorm context is set
+    await page.waitForURL(/\/home/);
+    await page.goto('/occupant/home');
+    await page.waitForLoadState('load');
+
+    // Instead of jumping straight to the route, hit the springboard
+    await page.goto('/admin/finance');
+    await page.waitForLoadState('load');
+    await page.getByRole('link', { name: 'Maintenance Manage' }).click();
+    await page.waitForLoadState('load');
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Maintenance Ledger' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Maintenance ledger' })).toBeVisible();
   });
 });

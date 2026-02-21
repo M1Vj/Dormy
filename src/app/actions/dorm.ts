@@ -265,3 +265,16 @@ export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: 
   revalidatePath("/admin/finance");
   return { success: true };
 }
+
+export async function getTreasurerMaintenanceAccess(dormId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+  
+  const { data } = await supabase
+    .from("dorms")
+    .select("treasurer_maintenance_access")
+    .eq("id", dormId)
+    .single();
+
+  return { access: data?.treasurer_maintenance_access ?? false };
+}

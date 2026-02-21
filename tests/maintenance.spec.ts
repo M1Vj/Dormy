@@ -10,10 +10,15 @@ test.describe('Maintenance Page - Adviser Access', () => {
     await page.goto('/login');
     await page.getByLabel('Email').fill('adviser@dormy.local');
     await page.getByLabel('Password').fill('DormyPass123!');
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForURL(/\/adviser\/home|\/home/);
+    const adviserForm = page.locator('form').first();
+    await adviserForm.evaluate((f: HTMLFormElement) => f.requestSubmit());
 
-    // 2. Navigate to Maintenance
+    // 2. Wait for redirect and establish dorm context
+    await page.waitForURL(/\/home/);
+    await page.goto('/occupant/home');
+    await page.waitForLoadState('networkidle');
+
+    // 3. Navigate to Maintenance
     await page.goto('/admin/finance/maintenance');
     await page.waitForLoadState('networkidle');
 

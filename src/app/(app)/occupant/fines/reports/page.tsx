@@ -91,18 +91,14 @@ export default async function FineReportsPage() {
     );
   }
 
-  const cookieStore = await cookies();
-  const occupantModeCookie = cookieStore.get("dormy_occupant_mode")?.value ?? "0";
-  const eligibleForOccupantMode = new Set(["student_assistant", "treasurer", "officer"]).has(role);
-  const effectiveRole = occupantModeCookie === "1" && eligibleForOccupantMode ? "occupant" : role;
-
-  if (effectiveRole !== "occupant") {
+  // Students and occupants need access. Role logic here was overly restrictive.
+  if (!role) {
     return (
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fine reports</h1>
           <p className="text-sm text-muted-foreground">
-            This page is available in Occupant view. Use the profile menu to switch to Occupant view.
+            You do not have a role in this dorm.
           </p>
         </div>
         <Button asChild variant="secondary">

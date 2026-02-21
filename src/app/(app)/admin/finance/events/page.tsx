@@ -179,9 +179,9 @@ export default async function EventsFinancePage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Events ledger</h1>
+          <h1 className="text-2xl font-semibold">Contributions</h1>
           <p className="text-sm text-muted-foreground">
-            Track event charges, collections, and remaining balances.
+            Track contribution charges, collections, and remaining balances.
           </p>
           {activeSemester ? (
             <p className="text-xs text-muted-foreground">Active semester: {activeSemester.label}</p>
