@@ -190,7 +190,7 @@ export function JoinDorm({
         return;
       }
       toast.success("Invite accepted");
-      window.location.href = "/home";
+      window.location.href = "/";
     });
   };
 
