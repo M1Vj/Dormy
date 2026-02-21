@@ -5,6 +5,7 @@ import { getExpenses } from "@/app/actions/expenses";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -60,16 +61,23 @@ export default async function ExpensesPage({
     .eq("user_id", user.id)
     .maybeSingle();
 
+  const { data: dormData } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
   const role = membership?.role ?? "";
+  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {};
+  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true;
   const canSubmit = new Set(["admin", "treasurer", "officer"]).has(role);
   const canReview = new Set(["admin", "treasurer"]).has(role);
-  const canView = new Set([
-    "admin",
-    "treasurer",
-    "officer",
-    "student_assistant",
-    "adviser",
-  ]).has(role);
+
+  const showMaintenanceTab = new Set(["admin", "adviser", "student_assistant"]).has(role) ||
+    (allowTreasurerMaintenance && new Set(["treasurer", "officer"]).has(role));
+  const showContributionsTab = new Set(["admin", "adviser", "treasurer"]).has(role);
+
+  const canView = showMaintenanceTab || showContributionsTab;
 
   if (!canView) {
     return (
@@ -162,6 +170,56 @@ export default async function ExpensesPage({
         </Card>
       </div>
 
+      <Tabs defaultValue={showMaintenanceTab ? "maintenance_fee" : "contributions"} className="space-y-4">
+        <TabsList>
+          {showMaintenanceTab && <TabsTrigger value="maintenance_fee">Maintenance</TabsTrigger>}
+          {showContributionsTab && <TabsTrigger value="contributions">Contributions</TabsTrigger>}
+        </TabsList>
+
+        {/* Maintenance Fee Tab */}
+        {showMaintenanceTab && (
+          <TabsContent value="maintenance_fee" className="space-y-4">
+            <ExpenseList
+              expenses={expenses.filter(e => e.category === "maintenance_fee")}
+              canReview={canReview}
+              dormId={dormId}
+            />
+          </TabsContent>
+        )}
+
+        {/* Contributions Tab */}
+        {showContributionsTab && (
+          <TabsContent value="contributions" className="space-y-4">
+            <ExpenseList
+              expenses={expenses.filter(e => e.category === "contributions")}
+              canReview={canReview}
+              dormId={dormId}
+            />
+          </TabsContent>
+        )}
+      </Tabs>
+    </div>
+  );
+}
+
+function ExpenseList({ expenses, canReview, dormId }: { expenses: any[], canReview: boolean, dormId: string }) {
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case "approved":
+        return (
+          <Badge variant="default" className="bg-emerald-600">
+            Approved
+          </Badge>
+        );
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>;
+      default:
+        return <Badge variant="secondary">Pending</Badge>;
+    }
+  };
+
+  return (
+    <>
       {/* Mobile Cards */}
       <div className="space-y-3 md:hidden">
         {expenses.length === 0 ? (
@@ -266,6 +324,6 @@ export default async function ExpensesPage({
           </TableBody>
         </Table>
       </div>
-    </div>
+    </>
   );
 }

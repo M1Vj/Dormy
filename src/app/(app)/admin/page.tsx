@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId } from "@/lib/dorms";
 import { createOccupant } from "@/app/actions/occupants";
 import { CreateOccupantForm } from "@/components/admin/occupants/create-occupant-form";
+import { TreasurerMaintenanceToggle } from "@/components/admin/treasurer-maintenance-toggle";
 
 export default async function Page() {
   const supabase = await createSupabaseServerClient();
@@ -46,6 +47,12 @@ export default async function Page() {
   const createOccupantAction = activeDormId
     ? createOccupant.bind(null, activeDormId)
     : undefined;
+
+  let dormAttributes: any = {};
+  if (activeDormId) {
+    const { data } = await supabase.from("dorms").select("attributes").eq("id", activeDormId).single();
+    dormAttributes = data?.attributes || {};
+  }
 
   return (
     <div className="space-y-4">
@@ -89,6 +96,19 @@ export default async function Page() {
             <Button asChild>
               <Link href="/admin/audit">Open audit trail</Link>
             </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+      {activeDormId && hasAccess ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dorm settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TreasurerMaintenanceToggle
+              dormId={activeDormId}
+              initialState={dormAttributes?.treasurer_maintenance_access === true}
+            />
           </CardContent>
         </Card>
       ) : null}

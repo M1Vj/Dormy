@@ -132,7 +132,7 @@ export default async function MaintenancePage({
     .map((occupant) => {
       const entries = occupant.ledger_entries ?? [];
       const balance = entries.reduce((sum, entry) => {
-        if (entry.ledger !== "adviser_maintenance" || entry.voided_at) {
+        if (entry.ledger !== "maintenance_fee" || entry.voided_at) {
           return sum;
         }
         return sum + Number(entry.amount_pesos ?? 0);
@@ -265,7 +265,7 @@ export default async function MaintenancePage({
                 <ChargeDialog
                   dormId={activeDormId}
                   occupantId={row.id}
-                  category="adviser_maintenance"
+                  category="maintenance_fee"
                   trigger={
                     <Button variant="outline" size="sm" className="w-full">
                       Charge
@@ -275,7 +275,7 @@ export default async function MaintenancePage({
                 <PaymentDialog
                   dormId={activeDormId}
                   occupantId={row.id}
-                  category="adviser_maintenance"
+                  category="maintenance_fee"
                   trigger={
                     <Button variant="outline" size="sm" className="w-full">
                       Pay
@@ -319,8 +319,8 @@ export default async function MaintenancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <ChargeDialog dormId={activeDormId} occupantId={row.id} category="adviser_maintenance" />
-                    <PaymentDialog dormId={activeDormId} occupantId={row.id} category="adviser_maintenance" />
+                    <ChargeDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
+                    <PaymentDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
                   </div>
                 </TableCell>
               </TableRow>

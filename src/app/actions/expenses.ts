@@ -14,6 +14,7 @@ const submitExpenseSchema = z.object({
   description: z.string().optional(),
   amount_pesos: z.coerce.number().positive("Amount must be positive"),
   purchased_at: z.string().min(1, "Purchase date is required"),
+  category: z.enum(["maintenance_fee", "contributions"]),
 });
 
 /**
@@ -97,6 +98,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
     description: formData.get("description") || undefined,
     amount_pesos: formData.get("amount_pesos"),
     purchased_at: formData.get("purchased_at"),
+    category: formData.get("category"),
   });
 
   if (!parsed.success) {
@@ -140,6 +142,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
       amount_pesos: parsed.data.amount_pesos,
       purchased_at: parsed.data.purchased_at,
       receipt_storage_path: receiptPath,
+      category: parsed.data.category,
       status: "pending",
     })
     .select("id")
@@ -254,7 +257,7 @@ export async function reviewExpense(
  */
 export async function getExpenses(
   dormId: string,
-  opts: { status?: string } = {}
+  opts: { status?: string; category?: string } = {}
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase is not configured." };
@@ -273,6 +276,10 @@ export async function getExpenses(
 
   if (opts.status && opts.status !== "all") {
     query = query.eq("status", opts.status);
+  }
+
+  if (opts.category && opts.category !== "all") {
+    query = query.eq("category", opts.category);
   }
 
   const { data, error } = await query;

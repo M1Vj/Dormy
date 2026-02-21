@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
 
@@ -91,14 +98,27 @@ export function SubmitExpenseDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="purchased_at">Date Purchased *</Label>
-              <Input
-                id="purchased_at"
-                name="purchased_at"
-                type="date"
-                required
-              />
+              <Label htmlFor="category">Category *</Label>
+              <Select name="category" defaultValue="maintenance_fee" required>
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="maintenance_fee">Maintenance Fee</SelectItem>
+                  <SelectItem value="contributions">Contributions</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="purchased_at">Date Purchased *</Label>
+            <Input
+              id="purchased_at"
+              name="purchased_at"
+              type="date"
+              required
+            />
           </div>
 
           <div className="space-y-2">

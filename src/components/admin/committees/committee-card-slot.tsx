@@ -19,7 +19,7 @@ const CommitteeCard = dynamic(
   }
 );
 
-export function CommitteeCardSlot({ committee }: { committee: CommitteeSummary }) {
-  return <CommitteeCard committee={committee} />;
+export function CommitteeCardSlot({ committee, canManage }: { committee: CommitteeSummary; canManage?: boolean }) {
+  return <CommitteeCard committee={committee as any} canManage={canManage} />;
 }
 

@@ -67,9 +67,9 @@ type SemesterWorkspace = {
   outstandingMoney: {
     total: number;
     byLedger: {
-      adviser_maintenance: number;
+      maintenance_fee: number;
       sa_fines: number;
-      treasurer_events: number;
+      contributions: number;
     };
   };
 };
@@ -86,9 +86,9 @@ function summarizeOutstandingLedger(
   const summary = {
     total: 0,
     byLedger: {
-      adviser_maintenance: 0,
+      maintenance_fee: 0,
       sa_fines: 0,
-      treasurer_events: 0,
+      contributions: 0,
     },
   };
 
@@ -100,16 +100,16 @@ function summarizeOutstandingLedger(
 
     summary.total += amount;
 
-    if (entry.ledger === "adviser_maintenance") {
-      summary.byLedger.adviser_maintenance += amount;
+    if (entry.ledger === "maintenance_fee") {
+      summary.byLedger.maintenance_fee += amount;
     }
 
     if (entry.ledger === "sa_fines") {
       summary.byLedger.sa_fines += amount;
     }
 
-    if (entry.ledger === "treasurer_events") {
-      summary.byLedger.treasurer_events += amount;
+    if (entry.ledger === "contributions") {
+      summary.byLedger.contributions += amount;
     }
   }
 

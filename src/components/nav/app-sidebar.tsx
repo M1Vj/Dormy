@@ -12,6 +12,8 @@ import {
   Shield,
   Users,
   Wallet,
+  Wrench,
+  Receipt,
   UserPlus,
   Building2,
   DoorOpen,
@@ -55,6 +57,7 @@ export function AppSidebar() {
         { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
         { title: "Evaluation", url: "/occupant/evaluation", icon: Shield, color: "text-cyan-500" },
         { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
       ];
     } else if (role === "admin") {
       return [
@@ -65,7 +68,7 @@ export function AppSidebar() {
         { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
         { title: "Finance", url: "/admin/finance", icon: Wallet, color: "text-amber-500" },
         { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
-        { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
         { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
       ];
@@ -76,7 +79,8 @@ export function AppSidebar() {
         { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
         { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
         { title: "Inspection", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
-        { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
     } else if (role === "treasurer") {
@@ -84,16 +88,16 @@ export function AppSidebar() {
         ...base,
         { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
         { title: "Dorm Finance", url: "/admin/finance", icon: Wallet, color: "text-emerald-500" },
-        { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
-    } else if (role === "adviser" || role === "assistant_adviser") {
+    } else if (role === "adviser") {
       return [
         ...base,
         { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
         { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
         { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
-        { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
     } else {
@@ -101,6 +105,7 @@ export function AppSidebar() {
       return [
         ...base,
         { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Expenses", url: "/admin/finance/expenses", icon: Receipt, color: "text-green-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
     }

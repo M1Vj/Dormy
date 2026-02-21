@@ -775,7 +775,7 @@ export async function overrideEventPayableDeadline(
     .from("ledger_entries")
     .select("id, metadata")
     .eq("dorm_id", dormId)
-    .eq("ledger", "treasurer_events")
+    .eq("ledger", "contributions")
     .eq("entry_type", "charge")
     .eq("event_id", parsed.data.event_id)
     .is("voided_at", null);

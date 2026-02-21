@@ -169,7 +169,7 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
           <DialogDescription>
-            Record a payment for {category === 'adviser_maintenance' ? 'maintenance fee' : category === 'treasurer_events' ? 'event contribution' : 'fines'}.
+            Record a payment for {category === 'maintenance_fee' ? 'maintenance fee' : category === 'contributions' ? 'event contribution' : 'fines'}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

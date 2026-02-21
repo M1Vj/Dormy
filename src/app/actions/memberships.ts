@@ -5,6 +5,7 @@ import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppRole } from "@/lib/auth";
+import { canManageRole } from "@/lib/roles";
 
 const updateRolesSchema = z.object({
   dormId: z.string().uuid(),
@@ -14,7 +15,6 @@ const updateRolesSchema = z.object({
     "student_assistant",
     "treasurer",
     "adviser",
-    "assistant_adviser",
     "occupant",
     "officer",
   ])).min(1, "At least one role is required"),
@@ -38,7 +38,7 @@ export async function updateMembershipRoles(
     return { error: "You must be logged in to update roles." };
   }
 
-  // Check if actor has permission (Admin, SA, Adviser)
+  // Check if actor has permission
   const { data: actorMembership } = await supabase
     .from("dorm_memberships")
     .select("role")
@@ -46,10 +46,7 @@ export async function updateMembershipRoles(
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (
-    !actorMembership ||
-    !["admin", "adviser", "student_assistant"].includes(actorMembership.role)
-  ) {
+  if (!actorMembership?.role) {
     return { error: "You do not have permission to update roles." };
   }
 
@@ -66,6 +63,22 @@ export async function updateMembershipRoles(
 
   if (fetchError) {
     return { error: fetchError.message };
+  }
+
+  const actorRole = actorMembership.role;
+
+  // Ensure actor can manage all old roles of target user
+  for (const m of previousMemberships || []) {
+    if (!canManageRole(actorRole, m.role)) {
+      return { error: `You do not have permission to manage a user holding the ${m.role} role.` };
+    }
+  }
+
+  // Ensure actor can assign all new roles
+  for (const r of newRoles) {
+    if (!canManageRole(actorRole, r)) {
+      return { error: `You do not have permission to assign the ${r} role.` };
+    }
   }
 
   const { error: delError } = await supabase

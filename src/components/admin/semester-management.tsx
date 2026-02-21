@@ -27,9 +27,9 @@ type SemesterManagementProps = {
   outstandingMoney: {
     total: number;
     byLedger: {
-      adviser_maintenance: number;
+      maintenance_fee: number;
       sa_fines: number;
-      treasurer_events: number;
+      contributions: number;
     };
   };
 };

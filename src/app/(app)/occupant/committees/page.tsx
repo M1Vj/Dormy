@@ -68,7 +68,7 @@ export default async function CommitteesPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {committees?.map((committee) => (
-          <CommitteeCardSlot key={committee.id} committee={committee} />
+          <CommitteeCardSlot key={committee.id} committee={committee} canManage={canCreate} />
         ))}
         {committees?.length === 0 ? (
           <div className="col-span-full rounded-lg border border-dashed py-12 text-center text-muted-foreground">

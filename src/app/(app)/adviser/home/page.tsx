@@ -173,7 +173,7 @@ export default async function HomePage() {
     for (const entry of entries ?? []) {
       if (entry.voided_at) continue;
       if (!entry.event_id) continue;
-      if (entry.ledger !== "treasurer_events") continue;
+      if (entry.ledger !== "contributions") continue;
 
       const key = String(entry.event_id);
       const current =

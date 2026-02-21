@@ -4,7 +4,7 @@ test.use({ storageState: 'playwright/.auth/admin.json' });
 
 test.describe('Admin Finance & Reporting', () => {
   test('should load reporting dashboard with key stats', async ({ page }) => {
-    await page.goto('/admin/reporting');
+    await page.goto('/reporting');
     await expect(page.getByText('Reporting Dashboard')).toBeVisible();
     await expect(page.getByText('Cash on Hand')).toBeVisible();
     await expect(page.getByText('Total Collected')).toBeVisible();
@@ -12,7 +12,7 @@ test.describe('Admin Finance & Reporting', () => {
   });
 
   test('should display ledger breakdown', async ({ page }) => {
-    await page.goto('/admin/reporting');
+    await page.goto('/reporting');
     await expect(page.getByText('Ledger Breakdown')).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Maintenance', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Fines', exact: true })).toBeVisible();

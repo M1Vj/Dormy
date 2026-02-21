@@ -122,7 +122,7 @@ export default async function EventsFinancePage({
         .from("ledger_entries")
         .select("id, event_id, amount_pesos, ledger, voided_at, metadata")
         .eq("dorm_id", activeDormId)
-        .eq("ledger", "treasurer_events")
+        .eq("ledger", "contributions")
         .is("voided_at", null),
       getUserDorms(),
     ]);

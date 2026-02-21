@@ -186,7 +186,7 @@ export default async function EventDetailsPage({
         .from("ledger_entries")
         .select("occupant_id, amount_pesos, metadata")
         .eq("dorm_id", dormId)
-        .eq("ledger", "treasurer_events")
+        .eq("ledger", "contributions")
         .eq("event_id", eventId)
         .is("voided_at", null),
     ]);
@@ -442,7 +442,7 @@ export default async function EventDetailsPage({
                     <PaymentDialog
                       dormId={dormId}
                       occupantId={occupant.id}
-                      category="treasurer_events"
+                      category="contributions"
                       eventId={eventId}
                       eventTitle={event.title}
                       trigger={
@@ -503,7 +503,7 @@ export default async function EventDetailsPage({
                       <PaymentDialog
                         dormId={dormId}
                         occupantId={occupant.id}
-                        category="treasurer_events"
+                        category="contributions"
                         eventId={eventId}
                         eventTitle={event.title}
                         trigger={

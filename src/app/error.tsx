@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
-import { BackToAppButton } from "@/components/nav/back-to-app-button";
 
 export default function GlobalError({
   error,
@@ -27,7 +26,9 @@ export default function GlobalError({
           </p>
           <div className="flex items-center gap-2">
             <Button onClick={reset}>Try again</Button>
-            <BackToAppButton text="Back to App" />
+            <Button variant="outline" asChild>
+              <Link href="/">Back to App</Link>
+            </Button>
           </div>
         </div>
       </body>

@@ -170,3 +170,55 @@ export async function switchDorm(dormId: string) {
   revalidatePath("/", "layout");
   return { success: true };
 }
+
+export async function updateDormAttributes(dormId: string, updates: Record<string, unknown>) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser"].includes(membership.role)) {
+    return { error: "You do not have permission to update dorm settings." };
+  }
+
+  const { data: dorm } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
+  const currentAttributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes : {};
+  const newAttributes = { ...currentAttributes, ...updates };
+
+  const { error } = await supabase
+    .from("dorms")
+    .update({ attributes: newAttributes })
+    .eq("id", dormId);
+
+  if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "dorm.updated",
+      entityType: "dorm",
+      entityId: dormId,
+      metadata: { updates },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for dorm update:", auditError);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/finance");
+  return { success: true };
+}

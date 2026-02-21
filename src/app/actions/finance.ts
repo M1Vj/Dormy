@@ -8,7 +8,7 @@ import { logAuditEvent } from "@/lib/audit/log";
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
-  category: z.enum(['adviser_maintenance', 'sa_fines', 'treasurer_events'] as const),
+  category: z.enum(['maintenance_fee', 'sa_fines', 'contributions'] as const),
   amount: z.number().positive(),
   entry_type: z.enum(['charge', 'payment', 'adjustment', 'refund'] as const),
   method: z.string().optional(),
@@ -27,12 +27,12 @@ const transactionSchema = z.object({
 });
 
 type TransactionData = z.infer<typeof transactionSchema>;
-export type LedgerCategory = 'adviser_maintenance' | 'sa_fines' | 'treasurer_events';
+export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions';
 
 const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
-  adviser_maintenance: ["admin", "adviser", "assistant_adviser"],
-  sa_fines: ["admin", "student_assistant", "adviser", "assistant_adviser"],
-  treasurer_events: ["admin", "treasurer"],
+  maintenance_fee: ["admin", "adviser"],
+  sa_fines: ["admin", "student_assistant", "adviser"],
+  contributions: ["admin", "treasurer"],
 };
 
 const contributionBatchSchema = z.object({
@@ -173,7 +173,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
       }
 
       const ledgerLabel =
-        tx.category === "adviser_maintenance"
+        tx.category === "maintenance_fee"
           ? "Maintenance"
           : tx.category === "sa_fines"
             ? "Fines"
@@ -473,7 +473,7 @@ export async function createContributionBatch(
       .from("ledger_entries")
       .select("occupant_id")
       .eq("dorm_id", dormId)
-      .eq("ledger", "treasurer_events")
+      .eq("ledger", "contributions")
       .eq("entry_type", "charge")
       .eq("event_id", parsed.data.event_id)
       .is("voided_at", null)
@@ -507,7 +507,7 @@ export async function createContributionBatch(
   const { error: insertError } = await supabase.from("ledger_entries").insert(
     targetOccupantIds.map((occupantId) => ({
       dorm_id: dormId,
-      ledger: "treasurer_events",
+      ledger: "contributions",
       entry_type: "charge",
       occupant_id: occupantId,
       event_id: parsed.data.event_id || null,
@@ -587,9 +587,9 @@ export async function getLedgerBalance(dormId: string, occupantId: string) {
 
   data.forEach(entry => {
     const amount = Number(entry.amount_pesos);
-    if (entry.ledger === 'adviser_maintenance') balances.maintenance += amount;
+    if (entry.ledger === 'maintenance_fee') balances.maintenance += amount;
     if (entry.ledger === 'sa_fines') balances.fines += amount;
-    if (entry.ledger === 'treasurer_events') balances.events += amount;
+    if (entry.ledger === 'contributions') balances.events += amount;
     balances.total += amount;
   });
 
