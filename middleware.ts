@@ -38,45 +38,92 @@ export async function middleware(req: NextRequest) {
   const isDashboardLegacyRoute =
     pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
+  const redirect = (url: URL | string) => {
+    const redirectResponse = NextResponse.redirect(url);
+    res.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  };
+
   if (!user && !isLoginRoute && !isAuthCallbackRoute && !isOAuthConsentRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname + req.nextUrl.search);
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
+
+  const getFirstMembership = async (): Promise<{
+    role: string;
+    dorm_id: string;
+  } | null> => {
+    const { data } = await supabase
+      .from("dorm_memberships")
+      .select("role, dorm_id")
+      .eq("user_id", user!.id)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    return data?.[0] ?? null;
+  };
 
   if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
+    let targetDorm = req.cookies.get("dorm_id")?.value;
 
-    // If no active role cookie, try to find a valid role from the DB
-    if (!targetRole) {
-      const { data: memberships } = await supabase
-        .from("dorm_memberships")
-        .select("role")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+    if (!targetRole || !targetDorm) {
+      const membership = await getFirstMembership();
 
-      targetRole = memberships?.role || "occupant";
+      targetRole = targetRole || membership?.role || "occupant";
+      if (!targetDorm && membership?.dorm_id) {
+        targetDorm = membership.dorm_id;
+        res.cookies.set("dorm_id", membership.dorm_id, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+      } else if (!membership?.dorm_id) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return redirect(redirectUrl);
+      }
     }
 
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
 
-  // Also redirect if they try to visit the old flat /home route
-  if (user && pathname === "/home") {
-    const targetRole = req.cookies.get("dormy_active_role")?.value || "occupant";
+  // Also redirect if they try to visit the old flat /home route or root /
+  if (user && (pathname === "/home" || pathname === "/")) {
+    let targetRole = req.cookies.get("dormy_active_role")?.value;
+    let targetDorm = req.cookies.get("dorm_id")?.value;
+
+    if (!targetRole || !targetDorm) {
+      const membership = await getFirstMembership();
+
+      targetRole = targetRole || membership?.role || "occupant";
+      if (!targetDorm && membership?.dorm_id) {
+        targetDorm = membership.dorm_id;
+        res.cookies.set("dorm_id", membership.dorm_id, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+      } else if (!membership?.dorm_id) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return redirect(redirectUrl);
+      }
+    }
+
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return redirect(redirectUrl);
   }
-
-
 
   return res;
 }
