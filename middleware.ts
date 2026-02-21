@@ -67,17 +67,27 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Also redirect if they try to visit the old flat /home route
-  if (user && pathname === "/home") {
-    const targetRole = req.cookies.get("dormy_active_role")?.value || "occupant";
+  // Also redirect if they try to visit the old flat /home route or root /
+  if (user && (pathname === "/home" || pathname === "/")) {
+    let targetRole = req.cookies.get("dormy_active_role")?.value;
+
+    if (!targetRole) {
+      const { data: memberships } = await supabase
+        .from("dorm_memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      targetRole = memberships?.role || "occupant";
+    }
+
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
-
-
-
   return res;
 }
 
