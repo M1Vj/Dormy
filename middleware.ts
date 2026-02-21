@@ -47,18 +47,27 @@ export async function middleware(req: NextRequest) {
 
   if (user && (isLoginRoute || isOAuthConsentRoute || isDashboardLegacyRoute)) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
+    let targetDorm = req.cookies.get("dorm_id")?.value;
 
     // If no active role cookie, try to find a valid role from the DB
-    if (!targetRole) {
+    if (!targetRole || !targetDorm) {
       const { data: memberships } = await supabase
         .from("dorm_memberships")
-        .select("role")
+        .select("role, dorm_id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
 
-      targetRole = memberships?.role || "occupant";
+      targetRole = targetRole || memberships?.role || "occupant";
+      if (!targetDorm && memberships?.dorm_id) {
+        targetDorm = memberships.dorm_id;
+        res.cookies.set("dorm_id", memberships.dorm_id, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+      }
     }
 
     const redirectUrl = req.nextUrl.clone();
@@ -70,17 +79,26 @@ export async function middleware(req: NextRequest) {
   // Also redirect if they try to visit the old flat /home route or root /
   if (user && (pathname === "/home" || pathname === "/")) {
     let targetRole = req.cookies.get("dormy_active_role")?.value;
+    let targetDorm = req.cookies.get("dorm_id")?.value;
 
-    if (!targetRole) {
+    if (!targetRole || !targetDorm) {
       const { data: memberships } = await supabase
         .from("dorm_memberships")
-        .select("role")
+        .select("role, dorm_id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
 
-      targetRole = memberships?.role || "occupant";
+      targetRole = targetRole || memberships?.role || "occupant";
+      if (!targetDorm && memberships?.dorm_id) {
+        targetDorm = memberships.dorm_id;
+        res.cookies.set("dorm_id", memberships.dorm_id, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+      }
     }
 
     const redirectUrl = req.nextUrl.clone();
@@ -88,6 +106,28 @@ export async function middleware(req: NextRequest) {
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
+
+  // Globally ensure `dorm_id` is set for all valid application routes if missing
+  if (user && !pathname.startsWith("/_next") && !pathname.startsWith("/api") && !isLoginRoute && !isJoinRoute) {
+    if (!req.cookies.has("dorm_id")) {
+      const { data: memberships } = await supabase
+        .from("dorm_memberships")
+        .select("dorm_id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (memberships?.dorm_id) {
+        res.cookies.set("dorm_id", memberships.dorm_id, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+      }
+    }
+  }
+
   return res;
 }
 
