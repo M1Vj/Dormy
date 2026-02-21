@@ -67,6 +67,11 @@ export async function middleware(req: NextRequest) {
           httpOnly: true,
           sameSite: "lax",
         });
+      } else if (!memberships?.dorm_id) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return NextResponse.redirect(redirectUrl);
       }
     }
 
@@ -98,6 +103,11 @@ export async function middleware(req: NextRequest) {
           httpOnly: true,
           sameSite: "lax",
         });
+      } else if (!memberships?.dorm_id) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return NextResponse.redirect(redirectUrl);
       }
     }
 
@@ -124,6 +134,11 @@ export async function middleware(req: NextRequest) {
           httpOnly: true,
           sameSite: "lax",
         });
+      } else {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return NextResponse.redirect(redirectUrl);
       }
     }
   }
