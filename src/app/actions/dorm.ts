@@ -222,3 +222,46 @@ export async function updateDormAttributes(dormId: string, updates: Record<strin
   revalidatePath("/admin/finance");
   return { success: true };
 }
+
+export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: boolean) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser"].includes(membership.role)) {
+    return { error: "You do not have permission to update dorm settings." };
+  }
+
+  const { error } = await supabase
+    .from("dorms")
+    .update({ treasurer_maintenance_access: enabled })
+    .eq("id", dormId);
+
+  if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "dorm.updated",
+      entityType: "dorm",
+      entityId: dormId,
+      metadata: { updates: { treasurer_maintenance_access: enabled } },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for dorm update:", auditError);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/finance");
+  return { success: true };
+}

@@ -71,14 +71,14 @@ export default async function ReportingDashboardPage() {
   const dormId = await getActiveDormId();
   if (!dormId) return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  const role = membership?.role ?? "occupant";
+  const roles = memberships?.map(m => m.role) ?? ["occupant"];
+  const primaryRole = roles.includes("admin") ? "admin" : roles.includes("adviser") ? "adviser" : roles[0] ?? "occupant";
 
   // Check if occupant is a committee head
   let committeeData: CommitteeDetail | null = null;
@@ -100,7 +100,7 @@ export default async function ReportingDashboardPage() {
     }
   }
 
-  const isDormStaff = new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]).has(role);
+  const isDormStaff = roles.some(r => new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]).has(r));
 
   if (!isDormStaff && !committeeData) {
     return (
@@ -146,7 +146,7 @@ export default async function ReportingDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Event Finance Breakdown</CardTitle>
+            <CardTitle>Contribution Breakdown</CardTitle>
             <CardDescription>Income generated per event under your committee</CardDescription>
           </CardHeader>
           <CardContent>
@@ -186,9 +186,9 @@ export default async function ReportingDashboardPage() {
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
   const stats = statsRes;
 
-  const showOverallFinance = new Set(["admin", "adviser"]).has(role);
-  const showFinesAndMaintenance = new Set(["admin", "adviser", "student_assistant"]).has(role);
-  const showContributions = new Set(["admin", "adviser", "treasurer"]).has(role);
+  const showOverallFinance = roles.some(r => new Set(["admin", "adviser"]).has(r));
+  const showFinesAndMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
+  const showContributions = roles.some(r => new Set(["admin", "adviser", "treasurer"]).has(r));
 
   const clearancePercentage = stats.totalOccupants > 0 ? (stats.occupantsCleared / stats.totalOccupants) * 100 : 0;
 
@@ -198,7 +198,7 @@ export default async function ReportingDashboardPage() {
         <h1 className="text-3xl font-bold tracking-tight">Reporting Dashboard</h1>
         <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           {currentDate}
-          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs uppercase tracking-wider">{role.replace("_", " ")}</span>
+          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs uppercase tracking-wider">{primaryRole.replace("_", " ")}</span>
         </p>
       </div>
 
