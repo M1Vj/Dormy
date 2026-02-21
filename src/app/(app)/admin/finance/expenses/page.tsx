@@ -201,6 +201,7 @@ export default async function ExpensesPage({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ExpenseList({ expenses, canReview, dormId }: { expenses: any[], canReview: boolean, dormId: string }) {
   const statusBadge = (status: string) => {
     switch (status) {
