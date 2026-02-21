@@ -31,12 +31,26 @@ import {
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
 import { DormSwitcher } from "@/components/nav/dorm-switcher"
-import { useMemo } from "react"
+import { useMemo, useEffect, useState } from "react"
+import { getTreasurerMaintenanceAccess } from "@/app/actions/dorm"
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { role } = useAuth()
+  const { role, dormId } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
+  const [treasurerAccess, setTreasurerAccess] = useState(false);
+
+  useEffect(() => {
+    async function checkAccess() {
+      if (dormId && (role === "treasurer" || role === "officer")) {
+        const result = await getTreasurerMaintenanceAccess(dormId);
+        if (!result.error) {
+          setTreasurerAccess(result.access);
+        }
+      }
+    }
+    checkAccess();
+  }, [dormId, role]);
 
   const menuItems = useMemo(() => {
     if (!role) {
@@ -83,13 +97,19 @@ export function AppSidebar() {
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
     } else if (role === "treasurer") {
-      return [
+      const items = [
         ...base,
         { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
         { title: "Dorm Finance", url: "/admin/finance", icon: Wallet, color: "text-emerald-500" },
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
+      if (treasurerAccess) {
+        items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
+      }
+      items.push(
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+      );
+      return items;
     } else if (role === "adviser") {
       return [
         ...base,
@@ -102,14 +122,20 @@ export function AppSidebar() {
       ];
     } else {
       // Fallback for officer, etc.
-      return [
+      const items = [
         ...base,
         { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
         { title: "Expenses", url: "/admin/finance/expenses", icon: Receipt, color: "text-green-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
+      if (treasurerAccess) {
+        items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
+      }
+      items.push(
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+      );
+      return items;
     }
-  }, [role]);
+  }, [role, treasurerAccess]);
 
   return (
     <Sidebar>

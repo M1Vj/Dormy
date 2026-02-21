@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { updateMembershipRoles } from "@/app/actions/memberships";
-import { AppRole, getRoleLabel } from "@/lib/roles";
+import { AppRole, getRoleLabel, canManageRole } from "@/lib/roles";
+import { useAuth } from "@/components/providers/auth-provider";
 
 interface UpdateRoleDialogProps {
   dormId: string;
@@ -42,6 +43,7 @@ export function UpdateRoleDialog({
   const [open, setOpen] = useState(false);
   const [roles, setRoles] = useState<AppRole[]>(currentRoles);
   const [isLoading, setIsLoading] = useState(false);
+  const { role: currentUserRole } = useAuth();
 
   const handleUpdate = async () => {
     if (!userId) return;
@@ -84,7 +86,7 @@ export function UpdateRoleDialog({
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Select Roles</label>
               <div className="flex flex-wrap gap-2">
-                {ROLES.map((r) => {
+                {ROLES.filter((r) => canManageRole(currentUserRole ?? "occupant", r)).map((r) => {
                   const isSelected = roles.includes(r);
                   return (
                     <Button
