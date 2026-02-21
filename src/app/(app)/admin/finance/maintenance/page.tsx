@@ -96,7 +96,7 @@ export default async function MaintenancePage({
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "adviser", "assistant_adviser"]).has(r));
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">

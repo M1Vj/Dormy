@@ -35,12 +35,36 @@ export const getCachedMembership = cache(async (dormId: string) => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
 
-  const { data: membership } = await supabase
+  // Use SELECT without .maybeSingle() to support multi-role users
+  // (maybeSingle throws when multiple rows match)
+  const { data } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  return membership;
+  if (!data || data.length === 0) return null;
+
+  // Return first membership (callers only need to know a role exists)
+  return data[0];
+});
+
+/**
+ * Returns ALL roles the user holds in a given dorm.
+ * Prefer this over getCachedMembership when you need multi-role awareness.
+ */
+export const getCachedRolesForDorm = cache(async (dormId: string): Promise<string[]> => {
+  const user = await getCachedUser();
+  if (!user) return [];
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+
+  const { data } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  return (data ?? []).map((m) => m.role as string);
 });
