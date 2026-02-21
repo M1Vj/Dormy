@@ -20,6 +20,7 @@ const CommitteeCard = dynamic(
 );
 
 export function CommitteeCardSlot({ committee, canManage }: { committee: CommitteeSummary; canManage?: boolean }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return <CommitteeCard committee={committee as any} canManage={canManage} />;
 }
 

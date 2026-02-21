@@ -48,7 +48,7 @@ export default async function Page() {
     ? createOccupant.bind(null, activeDormId)
     : undefined;
 
-  let dormAttributes: any = {};
+  let dormAttributes: Record<string, unknown> = {};
   if (activeDormId) {
     const { data } = await supabase.from("dorms").select("treasurer_maintenance_access").eq("id", activeDormId).single();
     dormAttributes = data || {};

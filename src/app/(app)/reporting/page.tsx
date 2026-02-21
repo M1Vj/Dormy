@@ -84,12 +84,14 @@ export default async function ReportingDashboardPage() {
   let committeeData: CommitteeDetail | null = null;
   let committeeFinances: CommitteeFinanceSummaryRow[] = [];
 
-  const { data: userCommitteeRole } = await supabase
+  const { data: userCommitteeRoles } = await supabase
     .from("committee_members")
     .select("committee_id, role")
     .eq("user_id", user.id)
     .in("role", ["head", "co-head"])
-    .maybeSingle();
+    .limit(1);
+
+  const userCommitteeRole = userCommitteeRoles?.[0] || null;
 
   if (userCommitteeRole) {
     const cRes = await getCommittee(userCommitteeRole.committee_id);
