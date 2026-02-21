@@ -196,39 +196,15 @@ export default async function MaintenancePage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      {/* Header row */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Maintenance ledger</h1>
+          <h1 className="text-2xl font-semibold">Maintenance Ledger</h1>
           <p className="text-sm text-muted-foreground">
-            Track maintenance balances and collect payments efficiently.
+            Track maintenance balances and collect payments.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-          <form method="GET" className="grid w-full gap-2 sm:grid-cols-[1fr_170px_auto_auto]">
-            <Input
-              name="search"
-              placeholder="Search occupant or room"
-              defaultValue={search}
-              className="w-full"
-            />
-            <select
-              name="status"
-              defaultValue={statusFilter}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">All balances</option>
-              <option value="outstanding">Outstanding only</option>
-              <option value="cleared">Cleared only</option>
-            </select>
-            <Button type="submit" variant="secondary" size="sm">
-              Filter
-            </Button>
-            {search || statusFilter ? (
-              <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/admin/finance/maintenance">Reset</Link>
-              </Button>
-            ) : null}
-          </form>
+        <div className="flex items-center gap-2">
           <ExportXlsxDialog
             report="maintenance-ledger"
             title="Export Maintenance Ledger"
@@ -241,7 +217,35 @@ export default async function MaintenancePage({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Search & Filter row */}
+      <form method="GET" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Input
+          name="search"
+          placeholder="Search occupant or room..."
+          defaultValue={search}
+          className="sm:max-w-xs"
+        />
+        <select
+          name="status"
+          defaultValue={statusFilter}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm sm:w-[170px]"
+        >
+          <option value="">All balances</option>
+          <option value="outstanding">Outstanding only</option>
+          <option value="cleared">Cleared only</option>
+        </select>
+        <Button type="submit" variant="secondary" size="sm">
+          Filter
+        </Button>
+        {search || statusFilter ? (
+          <Button asChild type="button" variant="ghost" size="sm">
+            <Link href="/admin/finance/maintenance">Reset</Link>
+          </Button>
+        ) : null}
+      </form>
+
+      {/* Summary cards */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Visible Occupants</CardTitle>
