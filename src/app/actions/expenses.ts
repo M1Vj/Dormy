@@ -42,7 +42,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
   const roles = memberships?.map(m => m.role) ?? [];
   const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
-  const staffSubmitRoles = new Set(["admin", "treasurer", "officer"]);
+  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser"]);
   const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
 
   if (!memberships || memberships.length === 0) {
