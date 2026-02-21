@@ -8,12 +8,16 @@ export async function getActiveDormId() {
   const cookieStore = await cookies();
   const rawId = cookieStore.get(DORM_COOKIE)?.value;
 
-  if (!rawId) return null;
-
   const dorms = await getUserDorms();
-  const isValid = dorms.some((d) => d.id === rawId);
+  if (dorms.length === 0) return null;
 
-  if (isValid) return rawId;
+  if (rawId) {
+    const isValid = dorms.some((d) => d.id === rawId);
+    if (isValid) return rawId;
+  }
+
+  // Fallback to the first available dorm if the cookie is missing or invalid.
+  // This prevents redirect loops in Safari which sometimes drops cookies.
   return dorms[0]?.id ?? null;
 }
 
