@@ -12,8 +12,10 @@ import {
   Shield,
   Users,
   Wallet,
-  UserPlus,
+  Wrench,
+  Receipt,
   Building2,
+  DoorOpen,
 } from "lucide-react"
 
 import {
@@ -29,87 +31,112 @@ import {
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/components/providers/auth-provider"
 import { DormSwitcher } from "@/components/nav/dorm-switcher"
-
-// Menu items.
-const items = [
-  { title: "Home", url: "/home", icon: Home, color: "text-sky-500" },
-  { title: "Join", url: "/join", icon: Building2, color: "text-slate-500" },
-  { title: "Applications", url: "/applications", icon: UserPlus, color: "text-indigo-500" },
-  { title: "Occupants", url: "/occupants", icon: Users, color: "text-emerald-500" },
-  { title: "Committees", url: "/committees", icon: Users, color: "text-violet-500" },
-  { title: "Fines", url: "/fines", icon: FileText, color: "text-rose-500" },
-  { title: "Payments", url: "/payments", icon: Wallet, color: "text-amber-500" },
-  { title: "Cleaning", url: "/cleaning", icon: Calendar, color: "text-lime-500" },
-  { title: "Evaluation", url: "/evaluation", icon: Shield, color: "text-cyan-500" },
-  { title: "Events", url: "/events", icon: Calendar, color: "text-orange-500" },
-  { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
-  { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
-  { title: "Admin", url: "/admin", icon: Settings, color: "text-zinc-500" },
-]
+import { useMemo, useEffect, useState } from "react"
+import { getTreasurerMaintenanceAccess } from "@/app/actions/dorm"
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { role } = useAuth()
+  const { role, dormId } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
+  const [treasurerAccess, setTreasurerAccess] = useState(false);
 
-  const directAdminOccupants =
-    role === "admin" || role === "student_assistant"
-  const directAdminFines =
-    role === "admin" || role === "student_assistant"
-
-  const occupantRoutes = new Set([
-    "/home",
-    "/events",
-    "/payments",
-    "/fines",
-    "/evaluation",
-    "/cleaning",
-    "/committees",
-  ])
-  const staffApplicationRoles = new Set([
-    "admin",
-    "adviser",
-    "student_assistant",
-  ])
-  const aiRoles = new Set([
-    "admin",
-    "officer",
-    "student_assistant",
-    "treasurer",
-    "adviser",
-    "assistant_adviser",
-  ])
-  const visibleItems = items.filter((item) => {
-    if (!role) {
-      return item.url === "/join"
+  useEffect(() => {
+    async function checkAccess() {
+      if (dormId && (role === "treasurer" || role === "officer")) {
+        const result = await getTreasurerMaintenanceAccess(dormId);
+        if (!result.error) {
+          setTreasurerAccess(result.access);
+        }
+      }
     }
+    checkAccess();
+  }, [dormId, role]);
+
+  const menuItems = useMemo(() => {
+    if (!role) {
+      return [{ title: "Join", url: "/join", icon: Building2, color: "text-slate-500" }];
+    }
+
+    const base = [
+      { title: "Home", url: `/${role}/home`, icon: Home, color: "text-sky-500" },
+    ];
 
     if (role === "occupant") {
-      return occupantRoutes.has(item.url)
+      return [
+        ...base,
+        { title: "Committees", url: "/occupant/committees", icon: Users, color: "text-violet-500" },
+        { title: "Fines", url: "/occupant/fines", icon: FileText, color: "text-rose-500" },
+        { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
+        { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
+        { title: "Evaluation", url: "/occupant/evaluation", icon: Shield, color: "text-cyan-500" },
+        { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+      ];
+    } else if (role === "admin") {
+      return [
+        ...base,
+        { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
+        { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
+        { title: "Committees", url: "/occupant/committees", icon: Users, color: "text-violet-500" },
+        { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
+        { title: "Finance", url: "/admin/finance", icon: Wallet, color: "text-amber-500" },
+        { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+        { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
+      ];
+    } else if (role === "student_assistant") {
+      return [
+        ...base,
+        { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
+        { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
+        { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
+        { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
+        { title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+      ];
+    } else if (role === "treasurer") {
+      const items = [
+        ...base,
+        { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
+        { title: "Dorm Finance", url: "/admin/finance", icon: Wallet, color: "text-emerald-500" },
+      ];
+      if (treasurerAccess) {
+        items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
+      }
+      items.push(
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+      );
+      return items;
+    } else if (role === "adviser") {
+      return [
+        ...base,
+        { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
+        { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
+        { title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" },
+        { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
+        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+      ];
+    } else {
+      // Fallback for officer, etc.
+      const items = [
+        ...base,
+        { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Expenses", url: "/admin/finance/expenses", icon: Receipt, color: "text-green-500" },
+      ];
+      if (treasurerAccess) {
+        items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
+      }
+      items.push(
+        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+      );
+      return items;
     }
-
-    if (item.url === "/applications") {
-      return staffApplicationRoles.has(role)
-    }
-
-    if (item.url === "/admin") {
-      return role === "admin" || role === "adviser"
-    }
-
-    if (item.url === "/ai") {
-      return role ? aiRoles.has(role) : false
-    }
-
-    if (item.url === "/admin/reporting") {
-      return new Set(["admin", "treasurer", "student_assistant", "adviser"]).has(role)
-    }
-
-    if (item.url === "/join") {
-      return false
-    }
-
-    return true
-  })
+  }, [role, treasurerAccess]);
 
   return (
     <Sidebar>
@@ -120,14 +147,8 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleItems.map((item) => {
-                const resolvedUrl =
-                  item.url === "/occupants" && directAdminOccupants
-                    ? "/admin/occupants"
-                    : item.url === "/fines" && directAdminFines
-                      ? "/admin/fines"
-                      : item.url
-
+              {menuItems.map((item) => {
+                const resolvedUrl = item.url
                 const isActive = pathname === resolvedUrl ||
                   (resolvedUrl !== "/" && pathname.startsWith(resolvedUrl))
                 return (

@@ -185,14 +185,14 @@ export function ApplicationsReview({
                         type="button"
                         variant="outline"
                         onClick={() => openDialog(app, "rejected")}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         Reject
                       </Button>
                       <Button
                         type="button"
                         onClick={() => openDialog(app, "approved")}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         Approve
                       </Button>
@@ -272,8 +272,8 @@ export function ApplicationsReview({
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={submitReview} disabled={!active || isPending}>
-              {isPending ? "Saving…" : decision === "approved" ? "Approve" : "Reject"}
+            <Button type="button" onClick={submitReview} disabled={!active} isLoading={isPending}>
+              {decision === "approved" ? "Approve" : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>

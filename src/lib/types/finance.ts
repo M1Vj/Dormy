@@ -1,4 +1,4 @@
-export type LedgerCategory = 'adviser_maintenance' | 'sa_fines' | 'treasurer_events';
+export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions';
 export type EntryType = 'charge' | 'payment' | 'adjustment' | 'refund';
 
 export type LedgerEntry = {

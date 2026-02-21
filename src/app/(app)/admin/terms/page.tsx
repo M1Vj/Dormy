@@ -46,7 +46,6 @@ export default async function AdminTermsPage() {
         dormId={activeDormId}
         activeSemester={workspace.activeSemester}
         semesters={workspace.semesters}
-        archives={workspace.archives}
         activeOccupants={workspace.activeOccupants}
         outstandingMoney={workspace.outstandingMoney}
       />

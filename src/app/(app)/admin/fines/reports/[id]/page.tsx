@@ -100,14 +100,16 @@ export default async function AdminFineReportDetailPage({
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant"]).has(r));
 
-  if (!membership || !new Set(["admin", "student_assistant"]).has(membership.role)) {
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.

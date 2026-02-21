@@ -6,6 +6,7 @@ import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
+import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import {
   Table,
   TableBody,
@@ -82,15 +83,14 @@ export default async function EventsFinancePage({
     return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", activeDormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = membership?.role ?? null;
-  if (!role || !new Set(["admin", "treasurer"]).has(role)) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -98,7 +98,7 @@ export default async function EventsFinancePage({
     );
   }
 
-  const canFilterDorm = role === "admin";
+  const canFilterDorm = roles.includes("admin");
   const semesterResult = await ensureActiveSemesterId(activeDormId, supabase);
   if ("error" in semesterResult) {
     return (
@@ -122,7 +122,7 @@ export default async function EventsFinancePage({
         .from("ledger_entries")
         .select("id, event_id, amount_pesos, ledger, voided_at, metadata")
         .eq("dorm_id", activeDormId)
-        .eq("ledger", "treasurer_events")
+        .eq("ledger", "contributions")
         .is("voided_at", null),
       getUserDorms(),
     ]);
@@ -179,9 +179,9 @@ export default async function EventsFinancePage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Events ledger</h1>
+          <h1 className="text-2xl font-semibold">Contributions</h1>
           <p className="text-sm text-muted-foreground">
-            Track event charges, collections, and remaining balances.
+            Track contribution charges, collections, and remaining balances.
           </p>
           {activeSemester ? (
             <p className="text-xs text-muted-foreground">Active semester: {activeSemester.label}</p>
@@ -213,6 +213,11 @@ export default async function EventsFinancePage({
             includeDormSelector={canFilterDorm}
           />
           <LedgerOverwriteDialog dormId={activeDormId} />
+          <ContributionBatchDialog
+            dormId={activeDormId}
+            events={typedEvents}
+            trigger={<Button>Add Contribution</Button>}
+          />
         </div>
       </div>
 
@@ -319,9 +324,8 @@ export default async function EventsFinancePage({
                 <TableCell className="text-right">₱{event.charged.toFixed(2)}</TableCell>
                 <TableCell className="text-right text-emerald-600">₱{event.collected.toFixed(2)}</TableCell>
                 <TableCell
-                  className={`text-right font-medium ${
-                    event.balance > 0 ? "text-rose-600" : "text-muted-foreground"
-                  }`}
+                  className={`text-right font-medium ${event.balance > 0 ? "text-rose-600" : "text-muted-foreground"
+                    }`}
                 >
                   ₱{event.balance.toFixed(2)}
                 </TableCell>

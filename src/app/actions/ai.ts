@@ -15,7 +15,6 @@ const AI_ALLOWED_ROLES: DormRole[] = [
   "student_assistant",
   "treasurer",
   "adviser",
-  "assistant_adviser",
 ];
 
 const eventConceptSchema = z.object({
@@ -260,10 +259,10 @@ async function callGeminiForConcept(rawText: string) {
 
 export async function getAiWorkspaceData(): Promise<
   | {
-      events: Array<{ id: string; title: string }>;
-      recentConcepts: AiConceptRecord[];
-      role: DormRole;
-    }
+    events: Array<{ id: string; title: string }>;
+    recentConcepts: AiConceptRecord[];
+    role: DormRole;
+  }
   | { error: string }
 > {
   const result = await getAiContext();
@@ -311,7 +310,7 @@ export async function getAiWorkspaceData(): Promise<
   );
 
   return {
-    events: (events ?? []) as Array<{ id: string; title: string }> ,
+    events: (events ?? []) as Array<{ id: string; title: string }>,
     recentConcepts,
     role: context.role,
   };
@@ -535,9 +534,9 @@ export async function getFinanceInsights(): Promise<FinanceInsights | { error: s
 
   const aiSummary = ranked.length
     ? `Outstanding balances total ₱${totalOutstanding.toFixed(2)} across ${ranked.length} occupants. Highest balances: ${ranked
-        .slice(0, 3)
-        .map((row) => `${row.full_name} (₱${row.total_balance.toFixed(2)})`)
-        .join(", ")}. Open fines: ${openFines}.`
+      .slice(0, 3)
+      .map((row) => `${row.full_name} (₱${row.total_balance.toFixed(2)})`)
+      .join(", ")}. Open fines: ${openFines}.`
     : "No outstanding balances were found for the current ledger snapshot.";
 
   await insertAudit(context, "ai.finance_insights", {

@@ -83,7 +83,7 @@ export function MetricsTable({ dormId, templateId, cycleId, metrics }: Props) {
                     size="icon"
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => handleDelete(metric.id)}
-                    disabled={isPending}
+                    isLoading={isPending}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

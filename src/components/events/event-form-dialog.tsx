@@ -75,9 +75,9 @@ export function EventFormDialog({
 
       const eventId =
         result &&
-        typeof result === "object" &&
-        "eventId" in result &&
-        typeof result.eventId === "string"
+          typeof result === "object" &&
+          "eventId" in result &&
+          typeof result.eventId === "string"
           ? result.eventId
           : event?.id ?? null;
 
@@ -231,14 +231,8 @@ export function EventFormDialog({
           {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
 
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending
-                ? mode === "create"
-                  ? "Creating..."
-                  : "Saving..."
-                : mode === "create"
-                  ? "Create event"
-                  : "Save changes"}
+            <Button type="submit" isLoading={isPending}>
+              {mode === "create" ? "Create event" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>

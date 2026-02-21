@@ -4,7 +4,7 @@ test.use({ storageState: 'playwright/.auth/admin.json' });
 
 test.describe('Admin Finance & Reporting', () => {
   test('should load reporting dashboard with key stats', async ({ page }) => {
-    await page.goto('/admin/reporting');
+    await page.goto('/reporting');
     await expect(page.getByText('Reporting Dashboard')).toBeVisible();
     await expect(page.getByText('Cash on Hand')).toBeVisible();
     await expect(page.getByText('Total Collected')).toBeVisible();
@@ -12,7 +12,7 @@ test.describe('Admin Finance & Reporting', () => {
   });
 
   test('should display ledger breakdown', async ({ page }) => {
-    await page.goto('/admin/reporting');
+    await page.goto('/reporting');
     await expect(page.getByText('Ledger Breakdown')).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Maintenance', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Fines', exact: true })).toBeVisible();
@@ -35,16 +35,16 @@ test.describe('Admin Fines Management', () => {
   });
 });
 
-test.describe('Admin Events', () => {
-  test('should load events finance page', async ({ page }) => {
-    await page.goto('/admin/finance/events');
-    await expect(page.getByText('Events ledger')).toBeVisible();
+test.describe('Admin Finance', () => {
+  test('should load finance page', async ({ page }) => {
+    await page.goto('/admin/finance');
+    await expect(page.getByText('Contributions')).toBeVisible();
   });
 });
 
 test.describe('Committees', () => {
   test('should load committees page', async ({ page }) => {
-    await page.goto('/committees');
+    await page.goto('/occupant/committees');
     await expect(page.getByRole('heading', { name: 'Committees', exact: true })).toBeVisible();
   });
 });

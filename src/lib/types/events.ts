@@ -1,7 +1,6 @@
 export const dormRoles = [
   "admin",
   "adviser",
-  "assistant_adviser",
   "student_assistant",
   "treasurer",
   "occupant",

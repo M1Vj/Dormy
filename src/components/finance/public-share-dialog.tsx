@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Share2, Copy, Check, ExternalLink, ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -29,6 +29,13 @@ interface PublicShareDialogProps {
   title: string;
 }
 
+interface PublicViewToken {
+  id: string;
+  token: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export function PublicShareDialog({
   dormId,
   entityId,
@@ -37,19 +44,19 @@ export function PublicShareDialog({
 }: PublicShareDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tokens, setTokens] = useState<any[]>([]);
+  const [tokens, setTokens] = useState<PublicViewToken[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const fetchTokens = async () => {
+  const fetchTokens = useCallback(async () => {
     const data = await getEntityPublicTokens(dormId, entityId);
     setTokens(data);
-  };
+  }, [dormId, entityId]);
 
   useEffect(() => {
     if (open) {
       fetchTokens();
     }
-  }, [open, dormId, entityId]);
+  }, [open, fetchTokens]);
 
   const handleCreateToken = async () => {
     setLoading(true);
@@ -61,7 +68,7 @@ export function PublicShareDialog({
         toast.success("Public share link generated!");
         fetchTokens();
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to generate link.");
     } finally {
       setLoading(false);
@@ -98,7 +105,7 @@ export function PublicShareDialog({
           <DialogTitle>Share Contribution Summary</DialogTitle>
           <DialogDescription>
             Generate a secure, public link to share collection progress for <strong>{title}</strong>.
-            Dormers' names are hidden for privacy.
+            Dormers&apos; names are hidden for privacy.
           </DialogDescription>
         </DialogHeader>
 

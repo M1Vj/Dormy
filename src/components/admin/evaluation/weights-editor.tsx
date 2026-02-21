@@ -73,8 +73,8 @@ export function WeightsEditor({ dormId, templateId, weights }: Props) {
         <div className="text-xs text-muted-foreground mb-4">
           Peer and Adviser weights should typically sum to 100%.
         </div>
-        <Button type="submit" className="w-full" disabled={isPending}>
-          {isPending ? "Saving..." : "Save Weights"}
+        <Button type="submit" className="w-full" isLoading={isPending}>
+          Save Weights
         </Button>
       </div>
     </form>

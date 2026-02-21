@@ -170,7 +170,7 @@ export function CompetitionScoringPanel({
               />
             </div>
             <div className="flex items-end">
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" isLoading={isPending}>
                 {isPending ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
@@ -235,7 +235,7 @@ export function CompetitionScoringPanel({
                       placeholder="Manual rank"
                       className="h-8 w-28"
                     />
-                    <Button type="submit" size="sm" variant="outline" disabled={isPending}>
+                    <Button type="submit" size="sm" variant="outline" isLoading={isPending}>
                       <Save className="mr-1 size-3.5" />
                       Rank
                     </Button>
@@ -273,7 +273,7 @@ export function CompetitionScoringPanel({
                           placeholder="0.00"
                           required
                         />
-                        <Button type="submit" variant="outline" disabled={isPending}>
+                        <Button type="submit" variant="outline" isLoading={isPending}>
                           Save
                         </Button>
                       </form>
@@ -301,7 +301,7 @@ export function CompetitionScoringPanel({
                       placeholder="0.00"
                       required
                     />
-                    <Button type="submit" variant="outline" disabled={isPending}>
+                    <Button type="submit" variant="outline" isLoading={isPending}>
                       Save
                     </Button>
                   </form>

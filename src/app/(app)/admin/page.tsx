@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getActiveDormId } from "@/lib/dorms";
+import { createOccupant } from "@/app/actions/occupants";
+import { CreateOccupantForm } from "@/components/admin/occupants/create-occupant-form";
+import { TreasurerMaintenanceToggle } from "@/components/admin/treasurer-maintenance-toggle";
 
 export default async function Page() {
   const supabase = await createSupabaseServerClient();
@@ -23,18 +27,31 @@ export default async function Page() {
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r));
 
-  if (!membership || !new Set(["admin", "adviser"]).has(membership.role)) {
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
       </div>
     );
+  }
+
+  const activeDormId = await getActiveDormId();
+  const createOccupantAction = activeDormId
+    ? createOccupant.bind(null, activeDormId)
+    : undefined;
+
+  let dormAttributes: Record<string, unknown> = {};
+  if (activeDormId) {
+    const { data } = await supabase.from("dorms").select("treasurer_maintenance_access").eq("id", activeDormId).single();
+    dormAttributes = data || {};
   }
 
   return (
@@ -45,24 +62,32 @@ export default async function Page() {
           <CardTitle className="text-base">User management</CardTitle>
         </CardHeader>
         <CardContent>
-          <Button asChild>
-            <Link href="/admin/users">Manage users</Link>
-          </Button>
+          <div className="flex flex-wrap gap-4">
+            <Button asChild>
+              <Link href="/admin/occupants">Manage occupants</Link>
+            </Button>
+            {createOccupantAction && (
+              <CreateOccupantForm action={createOccupantAction} />
+            )}
+          </div>
         </CardContent>
       </Card>
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Dorms</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-4">
             <Button asChild>
               <Link href="/admin/dorms">Manage dorms</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/dorms/add">Add new dorm</Link>
             </Button>
           </CardContent>
         </Card>
       ) : null}
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Audit logs</CardTitle>
@@ -71,6 +96,19 @@ export default async function Page() {
             <Button asChild>
               <Link href="/admin/audit">Open audit trail</Link>
             </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+      {activeDormId && hasAccess ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dorm settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TreasurerMaintenanceToggle
+              dormId={activeDormId}
+              initialState={dormAttributes?.treasurer_maintenance_access === true}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -87,7 +125,7 @@ export default async function Page() {
           </Button>
         </CardContent>
       </Card>
-      {membership.role === "admin" ? (
+      {roles.includes("admin") ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Overrides</CardTitle>

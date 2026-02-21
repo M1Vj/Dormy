@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function DashboardLayout() {
-  redirect("/events");
+  redirect("/occupant/events");
 }

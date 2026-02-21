@@ -41,7 +41,7 @@ interface Committee {
   members: CommitteeMember[];
 }
 
-export function CommitteeCard({ committee }: { committee: Committee }) {
+export function CommitteeCard({ committee, canManage }: { committee: Committee; canManage?: boolean }) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -66,32 +66,34 @@ export function CommitteeCard({ committee }: { committee: Committee }) {
               {committee.description || "No description provided."}
             </CardDescription>
           </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Committee?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the <strong>{committee.name}</strong> committee and all its member assignments.
-                  Expenses and events will remain but will be unlinked.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-                  {isPending ? "Deleting..." : "Delete"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {canManage && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Committee?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete the <strong>{committee.name}</strong> committee and all its member assignments.
+                    Expenses and events will remain but will be unlinked.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                    {isPending ? "Deleting..." : "Delete"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4">
@@ -133,7 +135,7 @@ export function CommitteeCard({ committee }: { committee: Committee }) {
             {memberCount} members
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/committees/${committee.id}`}>Open</Link>
+            <Link href={`/occupant/committees/${committee.id}`}>Open</Link>
           </Button>
         </div>
       </CardContent>

@@ -2,9 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 function getSafeNextPath(value: string | null) {
-  if (!value) return "/home";
-  if (!value.startsWith("/")) return "/home";
-  if (value.startsWith("//")) return "/home";
+  if (!value) return "/";
+  if (!value.startsWith("/")) return "/";
+  if (value.startsWith("//")) return "/";
   return value;
 }
 

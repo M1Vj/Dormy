@@ -28,13 +28,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +47,6 @@ export function AddMemberDialog({
   const [open, setOpen] = useState(false);
   const [occupantOpen, setOccupantOpen] = useState(false);
   const [selectedOccupant, setSelectedOccupant] = useState<Occupant | null>(null);
-  const [role, setRole] = useState<CommitteeMemberRole>("member");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -62,10 +54,9 @@ export function AddMemberDialog({
     if (!selectedOccupant?.user_id) return;
 
     startTransition(async () => {
-      await addCommitteeMember(committeeId, selectedOccupant.user_id!, role);
+      await addCommitteeMember(committeeId, selectedOccupant.user_id!, "member");
       setOpen(false);
       setSelectedOccupant(null);
-      setRole("member");
       router.refresh();
     });
   };
@@ -133,22 +124,6 @@ export function AddMemberDialog({
                 </Command>
               </PopoverContent>
             </Popover>
-          </div>
-          <div className="grid gap-2">
-            <Label>Role</Label>
-            <Select
-              value={role}
-              onValueChange={(val) => setRole(val as CommitteeMemberRole)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="co-head">Co-Head</SelectItem>
-                <SelectItem value="head">Head</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
         <div className="flex justify-end gap-2">

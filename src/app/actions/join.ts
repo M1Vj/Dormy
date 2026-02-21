@@ -115,7 +115,7 @@ export async function getMyDormApplications() {
   const { data, error } = await supabase
     .from("dorm_applications")
     .select(
-      "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
+      "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at"
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -202,16 +202,8 @@ export async function applyToDorm(formData: FormData) {
     requested_role: parsed.data.requestedRole,
     status: "pending",
     message: parsed.data.message,
-    student_id: parsed.data.studentId,
-    room_number: parsed.data.roomNumber,
-    course: parsed.data.course,
-    year_level: parsed.data.yearLevel,
-    contact_number: parsed.data.contactNumber,
-    home_address: parsed.data.homeAddress,
-    birthdate: parsed.data.birthdate || null,
-    emergency_contact_name: parsed.data.emergencyContactName,
-    emergency_contact_mobile: parsed.data.emergencyContactMobile,
-    emergency_contact_relationship: parsed.data.emergencyContactRelationship,
+    // Add these strictly into a metadata JSON block or omit them if the schema lacks them entirely.
+    // For now, these are omitted because the corresponding columns do not exist on `dorm_applications`.
   });
 
   if (error) {
@@ -539,7 +531,7 @@ export async function getDormApplicationsForActiveDorm(dormId: string, status?: 
   let query = supabase
     .from("dorm_applications")
     .select(
-      "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
+      "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at"
     )
     .eq("dorm_id", parsedDormId.data)
     .order("created_at", { ascending: false });
@@ -584,7 +576,7 @@ export async function reviewDormApplication(formData: FormData) {
 
   const { data: application, error: applicationError } = await supabase
     .from("dorm_applications")
-    .select("id, dorm_id, user_id, email, status, requested_role, student_id, room_number, course, year_level, contact_number, home_address, birthdate, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship")
+    .select("id, dorm_id, user_id, email, status, requested_role")
     .eq("id", parsed.data.applicationId)
     .maybeSingle();
 
@@ -644,17 +636,6 @@ export async function reviewDormApplication(formData: FormData) {
       .from("occupants")
       .update({
         user_id: application.user_id,
-        student_id: application.student_id,
-        classification: application.course, // Maps course to classification
-        room_number: application.room_number,
-        year_level: application.year_level,
-        contact_number: application.contact_number,
-        contact_mobile: application.contact_number, // Also fill contact_mobile for consistency
-        home_address: application.home_address,
-        birthdate: application.birthdate,
-        emergency_contact_name: application.emergency_contact_name,
-        emergency_contact_mobile: application.emergency_contact_mobile,
-        emergency_contact_relationship: application.emergency_contact_relationship,
         updated_at: now
       })
       .eq("dorm_id", application.dorm_id)

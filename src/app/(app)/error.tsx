@@ -42,8 +42,8 @@ export default function AppError({
             <Button type="button" onClick={reset} className="sm:w-auto">
               Try again
             </Button>
-            <Button asChild type="button" variant="outline" className="sm:w-auto">
-              <Link href="/home">Back to Home</Link>
+            <Button variant="outline" asChild>
+              <Link href="/">Back to Home</Link>
             </Button>
           </div>
         </CardContent>

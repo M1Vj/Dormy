@@ -14,6 +14,7 @@ const submitExpenseSchema = z.object({
   description: z.string().optional(),
   amount_pesos: z.coerce.number().positive("Amount must be positive"),
   purchased_at: z.string().min(1, "Purchase date is required"),
+  category: z.enum(["maintenance_fee", "contributions"]),
 });
 
 /**
@@ -32,17 +33,19 @@ export async function submitExpense(dormId: string, formData: FormData) {
   const committeeId = committeeIdInput ? committeeIdInput : null;
 
   // Verify officer/treasurer role
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
-  const staffSubmitRoles = new Set(["admin", "treasurer", "officer"]);
-  const isStaffSubmitter = Boolean(membership && staffSubmitRoles.has(membership.role));
+  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser"]);
+  const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
 
-  if (!membership) {
+  if (!memberships || memberships.length === 0) {
     return { error: "No dorm membership found for this account." };
   }
 
@@ -95,6 +98,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
     description: formData.get("description") || undefined,
     amount_pesos: formData.get("amount_pesos"),
     purchased_at: formData.get("purchased_at"),
+    category: formData.get("category"),
   });
 
   if (!parsed.success) {
@@ -138,6 +142,7 @@ export async function submitExpense(dormId: string, formData: FormData) {
       amount_pesos: parsed.data.amount_pesos,
       purchased_at: parsed.data.purchased_at,
       receipt_storage_path: receiptPath,
+      category: parsed.data.category,
       status: "pending",
     })
     .select("id")
@@ -187,17 +192,14 @@ export async function reviewExpense(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
+  const roles = memberships?.map(m => m.role) ?? [];
 
-  if (
-    !membership ||
-    !new Set(["admin", "treasurer"]).has(membership.role)
-  ) {
+  if (!roles.some(r => new Set(["admin", "treasurer"]).has(r))) {
     return { error: "Only treasurer or admin can approve expenses." };
   }
 
@@ -255,7 +257,7 @@ export async function reviewExpense(
  */
 export async function getExpenses(
   dormId: string,
-  opts: { status?: string } = {}
+  opts: { status?: string; category?: string } = {}
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase is not configured." };
@@ -274,6 +276,10 @@ export async function getExpenses(
 
   if (opts.status && opts.status !== "all") {
     query = query.eq("status", opts.status);
+  }
+
+  if (opts.category && opts.category !== "all") {
+    query = query.eq("category", opts.category);
   }
 
   const { data, error } = await query;

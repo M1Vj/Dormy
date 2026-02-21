@@ -148,8 +148,8 @@ function CreateRuleDialog({ dormId }: { dormId: string }) {
             <p className="text-sm text-primary">Rule added successfully.</p>
           ) : null}
           <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : "Add rule"}
+            <Button type="submit" isLoading={isPending}>
+              Add rule
             </Button>
           </SheetFooter>
         </form>
@@ -264,7 +264,7 @@ function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
                 min="0"
                 defaultValue={
                   rule.default_points !== null &&
-                  rule.default_points !== undefined
+                    rule.default_points !== undefined
                     ? String(rule.default_points)
                     : "0"
                 }
@@ -279,8 +279,8 @@ function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
             <p className="text-sm text-primary">Rule updated.</p>
           ) : null}
           <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : "Save changes"}
+            <Button type="submit" isLoading={isPending}>
+              Save changes
             </Button>
           </SheetFooter>
         </form>

@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
-import { EventPayableDialog } from "@/components/finance/event-payable-dialog";
+import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { PublicShareDialog } from "@/components/finance/public-share-dialog";
@@ -146,15 +146,14 @@ export default async function EventDetailsPage({
     return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = membership?.role ?? null;
-  if (!role || !new Set(["admin", "treasurer"]).has(role)) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
+  if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
         You do not have access to this page.
@@ -187,7 +186,7 @@ export default async function EventDetailsPage({
         .from("ledger_entries")
         .select("occupant_id, amount_pesos, metadata")
         .eq("dorm_id", dormId)
-        .eq("ledger", "treasurer_events")
+        .eq("ledger", "contributions")
         .eq("event_id", eventId)
         .is("voided_at", null),
     ]);
@@ -302,10 +301,10 @@ export default async function EventDetailsPage({
             entityType="event"
             title={event.title}
           />
-          <EventPayableDialog
+          <ContributionBatchDialog
             dormId={dormId}
             eventId={eventId}
-            trigger={<Button>Create payable event</Button>}
+            trigger={<Button>Create contribution</Button>}
           />
         </div>
       </div>
@@ -443,7 +442,7 @@ export default async function EventDetailsPage({
                     <PaymentDialog
                       dormId={dormId}
                       occupantId={occupant.id}
-                      category="treasurer_events"
+                      category="contributions"
                       eventId={eventId}
                       eventTitle={event.title}
                       trigger={
@@ -504,7 +503,7 @@ export default async function EventDetailsPage({
                       <PaymentDialog
                         dormId={dormId}
                         occupantId={occupant.id}
-                        category="treasurer_events"
+                        category="contributions"
                         eventId={eventId}
                         eventTitle={event.title}
                         trigger={

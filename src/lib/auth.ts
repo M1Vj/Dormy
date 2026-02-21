@@ -5,7 +5,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export type AppRole =
   | "admin"
   | "adviser"
-  | "assistant_adviser"
   | "student_assistant"
   | "treasurer"
   | "occupant"

@@ -8,7 +8,7 @@ import { logAuditEvent } from "@/lib/audit/log";
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
-  category: z.enum(['adviser_maintenance', 'sa_fines', 'treasurer_events'] as const),
+  category: z.enum(['maintenance_fee', 'sa_fines', 'contributions'] as const),
   amount: z.number().positive(),
   entry_type: z.enum(['charge', 'payment', 'adjustment', 'refund'] as const),
   method: z.string().optional(),
@@ -21,24 +21,25 @@ const transactionSchema = z.object({
       enabled: z.boolean().default(true),
       subject: z.string().trim().min(1).max(140).optional(),
       message: z.string().trim().max(2000).optional(),
+      signature: z.string().trim().max(100).optional(),
     })
     .optional(),
 });
 
 type TransactionData = z.infer<typeof transactionSchema>;
-export type LedgerCategory = 'adviser_maintenance' | 'sa_fines' | 'treasurer_events';
+export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions';
 
 const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
-  adviser_maintenance: ["admin", "adviser", "assistant_adviser"],
-  sa_fines: ["admin", "student_assistant", "adviser", "assistant_adviser"],
-  treasurer_events: ["admin", "treasurer"],
+  maintenance_fee: ["admin", "adviser"],
+  sa_fines: ["admin", "student_assistant", "adviser"],
+  contributions: ["admin", "treasurer"],
 };
 
-const eventPayableBatchSchema = z.object({
-  event_id: z.string().uuid(),
+const contributionBatchSchema = z.object({
   amount: z.number().positive(),
   description: z.string().trim().min(2).max(200),
   deadline: z.string().datetime().nullable(),
+  event_id: z.string().uuid().optional().nullable(),
   include_already_charged: z.boolean().default(false),
 });
 
@@ -172,7 +173,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
       }
 
       const ledgerLabel =
-        tx.category === "adviser_maintenance"
+        tx.category === "maintenance_fee"
           ? "Maintenance"
           : tx.category === "sa_fines"
             ? "Fines"
@@ -200,6 +201,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         eventTitle,
         customMessage: receiptConfig?.message?.trim() || null,
         subjectOverride: receiptConfig?.subject?.trim() || null,
+        signatureOverride: receiptConfig?.signature?.trim() || null,
       });
 
       const result = await sendEmail({
@@ -381,21 +383,21 @@ export async function overwriteLedgerEntry(
   };
 }
 
-export async function createEventPayableBatch(
+export async function createContributionBatch(
   dormId: string,
   payload: {
-    event_id: string;
     amount: number;
     description: string;
     deadline?: string | null;
+    event_id?: string | null;
     include_already_charged?: boolean;
   }
 ) {
-  const parsed = eventPayableBatchSchema.safeParse({
-    event_id: payload.event_id,
+  const parsed = contributionBatchSchema.safeParse({
     amount: payload.amount,
     description: payload.description,
     deadline: payload.deadline ?? null,
+    event_id: payload.event_id ?? null,
     include_already_charged: payload.include_already_charged ?? false,
   });
 
@@ -433,16 +435,20 @@ export async function createEventPayableBatch(
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
-  const { data: event, error: eventError } = await supabase
-    .from("events")
-    .select("id, title")
-    .eq("id", parsed.data.event_id)
-    .eq("dorm_id", dormId)
-    .eq("semester_id", semesterResult.semesterId)
-    .maybeSingle();
+  let eventTitle: string | null = null;
+  if (parsed.data.event_id) {
+    const { data: event, error: eventError } = await supabase
+      .from("events")
+      .select("id, title")
+      .eq("id", parsed.data.event_id)
+      .eq("dorm_id", dormId)
+      .eq("semester_id", semesterResult.semesterId)
+      .maybeSingle();
 
-  if (eventError || !event) {
-    return { error: "Event not found for this dorm." };
+    if (eventError || !event) {
+      return { error: "Event not found for this dorm." };
+    }
+    eventTitle = event.title;
   }
 
   const { data: occupants, error: occupantsError } = await supabase
@@ -462,12 +468,12 @@ export async function createEventPayableBatch(
   const activeOccupantIds = occupants.map((occupant) => occupant.id);
   let targetOccupantIds = activeOccupantIds;
 
-  if (!parsed.data.include_already_charged) {
+  if (!parsed.data.include_already_charged && parsed.data.event_id) {
     const { data: existingCharges, error: chargesError } = await supabase
       .from("ledger_entries")
       .select("occupant_id")
       .eq("dorm_id", dormId)
-      .eq("ledger", "treasurer_events")
+      .eq("ledger", "contributions")
       .eq("entry_type", "charge")
       .eq("event_id", parsed.data.event_id)
       .is("voided_at", null)
@@ -501,10 +507,10 @@ export async function createEventPayableBatch(
   const { error: insertError } = await supabase.from("ledger_entries").insert(
     targetOccupantIds.map((occupantId) => ({
       dorm_id: dormId,
-      ledger: "treasurer_events",
+      ledger: "contributions",
       entry_type: "charge",
       occupant_id: occupantId,
-      event_id: parsed.data.event_id,
+      event_id: parsed.data.event_id || null,
       amount_pesos: Math.abs(parsed.data.amount),
       method: "manual_charge",
       note: parsed.data.description,
@@ -525,11 +531,12 @@ export async function createEventPayableBatch(
     await logAuditEvent({
       dormId,
       actorUserId: user.id,
-      action: "finance.event_payable_created",
-      entityType: "event",
-      entityId: parsed.data.event_id,
+      action: "finance.contribution_batch_created",
+      entityType: "finance",
+      entityId: batchId,
       metadata: {
-        event_title: event.title,
+        event_id: parsed.data.event_id || null,
+        event_title: eventTitle,
         amount_pesos: Math.abs(parsed.data.amount),
         description: parsed.data.description,
         deadline: deadlineIso,
@@ -538,11 +545,134 @@ export async function createEventPayableBatch(
       },
     });
   } catch (auditError) {
-    console.error("Failed to write audit event for payable event creation:", auditError);
+    console.error("Failed to write audit event for contribution batch creation:", auditError);
   }
 
   revalidatePath("/admin/finance/events");
-  revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+  if (parsed.data.event_id) {
+    revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+  }
+  revalidatePath("/payments");
+
+  return {
+    success: true,
+    chargedCount: targetOccupantIds.length,
+  };
+}
+
+export async function createMaintenanceBatch(
+  dormId: string,
+  payload: {
+    amount: number;
+    description: string;
+    deadline?: string | null;
+  }
+) {
+  // We can reuse the same schema logic as contribution
+  const parsed = contributionBatchSchema.safeParse({
+    amount: payload.amount,
+    description: payload.description,
+    deadline: payload.deadline ?? null,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid maintenance charge input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  // Allowed roles for maintenance fee bulk charge
+  if (!new Set(["admin", "adviser"]).has(membership.role)) {
+    return { error: "Only admins and advisers can create maintenance charges." };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
+  const { data: occupants, error: occupantsError } = await supabase
+    .from("occupants")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("status", "active");
+
+  if (occupantsError) {
+    return { error: occupantsError.message };
+  }
+
+  if (!occupants?.length) {
+    return { error: "No active occupants found to charge." };
+  }
+
+  const targetOccupantIds = occupants.map((occupant) => occupant.id);
+
+  const batchId = crypto.randomUUID();
+  const deadlineIso = parsed.data.deadline
+    ? new Date(parsed.data.deadline).toISOString()
+    : null;
+
+  const { error: insertError } = await supabase.from("ledger_entries").insert(
+    targetOccupantIds.map((occupantId) => ({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      ledger: "maintenance_fee",
+      entry_type: "charge",
+      occupant_id: occupantId,
+      amount_pesos: Math.abs(parsed.data.amount),
+      method: "manual_charge",
+      note: parsed.data.description,
+      metadata: {
+        payable_batch_id: batchId,
+        payable_deadline: deadlineIso,
+        payable_label: parsed.data.description,
+      },
+      created_by: user.id,
+    }))
+  );
+
+  if (insertError) {
+    return { error: insertError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.maintenance_batch_created",
+      entityType: "finance",
+      entityId: batchId,
+      metadata: {
+        amount_pesos: Math.abs(parsed.data.amount),
+        description: parsed.data.description,
+        deadline: deadlineIso,
+        charged_count: targetOccupantIds.length,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for maintenance batch creation:", auditError);
+  }
+
+  revalidatePath("/admin/finance/maintenance");
   revalidatePath("/payments");
 
   return {
@@ -578,9 +708,9 @@ export async function getLedgerBalance(dormId: string, occupantId: string) {
 
   data.forEach(entry => {
     const amount = Number(entry.amount_pesos);
-    if (entry.ledger === 'adviser_maintenance') balances.maintenance += amount;
+    if (entry.ledger === 'maintenance_fee') balances.maintenance += amount;
     if (entry.ledger === 'sa_fines') balances.fines += amount;
-    if (entry.ledger === 'treasurer_events') balances.events += amount;
+    if (entry.ledger === 'contributions') balances.events += amount;
     balances.total += amount;
   });
 
