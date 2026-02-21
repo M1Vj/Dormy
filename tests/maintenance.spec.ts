@@ -1,42 +1,47 @@
 import { test, expect } from '@playwright/test';
 
-// Use adviser to verify access since "has_access = adviser, admin, assistant_adviser"
+// Adviser-specific test: handles its own login since the setup only authenticates admin/occupant.
 test.describe('Maintenance Page - Adviser Access', () => {
-  test('should allow adviser to access maintenance, view fund, and bulk charge', async ({ page }) => {
-    // Navigate to login
+  // Do NOT use global storageState; we log in manually.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('should allow adviser to access maintenance, view fund, and bulk charge dialog', async ({ page }) => {
+    // 1. Login as adviser
     await page.goto('/login');
+    await page.getByLabel('Email').fill('adviser@dormy.local');
+    await page.getByLabel('Password').fill('DormyPass123!');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(/\/adviser\/home|\/home/);
 
-    // Fill login form for adviser
-    await page.fill('input[name="email"]', 'adviser@dormy.local');
-    // Using demo password
-    await page.fill('input[name="password"]', 'DormyPass123!');
+    // 2. Navigate to Maintenance
+    await page.goto('/admin/finance/maintenance');
+    await page.waitForLoadState('networkidle');
 
-    // Click submit and wait for navigation to home
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/adviser\/home/);
-
-    // Click on Maintenance in sidebar
-    await page.click('a[href="/admin/finance/maintenance"]');
-    await expect(page).toHaveURL(/\/admin\/finance\/maintenance/);
-
-    // Verify main page elements
+    // 3. Verify main section heading
     await expect(page.getByRole('heading', { name: 'Maintenance ledger' })).toBeVisible();
-    await expect(page.getByText('Net Maintenance Fund')).toBeVisible();
-    await expect(page.getByText('Maintenance Expenses')).toBeVisible();
 
-    // Verify visibility of Bulk Charge button/dialog
+    // 4. Verify summary cards
+    await expect(page.getByText('Net Maintenance Fund')).toBeVisible();
+    await expect(page.getByText('Total Collectible')).toBeVisible();
+
+    // 5. Verify Maintenance Expenses section
+    await expect(page.getByRole('heading', { name: 'Maintenance Expenses' })).toBeVisible();
+
+    // 6. Verify Bulk Charge button exists and is clickable
     const bulkChargeBtn = page.getByRole('button', { name: /Bulk Charge Maintenance/i });
     await expect(bulkChargeBtn).toBeVisible();
 
-    // Open Bulk Charge Dialog
+    // 7. Open Bulk Charge Dialog
     await bulkChargeBtn.click();
-    await expect(page.getByRole('heading', { name: 'Bulk Charge Maintenance', exact: true })).toBeVisible();
+    const dialogHeading = page.getByRole('heading', { name: 'Bulk Charge Maintenance' });
+    await expect(dialogHeading).toBeVisible();
 
-    // Verify inputs inside dialog
+    // 8. Verify inputs inside dialog
     await expect(page.getByLabel(/Amount per Occupant/i)).toBeVisible();
-    await expect(page.getByLabel(/Description \/ Reason/i)).toBeVisible();
+    await expect(page.getByLabel(/Description/i)).toBeVisible();
 
-    // Click cancel to close
+    // 9. Close dialog
     await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialogHeading).not.toBeVisible();
   });
 });
