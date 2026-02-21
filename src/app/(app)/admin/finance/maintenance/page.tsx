@@ -5,6 +5,7 @@ import { ChargeDialog } from "@/components/finance/charge-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { MaintenanceBulkChargeDialog } from "@/components/finance/maintenance-bulk-charge-dialog";
+import { MaintenanceExpenseDialog } from "@/components/finance/maintenance-expense-dialog";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { getExpenses } from "@/app/actions/expenses";
 import { Button } from "@/components/ui/button";
@@ -383,11 +384,16 @@ export default async function MaintenancePage({
       </div>
 
       <div className="mt-8 space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Maintenance Expenses</h2>
-          <p className="text-sm text-muted-foreground">
-            Approved expenses deducted from the maintenance fund.
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Maintenance Expenses</h2>
+            <p className="text-sm text-muted-foreground">
+              Approved expenses deducted from the maintenance fund.
+            </p>
+          </div>
+          {roles.some(r => new Set(["admin", "adviser", "officer"]).has(r)) && (
+            <MaintenanceExpenseDialog dormId={activeDormId} />
+          )}
         </div>
 
         <div className="hidden rounded-md border md:block">
