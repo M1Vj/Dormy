@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getUserRolesAllDorms } from "@/lib/access";
 
-export default async function AdminLayout({
+const ALLOWED_ROLES = new Set(["adviser", "admin"]);
+
+export default async function AdviserLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -17,21 +20,10 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["admin", "student_assistant", "adviser"])
-    // ^ Admitting multiple high-tier roles here if needed, or strictly "admin"
-    // Wait, since admin/rooms is for admins, let's keep it mostly strict or check the specific roles allowed
-    // Actually, "student_assistant" might need access to fines, wait - SA will have student_assistant/fines
-    // Let's just strictly enforce "admin" for now, or maybe the existing pages within already enforce it?
-    // Let's just check if ANY membership exists for now to avoid breaking existing complex RBAC inside pages
-    .limit(1)
-    .maybeSingle();
+  const memberships = await getUserRolesAllDorms(supabase, user.id);
+  const hasAccess = memberships.some((m) => ALLOWED_ROLES.has(m.role));
 
-  if (!membership) {
-    // strict check failed, redirect them to settings where they can see their roles
+  if (!hasAccess) {
     redirect("/settings");
   }
 

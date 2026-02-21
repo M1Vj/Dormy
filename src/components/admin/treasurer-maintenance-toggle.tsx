@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { updateDormAttributes } from "@/app/actions/dorm";
+import { toggleTreasurerMaintenanceAccess } from "@/app/actions/dorm";
 
 export function TreasurerMaintenanceToggle({
   dormId,
@@ -20,9 +20,7 @@ export function TreasurerMaintenanceToggle({
     setEnabled(checked);
     setLoading(true);
 
-    const result = await updateDormAttributes(dormId, {
-      treasurer_maintenance_access: checked
-    });
+    const result = await toggleTreasurerMaintenanceAccess(dormId, checked);
 
     if (result.error) {
       toast.error(result.error);

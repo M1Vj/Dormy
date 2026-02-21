@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getUserRolesAllDorms } from "@/lib/access";
 
 const ALLOWED_ROLES = new Set(["admin", "adviser", "student_assistant", "treasurer", "officer"]);
 
@@ -19,16 +20,12 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", Array.from(ALLOWED_ROLES))
-    .limit(1)
-    .maybeSingle();
+  // Check across ALL dorms — the middleware and pages handle active-dorm scoping.
+  // Never redirect to /join here — middleware already handles dorm_id cookie setup.
+  const memberships = await getUserRolesAllDorms(supabase, user.id);
+  const hasAccess = memberships.some((m) => ALLOWED_ROLES.has(m.role));
 
-  if (!membership) {
-    // strict check failed, redirect them to settings where they can see their roles
+  if (!hasAccess) {
     redirect("/settings");
   }
 

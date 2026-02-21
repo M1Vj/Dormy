@@ -30,7 +30,7 @@ export function LoginForm() {
     setOauthLoading(true);
     try {
       const currentUrl = new URL(window.location.href);
-      const nextPath = currentUrl.searchParams.get("next") || "/home";
+      const nextPath = currentUrl.searchParams.get("next") || "/";
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
 
       const { error } = await supabase.auth.signInWithOAuth({

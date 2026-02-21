@@ -50,8 +50,8 @@ export default async function Page() {
 
   let dormAttributes: Record<string, unknown> = {};
   if (activeDormId) {
-    const { data } = await supabase.from("dorms").select("attributes").eq("id", activeDormId).single();
-    dormAttributes = data?.attributes || {};
+    const { data } = await supabase.from("dorms").select("treasurer_maintenance_access").eq("id", activeDormId).single();
+    dormAttributes = data || {};
   }
 
   return (

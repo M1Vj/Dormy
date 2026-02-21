@@ -14,18 +14,19 @@ export default async function FinanceDashboard() {
   const dormId = await getActiveDormId()
   if (!dormId) return null
 
-  const [{ data: membership }, { data: dormData }] = await Promise.all([
-    supabase.from("dorm_memberships").select("role").eq("dorm_id", dormId).eq("user_id", user.id).maybeSingle(),
+  const [{ data: memberships }, { data: dormData }] = await Promise.all([
+    supabase.from("dorm_memberships").select("role").eq("dorm_id", dormId).eq("user_id", user.id),
     supabase.from("dorms").select("attributes").eq("id", dormId).single()
   ])
 
-  const role = membership?.role ?? ""
-  const allowTreasurerMaintenance = dormData?.attributes?.treasurer_maintenance_access === true
+  const roles = memberships?.map(m => m.role) ?? []
+  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {}
+  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true
 
-  const canViewMaintenance = new Set(["admin", "adviser", "student_assistant"]).has(role) ||
-    (allowTreasurerMaintenance && new Set(["treasurer", "officer"]).has(role))
-  const canViewEvents = new Set(["admin", "treasurer"]).has(role)
-  const canViewExpenses = new Set(["admin", "treasurer", "officer", "adviser"]).has(role)
+  const canViewMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r)) ||
+    (allowTreasurerMaintenance && roles.some(r => new Set(["treasurer", "officer"]).has(r)))
+  const canViewEvents = roles.some(r => new Set(["admin", "treasurer"]).has(r))
+  const canViewExpenses = roles.some(r => new Set(["admin", "treasurer", "officer", "adviser"]).has(r))
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -46,8 +47,8 @@ export default async function FinanceDashboard() {
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Calendar className="h-8 w-8 text-orange-500 mb-2" />
-              <CardTitle>Events</CardTitle>
-              <CardDescription>Track events budgeting and ledgers</CardDescription>
+              <CardTitle>Contributions</CardTitle>
+              <CardDescription>Track contribution budgeting and ledgers</CardDescription>
             </CardHeader>
           </Card>
         </Link>

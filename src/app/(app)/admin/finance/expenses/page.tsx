@@ -54,12 +54,11 @@ export default async function ExpensesPage({
     );
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
   const { data: dormData } = await supabase
     .from("dorms")
@@ -67,15 +66,15 @@ export default async function ExpensesPage({
     .eq("id", dormId)
     .single();
 
-  const role = membership?.role ?? "";
+  const roles = memberships?.map(m => m.role) ?? [];
   const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {};
   const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true;
-  const canSubmit = new Set(["admin", "treasurer", "officer"]).has(role);
-  const canReview = new Set(["admin", "treasurer"]).has(role);
+  const canSubmit = roles.some(r => new Set(["admin", "treasurer", "officer"]).has(r));
+  const canReview = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
-  const showMaintenanceTab = new Set(["admin", "adviser", "student_assistant"]).has(role) ||
-    (allowTreasurerMaintenance && new Set(["treasurer", "officer"]).has(role));
-  const showContributionsTab = new Set(["admin", "adviser", "treasurer"]).has(role);
+  const showMaintenanceTab = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r)) ||
+    (allowTreasurerMaintenance && roles.some(r => new Set(["treasurer", "officer"]).has(r)));
+  const showContributionsTab = roles.some(r => new Set(["admin", "adviser", "treasurer"]).has(r));
 
   const canView = showMaintenanceTab || showContributionsTab;
 
