@@ -98,6 +98,7 @@ export function AppSidebar() {
         { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
         { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
         { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
         { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
       ];
     } else {
