@@ -35,10 +35,10 @@ test.describe('Admin Fines Management', () => {
   });
 });
 
-test.describe('Admin Events', () => {
-  test('should load events finance page', async ({ page }) => {
-    await page.goto('/admin/finance/events');
-    await expect(page.getByText('Events ledger')).toBeVisible();
+test.describe('Admin Finance', () => {
+  test('should load finance page', async ({ page }) => {
+    await page.goto('/admin/finance');
+    await expect(page.getByText('Contributions')).toBeVisible();
   });
 });
 

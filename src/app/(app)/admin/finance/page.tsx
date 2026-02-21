@@ -46,8 +46,8 @@ export default async function FinanceDashboard() {
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Calendar className="h-8 w-8 text-orange-500 mb-2" />
-              <CardTitle>Events</CardTitle>
-              <CardDescription>Track events budgeting and ledgers</CardDescription>
+              <CardTitle>Contributions</CardTitle>
+              <CardDescription>Track contribution budgeting and ledgers</CardDescription>
             </CardHeader>
           </Card>
         </Link>
