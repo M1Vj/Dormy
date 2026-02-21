@@ -53,6 +53,11 @@ export async function middleware(req: NextRequest) {
     return redirect(redirectUrl);
   }
 
+  /**
+   * Fetch the user's first membership safely — never uses .maybeSingle() so
+   * multi-role users (who have multiple rows) don't get an error that resolves
+   * to null, which previously caused spurious /join redirects.
+   */
   const getFirstMembership = async (): Promise<{
     role: string;
     dorm_id: string;
@@ -123,6 +128,42 @@ export async function middleware(req: NextRequest) {
     redirectUrl.pathname = `/${targetRole}/home`;
     redirectUrl.search = "";
     return redirect(redirectUrl);
+  }
+
+  // Globally ensure `dorm_id` is set for all valid application routes if missing
+  if (
+    user &&
+    !pathname.startsWith("/_next") &&
+    !pathname.startsWith("/api") &&
+    !isLoginRoute &&
+    !isJoinRoute
+  ) {
+    if (!req.cookies.has("dorm_id")) {
+      const { data } = await supabase
+        .from("dorm_memberships")
+        .select("dorm_id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      const dormId = data?.[0]?.dorm_id ?? null;
+
+      if (dormId) {
+        res.cookies.set("dorm_id", dormId, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+        });
+        // Force an immediate redirect to the same URL so Server Components
+        // will receive the newly baked `dorm_id` within `next/headers` cookies().
+        return redirect(req.nextUrl.clone());
+      } else {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/join";
+        redirectUrl.search = "";
+        return redirect(redirectUrl);
+      }
+    }
   }
 
   return res;
