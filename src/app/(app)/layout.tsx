@@ -18,9 +18,6 @@ export default async function AppLayout({
 }) {
   const dorms = await getUserDorms()
 
-  if (dorms.length === 0) {
-    redirect("/join")
-  }
   const activeDormId = await getActiveDormId()
   const initialDormId =
     dorms.find((dorm) => dorm.id === activeDormId)?.id ??

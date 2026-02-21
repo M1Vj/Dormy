@@ -277,14 +277,16 @@ for (const account of demoAccounts) {
   }
 
   try {
-    const membershipResult = await ensureMembership({
-      dormId: dorm.id,
-      userId: ensuredUserId,
-      desiredRole,
-    });
+    if (desiredRole !== "admin") {
+      const membershipResult = await ensureMembership({
+        dormId: dorm.id,
+        userId: ensuredUserId,
+        desiredRole,
+      });
 
-    if (membershipResult.status === "created") createdMemberships += 1;
-    if (membershipResult.status === "updated") updatedMemberships += 1;
+      if (membershipResult.status === "created") createdMemberships += 1;
+      if (membershipResult.status === "updated") updatedMemberships += 1;
+    }
   } catch (error) {
     console.log(`failed: ${email} (membership ${error?.message ?? String(error)})`);
   }
