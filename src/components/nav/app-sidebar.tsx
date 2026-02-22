@@ -66,10 +66,10 @@ export function AppSidebar() {
         ...base,
         { title: "Committees", url: `/${role}/committees`, icon: Users, color: "text-violet-500" },
         { title: "Fines", url: `/${role}/fines`, icon: FileText, color: "text-rose-500" },
-        { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
-        { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
+        { title: "Payments", url: `/${role}/payments`, icon: Wallet, color: "text-amber-500" },
+        { title: "Cleaning", url: `/${role}/cleaning`, icon: Calendar, color: "text-lime-500" },
         { title: "Evaluation", url: "/occupant/evaluation", icon: Shield, color: "text-cyan-500" },
-        { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Events", url: `/${role}/events`, icon: Calendar, color: "text-orange-500" },
         { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
       ];
     } else if (role === "admin") {
@@ -91,7 +91,7 @@ export function AppSidebar() {
         { title: "Occupants", url: `/${role}/occupants`, icon: Users, color: "text-emerald-500" },
         { title: "Rooms", url: `/${role}/rooms`, icon: DoorOpen, color: "text-teal-500" },
         { title: "Fines", url: `/${role}/fines`, icon: FileText, color: "text-rose-500" },
-        { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
+        { title: "Cleaning", url: `/${role}/cleaning`, icon: Calendar, color: "text-lime-500" },
         { title: "Maintenance", url: `/${role}/finance/maintenance`, icon: Wrench, color: "text-blue-500" },
         { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
         { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" },
@@ -99,7 +99,7 @@ export function AppSidebar() {
     } else if (role === "treasurer") {
       const items = [
         ...base,
-        { title: "Payments", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
+        { title: "Payments", url: `/${role}/payments`, icon: Wallet, color: "text-amber-500" },
         { title: "Dorm Finance", url: `/${role}/finance`, icon: Wallet, color: "text-emerald-500" },
       ];
       if (treasurerAccess) {
@@ -125,7 +125,7 @@ export function AppSidebar() {
       // Fallback for officer, etc.
       const items = [
         ...base,
-        { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+        { title: "Events", url: `/${role}/events`, icon: Calendar, color: "text-orange-500" },
         { title: "Expenses", url: `/${role}/finance/expenses`, icon: Receipt, color: "text-green-500" },
       ];
       if (treasurerAccess) {
