@@ -223,6 +223,37 @@ export async function updateDormAttributes(dormId: string, updates: Record<strin
   return { success: true };
 }
 
+export async function getTreasurerMaintenanceAccess(dormId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!membership) {
+    return { error: "You do not have access to this dorm." };
+  }
+
+  const { data: dorm, error } = await supabase
+    .from("dorms")
+    .select("treasurer_maintenance_access")
+    .eq("id", dormId)
+    .maybeSingle();
+
+  if (error || !dorm) {
+    return { error: error?.message ?? "Dorm not found" };
+  }
+
+  return { access: !!dorm.treasurer_maintenance_access };
+}
+
 export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: boolean) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase not configured." };

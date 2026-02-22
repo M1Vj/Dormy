@@ -44,7 +44,7 @@ export function AppSidebar() {
     async function checkAccess() {
       if (dormId && (role === "treasurer" || role === "officer")) {
         const result = await getTreasurerMaintenanceAccess(dormId);
-        if (!result.error) {
+        if (!result.error && result.access !== undefined) {
           setTreasurerAccess(result.access);
         }
       }
