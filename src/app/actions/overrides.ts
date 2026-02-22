@@ -789,7 +789,9 @@ export async function overrideEventPayableDeadline(
   }
 
   const previousDeadlines = new Set<string>();
-  for (const entry of entries) {
+  const now = new Date().toISOString();
+
+  const updatePromises = (entries ?? []).map(async (entry) => {
     const metadata =
       entry.metadata && typeof entry.metadata === "object"
         ? (entry.metadata as Record<string, unknown>)
@@ -802,22 +804,24 @@ export async function overrideEventPayableDeadline(
     const nextMetadata: Record<string, unknown> = {
       ...metadata,
       payable_deadline: deadlineIso,
-      payable_deadline_overridden_at: new Date().toISOString(),
+      payable_deadline_overridden_at: now,
       payable_deadline_overridden_by: userId,
     };
 
-    const { error: updateError } = await supabase
+    return supabase
       .from("ledger_entries")
       .update({
         metadata: nextMetadata,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
       .eq("dorm_id", dormId)
       .eq("id", entry.id);
+  });
 
-    if (updateError) {
-      return { error: updateError.message };
-    }
+  const results = await Promise.all(updatePromises);
+  const firstError = results.find((r) => r.error);
+  if (firstError) {
+    return { error: firstError.error.message };
   }
 
   try {
