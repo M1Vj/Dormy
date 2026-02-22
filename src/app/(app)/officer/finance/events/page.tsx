@@ -200,7 +200,7 @@ export default async function EventsFinancePage({
             </Button>
             {search ? (
               <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/treasurer/finance/events">Reset</Link>
+                <Link href="/officer/finance/events">Reset</Link>
               </Button>
             ) : null}
           </form>
