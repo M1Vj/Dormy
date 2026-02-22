@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/formatters";
 
 type SearchParams = {
   search?: string | string[];
@@ -53,17 +54,6 @@ const normalizeParam = (value?: string | string[]) => {
 };
 
 const asFirst = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] : value);
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed);
-};
 
 const formatAmount = (value: number | string | null | undefined) => {
   const parsed = Number(value ?? 0);

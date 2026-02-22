@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatDate } from "@/lib/formatters";
 import {
   Sheet,
   SheetContent,
@@ -77,17 +78,6 @@ const formatNumber = (value: number | string | null | undefined) => {
   const parsed = typeof value === "number" ? value : Number(value);
   if (Number.isNaN(parsed)) return "0";
   return new Intl.NumberFormat("en-US").format(parsed);
-};
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed);
 };
 
 const getFirst = <T,>(value?: T | T[] | null) =>

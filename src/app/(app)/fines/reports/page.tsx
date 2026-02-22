@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatDateTime } from "@/lib/formatters";
 
 type DirectoryRow = {
   id: string;
@@ -32,19 +33,6 @@ type FineReportRow = {
   reviewed_at: string | null;
   created_at: string;
 };
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(parsed);
-}
 
 function statusBadge(status: FineReportRow["status"]) {
   if (status === "approved") return <Badge className="bg-emerald-600">Approved</Badge>;
@@ -182,6 +170,11 @@ export default async function FineReportsPage() {
                   <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">
                     {report.details}
                   </p>
+                  <div className="mt-3 flex justify-end">
+                    <div className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+                      Open
+                    </div>
+                  </div>
                 </Link>
               );
             })}

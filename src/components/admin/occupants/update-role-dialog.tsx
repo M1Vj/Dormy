@@ -29,6 +29,8 @@ interface UpdateRoleDialogProps {
   userId: string;
   occupantName: string;
   currentRole: AppRole;
+  triggerClassName?: string;
+  showLabel?: boolean;
 }
 
 const ROLES: AppRole[] = [
@@ -46,6 +48,8 @@ export function UpdateRoleDialog({
   userId,
   occupantName,
   currentRole,
+  triggerClassName,
+  showLabel,
 }: UpdateRoleDialogProps) {
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<AppRole>(currentRole);
@@ -71,9 +75,13 @@ export function UpdateRoleDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-          <ShieldCheck className="h-4 w-4" />
-          <span className="sr-only">Update role</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={triggerClassName ?? "h-8 w-8 p-0"}
+        >
+          <ShieldCheck className={`h-4 w-4 ${showLabel ? "mr-2" : ""}`} />
+          {showLabel ? "Update role" : <span className="sr-only">Update role</span>}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
