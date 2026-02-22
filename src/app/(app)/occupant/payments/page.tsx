@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
