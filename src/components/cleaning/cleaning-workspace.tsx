@@ -32,6 +32,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CleaningSnapshot } from "@/lib/types/cleaning";
+import { formatDate } from "@/lib/formatters";
 
 type MessageState = {
   tone: "success" | "error";
@@ -68,19 +69,6 @@ function addDays(dateInput: string, days: number) {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
   return toIsoDate(next);
-}
-
-function formatReadableDate(value: string) {
-  const date = parseDateOnly(value);
-  if (!date) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
 }
 
 export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) {
@@ -358,7 +346,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-600">
               <CalendarDays className="size-3.5" />
-              {formatReadableDate(weekStart)} to {formatReadableDate(weekEnd)}
+              {formatDate(weekStart)} to {formatDate(weekEnd)}
             </Badge>
             <Badge variant="secondary">Rest Level {restLevel}</Badge>
             <Badge variant="outline">{assignedRooms}/{eligibleRooms} assigned</Badge>
@@ -625,7 +613,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">
-                      {weekday.day_label} · {formatReadableDate(weekday.date)}
+                      {weekday.day_label} · {formatDate(weekday.date)}
                     </p>
                     {weekday.has_exception ? (
                       <Badge variant="secondary" className="gap-1">
@@ -717,7 +705,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                   {snapshot.exceptions.map((exception) => (
                     <div key={exception.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
                       <div>
-                        <p className="text-sm font-medium">{formatReadableDate(exception.date)}</p>
+                        <p className="text-sm font-medium">{formatDate(exception.date)}</p>
                         <p className="text-xs text-muted-foreground">{exception.reason ?? "No reason"}</p>
                       </div>
                       <Button

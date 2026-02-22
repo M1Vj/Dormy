@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CreateOccupantForm } from "./create-occupant-form";
 import { UpdateRoleDialog } from "./update-role-dialog";
+import { formatDate } from "@/lib/formatters";
 import { AppRole, getRoleLabel } from "@/lib/roles";
 
 type RoomRef = {
@@ -46,17 +47,6 @@ const statusOptions = [
   { value: "active", label: "Active" },
   { value: "left", label: "Left" },
 ];
-
-const formatDate = (value: string | null | undefined) => {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed);
-};
 
 const getRoomCode = (assignment?: OccupantAssignment | null) => {
   if (!assignment?.room) return null;
@@ -181,7 +171,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                     </div>
                     <div>
                       <p className="text-muted-foreground">Joined</p>
-                      <p>{formatDate(occupant.joined_at)}</p>
+                      <p>{formatDate(occupant.joined_at, "—")}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Role</p>
@@ -277,7 +267,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        {formatDate(occupant.joined_at)}
+                        {formatDate(occupant.joined_at, "—")}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EditOccupantForm } from "@/components/admin/occupants/edit-occupant-form";
+import { formatDate } from "@/lib/formatters";
 
 type RoomRef = {
   code?: string | null;
@@ -21,21 +22,6 @@ type RoomAssignment = {
   start_date?: string | null;
   end_date?: string | null;
   room?: RoomRef | RoomRef[] | null;
-};
-
-const formatDate = (value: string | null | undefined) => {
-  if (!value) return "-";
-  const raw = String(value);
-  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const parsed = ymd
-    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
-    : new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsed);
 };
 
 const getRoomRef = (assignment?: RoomAssignment | null) => {

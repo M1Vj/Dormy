@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatDateTime } from "@/lib/formatters";
 
 type OccupantRef = {
   full_name?: string | null;
@@ -51,19 +52,6 @@ type FineReportCommentRow = {
 };
 
 const first = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] : value);
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(parsed);
-}
 
 function statusBadge(status: FineReportRow["status"]) {
   if (status === "approved") return <Badge className="bg-emerald-600">Approved</Badge>;

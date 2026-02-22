@@ -7,13 +7,7 @@ import { getEventViewerContext } from "@/app/actions/events";
 import { CompetitionPrintButton } from "@/components/competition/competition-print-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-function formatDateTime(value: Date) {
-  return new Intl.DateTimeFormat("en-PH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(value);
-}
+import { formatCompetitionDateTime } from "@/lib/formatters";
 
 export default async function CompetitionPrintPage({
   params,
@@ -56,7 +50,7 @@ export default async function CompetitionPrintPage({
   }
 
   const leaderboard = [...snapshot.leaderboard].sort((a, b) => a.rank - b.rank);
-  const generatedAt = formatDateTime(new Date());
+  const generatedAt = formatCompetitionDateTime(new Date());
 
   return (
     <div className="space-y-5 print:space-y-3">
