@@ -70,7 +70,7 @@ export function AppSidebar() {
         { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
         { title: "Evaluation", url: "/occupant/evaluation", icon: Shield, color: "text-cyan-500" },
         { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
+        { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
       ];
     } else if (role === "admin") {
       return [
@@ -81,20 +81,20 @@ export function AppSidebar() {
         { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
         { title: "Finance", url: "/admin/finance", icon: Wallet, color: "text-amber-500" },
         { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
-        { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
+        { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" },
+        { title: "Settings", url: `/${role}/settings`, icon: Settings, color: "text-zinc-500" },
       ];
     } else if (role === "student_assistant") {
       return [
         ...base,
-        { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
-        { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
+        { title: "Occupants", url: `/${role}/occupants`, icon: Users, color: "text-emerald-500" },
+        { title: "Rooms", url: `/${role}/rooms`, icon: DoorOpen, color: "text-teal-500" },
         { title: "Fines", url: "/admin/fines", icon: FileText, color: "text-rose-500" },
         { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
         { title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" },
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+        { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" },
       ];
     } else if (role === "treasurer") {
       const items = [
@@ -106,20 +106,20 @@ export function AppSidebar() {
         items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
       }
       items.push(
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+        { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
+        { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" }
       );
       return items;
     } else if (role === "adviser") {
       return [
         ...base,
-        { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
-        { title: "Rooms", url: "/admin/rooms", icon: DoorOpen, color: "text-teal-500" },
+        { title: "Occupants", url: `/${role}/occupants`, icon: Users, color: "text-emerald-500" },
+        { title: "Rooms", url: `/${role}/rooms`, icon: DoorOpen, color: "text-teal-500" },
         { title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" },
         { title: "Evaluation", url: "/admin/evaluation", icon: Shield, color: "text-cyan-500" },
-        { title: "Reporting", url: "/reporting", icon: BarChart3, color: "text-pink-500" },
-        { title: "Settings", url: "/admin", icon: Settings, color: "text-zinc-500" },
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
+        { title: "Reporting", url: `/${role}/reporting`, icon: BarChart3, color: "text-pink-500" },
+        { title: "Settings", url: `/${role}/settings`, icon: Settings, color: "text-zinc-500" },
+        { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" },
       ];
     } else {
       // Fallback for officer, etc.
@@ -132,7 +132,7 @@ export function AppSidebar() {
         items.push({ title: "Maintenance", url: "/admin/finance/maintenance", icon: Wrench, color: "text-blue-500" });
       }
       items.push(
-        { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" }
+        { title: "AI", url: `/${role}/ai`, icon: Sparkles, color: "text-purple-500" }
       );
       return items;
     }
