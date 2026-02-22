@@ -283,7 +283,7 @@ export default async function HomePage() {
             )}
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
-                <Link href="/occupant/payments">
+                <Link href="/admin/payments">
                   <Wallet className="mr-2 size-4 text-amber-500" />
                   Payments
                 </Link>
@@ -295,13 +295,13 @@ export default async function HomePage() {
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/occupant/cleaning">
+                <Link href="/admin/cleaning">
                   <ClipboardList className="mr-2 size-4 text-lime-500" />
                   Cleaning
                 </Link>
               </Button>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/occupant/evaluation">
+                <Link href="/admin/evaluation">
                   <Shield className="mr-2 size-4 text-cyan-500" />
                   Evaluation
                 </Link>
@@ -344,7 +344,7 @@ export default async function HomePage() {
             )}
 
             <Button asChild className="w-full" variant="outline">
-              <Link href="/occupant/payments">View transaction history</Link>
+              <Link href="/admin/payments">View transaction history</Link>
             </Button>
           </CardContent>
         </Card>
@@ -487,7 +487,7 @@ export default async function HomePage() {
               <CardDescription>From your current semester calendar.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href="/occupant/events">
+              <Link href="/admin/events">
                 <CalendarDays className="mr-2 size-4 text-orange-500" />
                 Open calendar
               </Link>

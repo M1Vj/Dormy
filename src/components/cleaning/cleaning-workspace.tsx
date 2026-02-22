@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { format, parseISO } from "date-fns";
 import type { CleaningSnapshot } from "@/lib/types/cleaning";
 
 type MessageState = {
@@ -458,7 +459,7 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                       type="button"
                       onClick={() => canManage && toggleCleaningDay(day.date, day.has_exception, exception?.id)}
                       disabled={isPending || !canManage}
-                      className={`flex h-7 px-3.5 items-center justify-center rounded-sm font-medium transition-colors ${day.has_exception
+                      className={`flex h-auto py-1 px-3 flex-col items-center justify-center rounded-sm font-medium transition-colors ${day.has_exception
                         ? "bg-muted text-muted-foreground/60 hover:bg-muted/80"
                         : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
                         } ${canManage ? "cursor-pointer" : "cursor-default"}`}
@@ -468,7 +469,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                           : (day.has_exception ? "Click to enable cleaning" : "Click to skip cleaning")
                       }
                     >
-                      {day.day_label.slice(0, 3)}
+                      <span className="text-xs leading-none mb-0.5">{day.day_label.slice(0, 3)}</span>
+                      <span className="text-[10px] opacity-80 leading-none">{format(parseISO(day.date), "MMM d")}</span>
                     </button>
                   );
                 })}

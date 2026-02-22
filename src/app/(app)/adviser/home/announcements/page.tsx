@@ -78,7 +78,7 @@ export default async function AnnouncementsPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" className="-ml-2">
-              <Link href="/occupant/home">
+              <Link href="/adviser/home">
                 <ArrowLeft className="mr-2 size-4" />
                 Back
               </Link>

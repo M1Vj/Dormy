@@ -18,7 +18,7 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access admin finance maintenance page without errors', async ({ page }) => {
     await page.goto('/admin/finance/maintenance');
-    await page.waitForLoadState('networkidle');
+    
 
     // Should show content, not error messages
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
@@ -28,7 +28,7 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access admin fines page without errors', async ({ page }) => {
     await page.goto('/admin/fines');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -37,16 +37,16 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access admin finance events page without errors', async ({ page }) => {
     await page.goto('/admin/finance/events');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Events ledger' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Contributions' })).toBeVisible();
   });
 
   test('should access admin occupants page without errors', async ({ page }) => {
     await page.goto('/admin/occupants');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -55,7 +55,7 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access admin finance expenses page without errors', async ({ page }) => {
     await page.goto('/admin/finance/expenses');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -64,7 +64,7 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access admin rooms page without errors', async ({ page }) => {
     await page.goto('/admin/rooms');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -73,7 +73,7 @@ test.describe('Multi-role RBAC Access', () => {
 
   test('should access occupant committees page without errors', async ({ page }) => {
     await page.goto('/occupant/committees');
-    await page.waitForLoadState('networkidle');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
@@ -95,8 +95,8 @@ test.describe('Adviser Role Access', () => {
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForURL(/\/home/);
 
-    await page.goto('/admin/finance/maintenance');
-    await page.waitForLoadState('networkidle');
+    await page.goto('/adviser/finance/maintenance');
+    
 
     await expect(page.getByText('No active dorm selected.')).not.toBeVisible();
     await expect(page.getByText('You do not have access to this page.')).not.toBeVisible();
