@@ -279,7 +279,7 @@ export default async function EventDetailsPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/treasurer/finance/events">
+            <Link href="/adviser/finance/events">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
