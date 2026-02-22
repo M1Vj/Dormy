@@ -62,6 +62,11 @@ export function FineReportsTable({ reports }: { reports: FineReportRow[] }) {
                 Occurred {formatDateTime(report.occurred_at)}
               </p>
               <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{report.details}</p>
+              <div className="mt-3 flex justify-end">
+                <div className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+                  Open
+                </div>
+              </div>
             </Link>
           );
         })}

@@ -191,6 +191,18 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                         Edit
                       </Link>
                     </Button>
+                    {occupant.user_id ? (
+                      <div className="col-span-2">
+                        <UpdateRoleDialog
+                          dormId={dormId}
+                          userId={occupant.user_id}
+                          occupantName={occupant.full_name ?? "User"}
+                          currentRole={occupant.role}
+                          triggerClassName="w-full"
+                          showLabel
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );

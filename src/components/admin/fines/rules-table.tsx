@@ -158,7 +158,15 @@ function CreateRuleDialog({ dormId }: { dormId: string }) {
   );
 }
 
-function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
+function EditRuleDialog({
+  dormId,
+  rule,
+  triggerClassName,
+}: {
+  dormId: string;
+  rule: FineRule;
+  triggerClassName?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     async (previousState: typeof initialState, formData: FormData) => {
       const result = await updateFineRule(dormId, rule.id, formData);
@@ -173,7 +181,7 @@ function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button size="sm" variant="ghost">
+        <Button size="sm" variant="ghost" className={triggerClassName}>
           Edit
         </Button>
       </SheetTrigger>
@@ -304,7 +312,57 @@ export function RulesTable({ dormId, rules }: RulesTableProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 md:hidden">
+          {rules.length === 0 ? (
+            <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+              No rules created yet.
+            </div>
+          ) : (
+            rules.map((rule) => (
+              <div key={rule.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium">{rule.title ?? "Untitled rule"}</p>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${getSeverityClass(
+                      rule.severity
+                    )}`}
+                  >
+                    {rule.severity ?? "unknown"}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Pesos</p>
+                    <p>{formatNumber(rule.default_pesos)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Points</p>
+                    <p>{formatNumber(rule.default_points)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] ${getStatusClass(
+                        rule.active
+                      )}`}
+                    >
+                      {rule.active === false ? "Inactive" : "Active"}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <EditRuleDialog
+                    dormId={dormId}
+                    rule={rule}
+                    triggerClassName="w-full"
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr className="border-b">
