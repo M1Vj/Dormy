@@ -32,7 +32,7 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href="/admin/finance/events">Open events ledger</Link>
+                <Link href={role === "treasurer" ? "/treasurer/finance/events" : "/admin/finance/events"}>Open events ledger</Link>
               </Button>
             </CardContent>
           </Card>
@@ -46,7 +46,7 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href="/admin/finance/maintenance">Open maintenance ledger</Link>
+                <Link href={role === "student_assistant" ? "/student_assistant/finance/maintenance" : role === "adviser" ? "/adviser/finance/maintenance" : "/admin/finance/maintenance"}>Open maintenance ledger</Link>
               </Button>
             </CardContent>
           </Card>
@@ -60,7 +60,7 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href="/admin/fines">Open fines ledger</Link>
+                <Link href={role === "student_assistant" ? "/student_assistant/fines" : "/admin/fines"}>Open fines ledger</Link>
               </Button>
             </CardContent>
           </Card>
@@ -78,7 +78,7 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href="/admin/finance/expenses">Open expenses ledger</Link>
+                <Link href={role === "officer" ? "/officer/finance/expenses" : "/admin/finance/expenses"}>Open expenses ledger</Link>
               </Button>
             </CardContent>
           </Card>
