@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, ClipboardList, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { FileText, ClipboardList, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 interface SaDashboardProps {
@@ -10,10 +10,10 @@ interface SaDashboardProps {
   role: string;
 }
 
-export function SaDashboard({ 
-  unverifiedFines, 
+export function SaDashboard({
+  unverifiedFines,
   todayCleaningCount,
-  role 
+  role
 }: SaDashboardProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2">

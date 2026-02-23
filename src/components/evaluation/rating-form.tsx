@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { submitEvaluation } from "@/app/actions/evaluation";
 import { EvaluationMetric } from "@/lib/types/evaluation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+
 
 interface Props {
   raterId: string;

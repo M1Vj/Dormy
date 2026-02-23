@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Receipt, ArrowRight, Star } from "lucide-react";
+import { CalendarDays, Receipt, Star } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 
@@ -17,9 +17,9 @@ interface CommitteeWidgetProps {
   role: string;
 }
 
-export function CommitteeWidget({ 
+export function CommitteeWidget({
   committee,
-  role 
+  role
 }: CommitteeWidgetProps) {
   const totalCharged = committee.finance.reduce((sum, f) => sum + Number(f.charged_pesos), 0);
   const totalCollected = committee.finance.reduce((sum, f) => sum + Number(f.collected_pesos), 0);
@@ -61,9 +61,9 @@ export function CommitteeWidget({
                 <span>{collectionRate.toFixed(0)}%</span>
               </div>
               <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-orange-500 transition-all" 
-                  style={{ width: `${collectionRate}%` }} 
+                <div
+                  className="h-full bg-orange-500 transition-all"
+                  style={{ width: `${collectionRate}%` }}
                 />
               </div>
             </div>
