@@ -448,9 +448,9 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                 </Dialog>
               )}
             </div>
-            <div className="w-full pt-1">
-              <div className="inline-flex flex-wrap items-center gap-1.5 rounded-md border bg-background/60 p-1.5 px-3 text-sm text-muted-foreground backdrop-blur shadow-sm">
-                <span className="font-medium mr-1 text-foreground">Cleaning Days:</span>
+            <div className="w-full pt-4 flex justify-center">
+              <div className="inline-flex flex-wrap justify-center items-center gap-2 rounded-xl border bg-background/60 p-2 px-4 text-base text-muted-foreground backdrop-blur shadow-sm">
+                <span className="font-semibold mr-2 text-foreground">Cleaning Days:</span>
                 {snapshot.weekdays.map((day) => {
                   const exception = snapshot.exceptions.find(e => e.date === day.date);
                   return (
@@ -459,9 +459,9 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                       type="button"
                       onClick={() => canManage && toggleCleaningDay(day.date, day.has_exception, exception?.id)}
                       disabled={isPending || !canManage}
-                      className={`flex h-auto py-1 px-3 flex-col items-center justify-center rounded-sm font-medium transition-colors ${day.has_exception
+                      className={`flex py-2 px-4 flex-col items-center justify-center rounded-md font-medium transition-colors ${day.has_exception
                         ? "bg-muted text-muted-foreground/60 hover:bg-muted/80"
-                        : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                        : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
                         } ${canManage ? "cursor-pointer" : "cursor-default"}`}
                       title={
                         !canManage
@@ -469,8 +469,8 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                           : (day.has_exception ? "Click to enable cleaning" : "Click to skip cleaning")
                       }
                     >
-                      <span className="text-xs leading-none mb-0.5">{day.day_label.slice(0, 3)}</span>
-                      <span className="text-[10px] opacity-80 leading-none">{format(parseISO(day.date), "MMM d")}</span>
+                      <span className="text-sm font-bold leading-none mb-1">{day.day_label.slice(0, 3)}</span>
+                      <span className="text-xs opacity-90 leading-none">{format(parseISO(day.date), "MMM d")}</span>
                     </button>
                   );
                 })}

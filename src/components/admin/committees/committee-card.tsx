@@ -41,7 +41,15 @@ interface Committee {
   members: CommitteeMember[];
 }
 
-export function CommitteeCard({ committee, canManage }: { committee: Committee; canManage?: boolean }) {
+export function CommitteeCard({
+  committee,
+  canManage,
+  detailHrefPrefix = "/occupant/committees",
+}: {
+  committee: Committee;
+  canManage?: boolean;
+  detailHrefPrefix?: string;
+}) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -135,7 +143,7 @@ export function CommitteeCard({ committee, canManage }: { committee: Committee; 
             {memberCount} members
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/occupant/committees/${committee.id}`}>Open</Link>
+            <Link href={`${detailHrefPrefix}/${committee.id}`}>Open</Link>
           </Button>
         </div>
       </CardContent>

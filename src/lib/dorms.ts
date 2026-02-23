@@ -47,7 +47,7 @@ export const getUserDorms = cache(async () => {
 
   const { data } = await supabase
     .from("dorm_memberships")
-    .select("dorms(id, name, slug)")
+    .select("dorms(id, name, slug, treasurer_maintenance_access)")
     .eq("user_id", user.id);
 
   return (data ?? [])
@@ -60,4 +60,5 @@ export type DormSummary = {
   id: string;
   name: string;
   slug: string;
+  treasurer_maintenance_access?: boolean | null;
 };

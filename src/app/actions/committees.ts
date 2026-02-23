@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -126,7 +127,8 @@ export async function createCommittee(dormId: string, formData: FormData) {
     metadata: { name: committee.name },
   });
 
-  revalidatePath("/committees");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/committees`);
   return { success: true, committee };
 }
 
@@ -219,7 +221,8 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
 
   if (error) return { error: error.message };
 
-  revalidatePath(`/committees/${committeeId}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/committees/${committeeId}`);
   return { success: true };
 }
 
@@ -277,7 +280,8 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
 
   if (error) return { error: error.message };
 
-  revalidatePath(`/committees/${committeeId}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/committees/${committeeId}`);
   return { success: true };
 }
 
@@ -322,7 +326,8 @@ export async function deleteCommittee(committeeId: string) {
     metadata: {},
   });
 
-  revalidatePath("/committees");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/committees`);
   return { success: true };
 }
 
@@ -431,25 +436,17 @@ function asNumber(value: unknown) {
   return parsed;
 }
 
-export async function getCommitteeFinanceSummary(committeeId: string) {
-  const parsed = z.string().uuid().safeParse(committeeId);
-  if (!parsed.success) {
-    return { error: "Invalid committee id.", data: [] as CommitteeFinanceSummaryRow[] };
-  }
-
+export async function getCommitteeFinanceSummary(committeeId: string): Promise<{ data: CommitteeFinanceSummaryRow[]; error?: string }> {
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { error: "Supabase not configured.", data: [] as CommitteeFinanceSummaryRow[] };
+  if (!supabase) return { data: [] };
 
   const { data, error } = await supabase.rpc("get_committee_finance_summary", {
-    p_committee_id: parsed.data,
+    p_committee_id: committeeId,
   });
 
-  if (error) {
-    return { error: error.message, data: [] as CommitteeFinanceSummaryRow[] };
-  }
+  if (error || !data) return { data: [] };
 
-  const rows = (data ?? []) as CommitteeFinanceRpcRow[];
-  const normalized = rows.map((row) => {
+  const rows: CommitteeFinanceSummaryRow[] = (data as CommitteeFinanceRpcRow[]).map((row) => {
     const charged = asNumber(row.charged_pesos);
     const collected = asNumber(row.collected_pesos);
     return {
@@ -457,9 +454,67 @@ export async function getCommitteeFinanceSummary(committeeId: string) {
       event_title: row.event_title,
       charged_pesos: charged,
       collected_pesos: collected,
-      balance_pesos: Math.max(0, charged - collected),
+      balance_pesos: charged - collected,
     };
   });
 
-  return { data: normalized as CommitteeFinanceSummaryRow[], error: "" };
+  return { data: rows };
+}
+
+export async function getCommitteeDashboardData(dormId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Get user's committees
+  const { data: memberships } = await supabase
+    .from("committee_members")
+    .select(`
+      role,
+      committee:committees(
+        id,
+        name,
+        description
+      )
+    `)
+    .eq("user_id", user.id);
+
+  if (!memberships || memberships.length === 0) {
+    return { data: null };
+  }
+
+  const committees = memberships.map(m => ({
+    role: m.role,
+    ...first(m.committee)
+  })).filter(c => c.id);
+
+  // For each committee, get its finance summary and upcoming events
+  const results = await Promise.all(committees.map(async (c) => {
+    const [finance, events, expenses] = await Promise.all([
+      getCommitteeFinanceSummary(c.id!),
+      supabase
+        .from("events")
+        .select("id, title, starts_at")
+        .eq("committee_id", c.id!)
+        .gte("starts_at", new Date().toISOString())
+        .order("starts_at", { ascending: true })
+        .limit(3),
+      supabase
+        .from("expenses")
+        .select("id, title, amount_pesos, status")
+        .eq("committee_id", c.id!)
+        .eq("status", "pending")
+    ]);
+
+    return {
+      ...c,
+      finance: finance.data,
+      upcomingEvents: events.data ?? [],
+      pendingExpenses: expenses.data ?? []
+    };
+  }));
+
+  return { data: results };
 }

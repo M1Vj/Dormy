@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -279,8 +280,8 @@ export async function submitEvaluation(
     console.error("Failed to write audit event for evaluation submission:", auditError);
   }
 
-  revalidatePath("/evaluation");
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true };
 }
 
@@ -417,7 +418,8 @@ export async function createEvaluationCycle(
     console.error("Failed to write audit event for evaluation cycle creation:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true, id: cycle.id };
 }
 
@@ -481,8 +483,9 @@ export async function updateEvaluationCycle(
     console.error("Failed to write audit event for evaluation cycle update:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
-  revalidatePath(`/admin/evaluation/${cycleId}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
+  revalidatePath(`/${activeRole}/evaluation/${cycleId}`);
   return { success: true };
 }
 
@@ -537,7 +540,8 @@ export async function deleteEvaluationCycle(dormId: string, cycleId: string) {
     console.error("Failed to write audit event for evaluation cycle deletion:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true };
 }
 
@@ -643,8 +647,9 @@ export async function createEvaluationTemplate(
     console.error("Failed to write audit event for evaluation template creation:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
-  revalidatePath(`/admin/evaluation/${template.cycle_id}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
+  revalidatePath(`/${activeRole}/evaluation/${template.cycle_id}`);
   return { success: true, id: template.id };
 }
 
@@ -695,8 +700,9 @@ export async function updateTemplate(
     console.error("Failed to write audit event for evaluation template update:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
-  revalidatePath(`/admin/evaluation/${updated.cycle_id}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
+  revalidatePath(`/${activeRole}/evaluation/${updated.cycle_id}`);
   return { success: true };
 }
 
@@ -746,9 +752,10 @@ export async function deleteEvaluationTemplate(
     console.error("Failed to write audit event for evaluation template deletion:", auditError);
   }
 
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   if (cycleId) {
-    revalidatePath(`/admin/evaluation/${cycleId}`);
+    revalidatePath(`/${activeRole}/evaluation/${cycleId}`);
   }
   return { success: true };
 }
@@ -840,7 +847,8 @@ export async function createEvaluationMetric(
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
   }
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true };
 }
 
@@ -905,7 +913,8 @@ export async function updateEvaluationMetric(
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
   }
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true };
 }
 
@@ -967,7 +976,8 @@ export async function deleteEvaluationMetric(
   if (cycleId) {
     revalidatePath(`/admin/evaluation/${cycleId}`);
   }
-  revalidatePath("/admin/evaluation");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/evaluation`);
   return { success: true };
 }
 

@@ -51,6 +51,9 @@ export async function middleware(req: NextRequest) {
     return redirectResponse;
   };
 
+  const pathMatches = (targetPath: string, allowedPrefix: string) =>
+    targetPath === allowedPrefix || targetPath.startsWith(`${allowedPrefix}/`);
+
   if (!user && !isLoginRoute && !isAuthCallbackRoute && !isOAuthConsentRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
@@ -142,6 +145,37 @@ export async function middleware(req: NextRequest) {
     !isLoginRoute &&
     !isJoinRoute
   ) {
+    // Admin scope restriction: keep admin pages focused on dorm setup, occupants, clearance, and semesters.
+    if (pathname.startsWith("/admin")) {
+      const allowedAdminPrefixes = [
+        "/admin/home",
+        "/admin/occupants",
+        "/admin/dorms",
+        "/admin/clearance",
+        "/admin/terms",
+        "/admin/profile",
+        "/admin/settings",
+      ];
+
+      const isAllowedAdminRoute =
+        pathname === "/admin" ||
+        allowedAdminPrefixes.some((prefix) => pathMatches(pathname, prefix));
+      if (!isAllowedAdminRoute) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = "/admin/home";
+        redirectUrl.search = "";
+        return redirect(redirectUrl, "Admin route restricted by role policy.");
+      }
+    }
+
+    // Occupant role policy: personal reporting is replaced by dorm-level finance totals.
+    if (pathname === "/occupant/reporting" || pathname.startsWith("/occupant/reporting/")) {
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = "/occupant/payments";
+      redirectUrl.search = "";
+      return redirect(redirectUrl, "Occupant reporting route redirected to dorm finance totals.");
+    }
+
     if (!req.cookies.has("dorm_id")) {
       console.log(`[Middleware] User has no dorm_id cookie on app route ${pathname}. Attempting to set it...`);
       const { data } = await supabase

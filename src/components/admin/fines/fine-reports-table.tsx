@@ -45,7 +45,7 @@ function statusBadge(status: FineReportRow["status"]) {
   return <Badge variant="outline">Pending</Badge>;
 }
 
-export function FineReportsTable({ reports }: { reports: FineReportRow[] }) {
+export function FineReportsTable({ reports, role = "admin" }: { reports: FineReportRow[], role?: string }) {
   return (
     <div className="space-y-3">
       <div className="space-y-3 md:hidden">
@@ -56,7 +56,7 @@ export function FineReportsTable({ reports }: { reports: FineReportRow[] }) {
           return (
             <Link
               key={report.id}
-              href={`/admin/fines/reports/${report.id}`}
+              href={`/${role}/fines/reports/${report.id}`}
               className="block rounded-lg border p-3 transition hover:bg-muted/40"
             >
               <div className="flex items-start justify-between gap-2">
@@ -113,7 +113,7 @@ export function FineReportsTable({ reports }: { reports: FineReportRow[] }) {
                   <td className="px-3 py-2">{statusBadge(report.status)}</td>
                   <td className="px-3 py-2">
                     <Button asChild size="sm" variant="outline">
-                      <Link href={`/admin/fines/reports/${report.id}`}>Open</Link>
+                      <Link href={`/${role}/fines/reports/${report.id}`}>Open</Link>
                     </Button>
                   </td>
                 </tr>

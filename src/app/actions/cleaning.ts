@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -705,7 +706,8 @@ export async function seedDefaultCleaningAreas() {
     console.error("Failed to write audit event for cleaning area seeding:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, inserted: inserts.length };
 }
 
@@ -758,7 +760,8 @@ export async function createCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area creation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -816,7 +819,8 @@ export async function updateCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area update:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -872,7 +876,8 @@ export async function deleteCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area deletion:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -937,7 +942,8 @@ export async function upsertCleaningWeek(formData: FormData) {
     console.error("Failed to write audit event for cleaning week upsert:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, week_id: ensured.week.id, week_start: ensured.week.week_start };
 }
 
@@ -1074,7 +1080,8 @@ export async function setCleaningRoomAssignment(formData: FormData) {
     console.error("Failed to write audit event for cleaning assignment mutation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -1295,7 +1302,8 @@ export async function generateCleaningAssignments(formData: FormData) {
     console.error("Failed to write audit event for cleaning assignment generation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, generated: assignments.length };
 }
 
@@ -1368,7 +1376,8 @@ export async function createCleaningException(formData: FormData) {
     console.error("Failed to write audit event for cleaning exception upsert:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -1414,6 +1423,7 @@ export async function deleteCleaningException(formData: FormData) {
     console.error("Failed to write audit event for cleaning exception deletion:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -307,11 +308,14 @@ export async function overrideOccupantRecord(
     console.error("Failed to write audit event for occupant override:", error);
   }
 
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${parsed.data.occupant_id}`);
-  revalidatePath("/occupants");
-  revalidatePath(`/occupants/${parsed.data.occupant_id}`);
-  revalidatePath("/admin/overrides");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${parsed.data.occupant_id}`);
+  revalidatePath("/occupants"); // keep for safety
+  revalidatePath(`/occupants/${parsed.data.occupant_id}`); // keep for safety
+  revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
 }
@@ -456,10 +460,14 @@ export async function overrideFineRecord(
     console.error("Failed to write audit event for fine override:", error);
   }
 
-  revalidatePath("/admin/fines");
-  revalidatePath(`/admin/occupants/${fine.occupant_id}`);
-  revalidatePath("/payments");
-  revalidatePath("/admin/overrides");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
+  revalidatePath(`/${activeRole}/occupants/${fine.occupant_id}`);
+  revalidatePath(`/${activeRole}/payments`); // occupant view? or general payments
+  revalidatePath("/payments"); // Occupant view
+  revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
 }
@@ -581,14 +589,18 @@ export async function overrideLedgerEntryOccupant(
     console.error("Failed to write audit event for ledger occupant override:", error);
   }
 
-  revalidatePath("/payments");
-  revalidatePath("/admin/finance/maintenance");
-  revalidatePath("/admin/finance/events");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/payments`);
+  revalidatePath("/payments"); // Occupant
+  revalidatePath(`/${activeRole}/finance/maintenance`);
+  revalidatePath(`/${activeRole}/finance/events`);
   if (entry.event_id) {
-    revalidatePath(`/admin/finance/events/${entry.event_id}`);
+    revalidatePath(`/${activeRole}/finance/events/${entry.event_id}`);
   }
-  revalidatePath("/admin/fines");
-  revalidatePath("/admin/overrides");
+  revalidatePath(`/${activeRole}/fines`);
+  revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
 }
@@ -719,11 +731,14 @@ export async function overrideEventRecord(
     console.error("Failed to write audit event for event override:", error);
   }
 
-  revalidatePath("/events");
-  revalidatePath(`/events/${parsed.data.event_id}`);
-  revalidatePath("/admin/finance/events");
-  revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
-  revalidatePath("/admin/overrides");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/events`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
 }
@@ -839,10 +854,14 @@ export async function overrideEventPayableDeadline(
     console.error("Failed to write audit event for payable deadline override:", error);
   }
 
-  revalidatePath("/admin/finance/events");
-  revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/payments`);
   revalidatePath("/payments");
-  revalidatePath("/admin/overrides");
+  revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
 }
@@ -972,8 +991,11 @@ export async function overrideCleaningAssignment(
     console.error("Failed to write audit event for cleaning assignment override:", error);
   }
 
-  revalidatePath("/cleaning");
-  revalidatePath("/admin/overrides");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/cleaning`);
+  revalidatePath(`/${activeRole}/overrides`);
   return { success: true };
 }
 
@@ -1047,8 +1069,11 @@ export async function overrideCleaningRestLevel(
     console.error("Failed to write audit event for cleaning rest-level override:", error);
   }
 
-  revalidatePath("/cleaning");
-  revalidatePath("/admin/overrides");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/cleaning`);
+  revalidatePath(`/${activeRole}/overrides`);
   return { success: true };
 }
 
@@ -1166,11 +1191,13 @@ export async function overrideEvaluationMetricScore(
     console.error("Failed to write audit event for evaluation score override:", error);
   }
 
-  revalidatePath("/evaluation");
-  revalidatePath("/admin/evaluation");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/evaluation`);
+  revalidatePath(`/${activeRole}/overrides`);
   if (template?.cycle_id) {
-    revalidatePath(`/admin/evaluation/${template.cycle_id}`);
+    revalidatePath(`/${activeRole}/evaluation/${template.cycle_id}`);
   }
-  revalidatePath("/admin/overrides");
   return { success: true };
 }

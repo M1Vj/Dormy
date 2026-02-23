@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
@@ -15,6 +16,15 @@ const submitExpenseSchema = z.object({
   amount_pesos: z.coerce.number().positive("Amount must be positive"),
   purchased_at: z.string().min(1, "Purchase date is required"),
   category: z.enum(["maintenance_fee", "contributions"]),
+  expense_group_title: z.string().trim().max(140).optional(),
+  contribution_reference_title: z.string().trim().max(140).optional(),
+  vendor_name: z.string().trim().max(140).optional(),
+  official_receipt_no: z.string().trim().max(120).optional(),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0").optional(),
+  unit_cost_pesos: z.coerce.number().positive("Unit cost must be greater than 0").optional(),
+  payment_method: z.string().trim().max(80).optional(),
+  purchased_by: z.string().trim().max(140).optional(),
+  transparency_notes: z.string().trim().max(2000).optional(),
 });
 
 /**
@@ -40,9 +50,8 @@ export async function submitExpense(dormId: string, formData: FormData) {
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
-  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser"]);
+  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser", "assistant_adviser", "student_assistant"]);
   const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
 
   if (!memberships || memberships.length === 0) {
@@ -99,6 +108,15 @@ export async function submitExpense(dormId: string, formData: FormData) {
     amount_pesos: formData.get("amount_pesos"),
     purchased_at: formData.get("purchased_at"),
     category: formData.get("category"),
+    expense_group_title: formData.get("expense_group_title") || undefined,
+    contribution_reference_title: formData.get("contribution_reference_title") || undefined,
+    vendor_name: formData.get("vendor_name") || undefined,
+    official_receipt_no: formData.get("official_receipt_no") || undefined,
+    quantity: formData.get("quantity") || undefined,
+    unit_cost_pesos: formData.get("unit_cost_pesos") || undefined,
+    payment_method: formData.get("payment_method") || undefined,
+    purchased_by: formData.get("purchased_by") || undefined,
+    transparency_notes: formData.get("transparency_notes") || undefined,
   });
 
   if (!parsed.success) {
@@ -143,6 +161,18 @@ export async function submitExpense(dormId: string, formData: FormData) {
       purchased_at: parsed.data.purchased_at,
       receipt_storage_path: receiptPath,
       category: parsed.data.category,
+      expense_group_title:
+        parsed.data.expense_group_title?.trim() ||
+        (parsed.data.category === "contributions" ? parsed.data.title.trim() : null),
+      contribution_reference_title:
+        parsed.data.contribution_reference_title?.trim() || null,
+      vendor_name: parsed.data.vendor_name?.trim() || null,
+      official_receipt_no: parsed.data.official_receipt_no?.trim() || null,
+      quantity: parsed.data.quantity ?? null,
+      unit_cost_pesos: parsed.data.unit_cost_pesos ?? null,
+      payment_method: parsed.data.payment_method?.trim() || null,
+      purchased_by: parsed.data.purchased_by?.trim() || null,
+      transparency_notes: parsed.data.transparency_notes?.trim() || null,
       status: "pending",
     })
     .select("id")
@@ -168,9 +198,11 @@ export async function submitExpense(dormId: string, formData: FormData) {
     // best-effort
   }
 
-  revalidatePath("/admin/finance/expenses");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance/expenses`);
   if (committeeId) {
-    revalidatePath(`/committees/${committeeId}`);
+    revalidatePath(`/${activeRole}/committees/${committeeId}`);
   }
   return { success: true };
 }
@@ -199,10 +231,6 @@ export async function reviewExpense(
     .eq("user_id", user.id);
   const roles = memberships?.map(m => m.role) ?? [];
 
-  if (!roles.some(r => new Set(["admin", "treasurer"]).has(r))) {
-    return { error: "Only treasurer or admin can approve expenses." };
-  }
-
   const { data: expense } = await supabase
     .from("expenses")
     .select("*")
@@ -211,6 +239,17 @@ export async function reviewExpense(
     .maybeSingle();
 
   if (!expense) return { error: "Expense not found." };
+
+  const canReviewAll = roles.some((r) => new Set(["admin", "treasurer"]).has(r));
+  const canReviewMaintenance = roles.some((r) =>
+    new Set(["adviser", "assistant_adviser", "student_assistant"]).has(r)
+  );
+  const canReviewExpense = canReviewAll || (canReviewMaintenance && expense.category === "maintenance_fee");
+
+  if (!canReviewExpense) {
+    return { error: "You do not have permission to review this expense." };
+  }
+
   if (expense.status !== "pending") {
     return { error: "This expense has already been reviewed." };
   }
@@ -245,9 +284,11 @@ export async function reviewExpense(
     // best-effort
   }
 
-  revalidatePath("/admin/finance/expenses");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance/expenses`);
   if (expense.committee_id) {
-    revalidatePath(`/committees/${expense.committee_id}`);
+    revalidatePath(`/${activeRole}/committees/${expense.committee_id}`);
   }
   return { success: true };
 }

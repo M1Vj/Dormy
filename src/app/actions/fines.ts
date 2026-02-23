@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { ensureActiveSemesterId } from "@/lib/semesters";
@@ -93,7 +94,9 @@ export async function createFineRule(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for fine rule creation:", auditError);
   }
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -184,7 +187,9 @@ export async function updateFineRule(
     console.error("Failed to write audit event for fine rule update:", auditError);
   }
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -322,6 +327,7 @@ export async function issueFine(dormId: string, formData: FormData) {
   // Sync to Ledger (Charge)
   const { error: ledgerError } = await supabase.from("ledger_entries").insert({
     dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
     ledger: "sa_fines",
     entry_type: "charge",
     occupant_id: parsed.data.occupant_id,
@@ -357,8 +363,10 @@ export async function issueFine(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for fine issuance:", auditError);
   }
 
-  revalidatePath("/admin/fines");
-  revalidatePath(`/admin/occupants/${parsed.data.occupant_id}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
+  revalidatePath(`/${activeRole}/occupants/${parsed.data.occupant_id}`);
   return { success: true };
 }
 
@@ -395,7 +403,9 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
 
   // Sync to Ledger (Void)
   const { error: ledgerError } = await supabase

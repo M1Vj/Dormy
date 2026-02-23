@@ -24,7 +24,7 @@ const allowedRolesByLedger = {
 function labelForLedger(category: z.infer<typeof draftReceiptSchema>["category"]) {
   if (category === "maintenance_fee") return "Maintenance";
   if (category === "sa_fines") return "Fines";
-  return "Event contributions";
+  return "Contributions";
 }
 
 function escapePrompt(value: string) {

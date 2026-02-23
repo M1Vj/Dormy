@@ -421,9 +421,9 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       "Course": row.course,
       "Maintenance Balance": formatPeso(row.maintenance_balance),
       "Fines Balance": formatPeso(row.fines_balance),
-      "Events Balance": formatPeso(row.events_balance),
+      "Contributions Balance": formatPeso(row.events_balance),
       "Total Balance": formatPeso(row.total_balance),
-      "Clearance Status": row.total_balance <= 0 ? "CLEARED" : "NOT CLEARED",
+      "Clearance Status": (row.maintenance_balance <= 0 && row.fines_balance <= 0 && row.events_balance <= 0) ? "CLEARED" : "NOT CLEARED",
     }));
 
   const transactionRows = entries.map((entry) => {

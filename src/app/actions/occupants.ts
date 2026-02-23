@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -371,8 +372,8 @@ export async function createOccupant(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for occupant creation:", auditError);
   }
 
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
   return { success: true };
 }
 
@@ -611,10 +612,9 @@ export async function updateOccupant(
     }
   }
 
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${occupantId}`);
-  revalidatePath(`/occupants/${occupantId}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${occupantId}`);
   return { success: true };
 }
 
@@ -736,10 +736,9 @@ export async function updatePersonalOccupant(formData: FormData) {
   }
 
   revalidatePath("/profile");
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${occupant.id}`);
-  revalidatePath(`/occupants/${occupant.id}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${occupant.id}`);
 
   return { success: true };
 }

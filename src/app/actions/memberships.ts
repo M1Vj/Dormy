@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -15,6 +16,7 @@ const updateRolesSchema = z.object({
     "student_assistant",
     "treasurer",
     "adviser",
+    "assistant_adviser",
     "occupant",
     "officer",
   ])).min(1, "At least one role is required"),
@@ -50,6 +52,11 @@ export async function updateMembershipRoles(
     return { error: "You do not have permission to update roles." };
   }
 
+  const actorRole = actorMembership.role;
+  if (!new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]).has(actorRole)) {
+    return { error: "Only admin, adviser, and student assistant accounts can delegate roles." };
+  }
+
   const parsed = updateRolesSchema.safeParse({ dormId, userId, roles: newRoles });
   if (!parsed.success) {
     return { error: "Invalid input data: " + parsed.error.message };
@@ -65,8 +72,6 @@ export async function updateMembershipRoles(
     return { error: fetchError.message };
   }
 
-  const actorRole = actorMembership.role;
-
   // Ensure actor can manage all old roles of target user
   for (const m of previousMemberships || []) {
     if (!canManageRole(actorRole, m.role)) {
@@ -76,6 +81,10 @@ export async function updateMembershipRoles(
 
   // Ensure actor can assign all new roles
   for (const r of newRoles) {
+    if (actorRole !== "admin" && r === "admin") {
+      return { error: "Only admins can assign the admin role." };
+    }
+
     if (!canManageRole(actorRole, r)) {
       return { error: `You do not have permission to assign the ${r} role.` };
     }
@@ -118,7 +127,9 @@ export async function updateMembershipRoles(
     },
   });
 
-  revalidatePath("/admin/occupants");
-  revalidatePath("/occupants");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath("/occupants"); // Keep global for safety or remove if unused
   return { success: true };
 }
