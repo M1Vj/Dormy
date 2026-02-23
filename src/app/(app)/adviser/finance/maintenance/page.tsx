@@ -240,7 +240,7 @@ export default async function MaintenancePage({
         </Button>
         {search || statusFilter ? (
           <Button asChild type="button" variant="ghost" size="sm">
-            <Link href="/adviser/finance/maintenance">Reset</Link>
+            <Link href={`/${activeRole}/finance/maintenance`}>Reset</Link>
           </Button>
         ) : null}
       </form>

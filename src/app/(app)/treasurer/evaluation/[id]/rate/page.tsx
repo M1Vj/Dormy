@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { RatingForm } from "@/components/evaluation/rating-form";
+import { getActiveRole } from "@/lib/roles-server";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -79,7 +80,8 @@ export default async function RateOccupantPage({ params }: Props) {
     .single();
 
   if (existing) {
-    redirect("/occupant/evaluation");
+    const role = await getActiveRole() || "occupant";
+    redirect(`/${role}/evaluation`);
   }
 
   // 5. Get metrics
@@ -89,7 +91,7 @@ export default async function RateOccupantPage({ params }: Props) {
     <div className="max-w-3xl mx-auto space-y-6 p-8">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/treasurer/evaluation">
+          <Link href={`/${role}/evaluation`}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>

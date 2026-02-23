@@ -53,10 +53,14 @@ function textToLines(text: string) {
 }
 
 export function AiOrganizerWorkspace({
+  role,
+  suggestedPrompts = [],
   events,
   recentConcepts,
   initialInsights,
 }: {
+  role: string;
+  suggestedPrompts?: string[];
   events: Array<{ id: string; title: string }>;
   recentConcepts: AiConceptRecord[];
   initialInsights: FinanceInsights | null;
@@ -230,6 +234,23 @@ export function AiOrganizerWorkspace({
                 Browser speech-to-text is optional. Manual text entry is always available.
               </span>
             </div>
+
+            {suggestedPrompts.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {suggestedPrompts.map((prompt) => (
+                  <Button
+                    key={prompt}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-auto text-left whitespace-normal"
+                    onClick={() => setRawText(prompt)}
+                  >
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
+            )}
 
             <form className="space-y-3" onSubmit={handleOrganize}>
               <Label htmlFor="ai_raw_text">Raw input</Label>

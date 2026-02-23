@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
@@ -168,9 +169,11 @@ export async function submitExpense(dormId: string, formData: FormData) {
     // best-effort
   }
 
-  revalidatePath("/admin/finance/expenses");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance/expenses`);
   if (committeeId) {
-    revalidatePath(`/committees/${committeeId}`);
+    revalidatePath(`/${activeRole}/committees/${committeeId}`);
   }
   return { success: true };
 }
@@ -245,9 +248,11 @@ export async function reviewExpense(
     // best-effort
   }
 
-  revalidatePath("/admin/finance/expenses");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance/expenses`);
   if (expense.committee_id) {
-    revalidatePath(`/committees/${expense.committee_id}`);
+    revalidatePath(`/${activeRole}/committees/${expense.committee_id}`);
   }
   return { success: true };
 }

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Wrench, Calendar, Receipt } from "lucide-react"
+import { Wrench, Receipt } from "lucide-react"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getActiveDormId } from "@/lib/dorms"
 
@@ -23,15 +23,16 @@ export default async function FinanceDashboard() {
   const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {}
   const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true
 
-  const canViewMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r)) ||
+  const role = roles[0] || "occupant";
+
+  const canViewMaintenance = roles.some(r => new Set(["admin", "adviser"]).has(r)) ||
     (allowTreasurerMaintenance && roles.some(r => new Set(["treasurer", "officer"]).has(r)))
-  const canViewEvents = roles.some(r => new Set(["admin", "treasurer"]).has(r))
   const canViewExpenses = roles.some(r => new Set(["admin", "treasurer", "officer", "adviser"]).has(r))
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
       {canViewMaintenance && (
-        <Link href="/student_assistant/finance/maintenance" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/finance/maintenance`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Wrench className="h-8 w-8 text-blue-500 mb-2" />
@@ -42,20 +43,9 @@ export default async function FinanceDashboard() {
         </Link>
       )}
 
-      {canViewEvents && (
-        <Link href="/student_assistant/finance/events" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
-          <Card className="hover:bg-muted/50 transition-colors h-full">
-            <CardHeader>
-              <Calendar className="h-8 w-8 text-orange-500 mb-2" />
-              <CardTitle>Contributions</CardTitle>
-              <CardDescription>Track contribution budgeting and ledgers</CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-      )}
 
       {canViewExpenses && (
-        <Link href="/student_assistant/finance/expenses" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/finance/expenses`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Receipt className="h-8 w-8 text-green-500 mb-2" />

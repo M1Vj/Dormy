@@ -65,7 +65,7 @@ export function ContributionBatchDialog({
     defaultValues: {
       eventId: eventId ?? "none",
       amount: 0,
-      description: "Event contribution",
+      description: "Contribution",
       deadline: "",
       includeAlreadyCharged: false,
     },
@@ -102,18 +102,18 @@ export function ContributionBatchDialog({
 
       const count = response && "chargedCount" in response ? response.chargedCount : null;
       toast.success(
-        count ? `Payable event created for ${count} occupants.` : "Payable event created."
+        count ? `Contribution created for ${count} occupants.` : "Contribution created."
       );
       setOpen(false);
       form.reset({
         eventId: eventId ?? "none",
         amount: 0,
-        description: "Event contribution",
+        description: "Contribution",
         deadline: "",
         includeAlreadyCharged: false,
       });
     } catch {
-      toast.error("Failed to create payable event.");
+      toast.error("Failed to create contribution.");
     } finally {
       setIsPending(false);
     }

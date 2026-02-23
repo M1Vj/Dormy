@@ -113,6 +113,7 @@ export default async function AdminFinesPage({
             fines={fines}
             rules={rules}
             occupants={occupants}
+            role="student_assistant"
             filters={{
               search,
               status,
@@ -123,7 +124,7 @@ export default async function AdminFinesPage({
           <RulesTable dormId={activeDormId!} rules={rules} />
         </TabsContent>
         <TabsContent value="reports">
-          <FineReportsTable reports={reports} />
+          <FineReportsTable reports={reports} role="student_assistant" />
         </TabsContent>
       </Tabs>
     </div>

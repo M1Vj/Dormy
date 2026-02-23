@@ -386,7 +386,7 @@ export default async function EventDetailsPage({
               </Button>
               {search || statusFilter ? (
                 <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/admin/finance/events/${eventId}`}>Reset</Link>
+                  <Link href={`/treasurer/finance/events/${eventId}`}>Reset</Link>
                 </Button>
               ) : null}
             </div>

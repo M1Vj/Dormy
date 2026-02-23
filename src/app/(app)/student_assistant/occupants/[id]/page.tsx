@@ -109,7 +109,7 @@ export default async function AdminOccupantProfilePage(props: {
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Occupant not found.</p>
         <Button asChild variant="secondary">
-          <Link href="/student_assistant/occupants">Back to occupants</Link>
+          <Link href={`/${myRole}/occupants`}>Back to occupants</Link>
         </Button>
       </div>
     );
@@ -170,7 +170,7 @@ export default async function AdminOccupantProfilePage(props: {
           )}
           {!isEditMode && (
             <Button asChild variant="outline">
-              <Link href={`/student_assistant/occupants/${occupant.id}?mode=edit`}>Edit</Link>
+              <Link href={`/${myRole}/occupants/${occupant.id}?mode=edit`}>Edit</Link>
             </Button>
           )}
           {!isEditMode && (
@@ -186,7 +186,7 @@ export default async function AdminOccupantProfilePage(props: {
             />
           )}
           <Button asChild variant="secondary">
-            <Link href="/student_assistant/occupants">Back to occupants</Link>
+            <Link href={`/${myRole}/occupants`}>Back to occupants</Link>
           </Button>
         </div>
       </div>

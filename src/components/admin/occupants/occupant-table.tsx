@@ -131,7 +131,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
             </Button>
             {hasFilters ? (
               <Button asChild type="button" size="sm" variant="ghost" className="w-full sm:w-auto">
-                <Link href="/admin/occupants">Reset</Link>
+                <Link href={basePath}>Reset</Link>
               </Button>
             ) : null}
           </form>
@@ -186,13 +186,13 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
-                      <Link href={`/admin/occupants/${occupant.id}`}>
+                      <Link href={`${basePath}/${occupant.id}`}>
                         View
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="ghost" className="w-full">
                       <Link
-                        href={`/admin/occupants/${occupant.id}?mode=edit`}
+                        href={`${basePath}/${occupant.id}?mode=edit`}
                       >
                         Edit
                       </Link>
@@ -286,13 +286,13 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Button asChild size="sm" variant="ghost">
-                            <Link href={`/admin/occupants/${occupant.id}`}>
+                            <Link href={`${basePath}/${occupant.id}`}>
                               View
                             </Link>
                           </Button>
                           <Button asChild size="sm" variant="ghost">
                             <Link
-                              href={`/admin/occupants/${occupant.id}?mode=edit`}
+                              href={`${basePath}/${occupant.id}?mode=edit`}
                             >
                               Edit
                             </Link>

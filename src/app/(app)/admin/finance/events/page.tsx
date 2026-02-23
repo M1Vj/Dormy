@@ -114,7 +114,7 @@ export default async function EventsFinancePage({
     await Promise.all([
       supabase
         .from("events")
-        .select("id, title, starts_at, is_competition")
+        .select("id, title, starts_at, is_competition, committee_id")
         .eq("dorm_id", activeDormId)
         .eq("semester_id", semesterResult.semesterId)
         .order("starts_at", { ascending: false }),
@@ -127,16 +127,17 @@ export default async function EventsFinancePage({
       getUserDorms(),
     ]);
 
-  if (eventsError) {
-    return <div className="p-6 text-sm text-destructive">Error loading events.</div>;
-  }
+  const { data: myCommittees } = await supabase
+    .from("committee_members")
+    .select("committee_id")
+    .eq("user_id", user.id);
+  const myCommitteeIds = new Set(myCommittees?.map(c => c.committee_id) ?? []);
 
-  if (entriesError) {
-    return <div className="p-6 text-sm text-destructive">Error loading ledger.</div>;
-  }
+  const filteredEvents = roles.includes("admin") || roles.includes("treasurer") || roles.includes("adviser")
+    ? (events ?? [])
+    : (events ?? []).filter(e => e.committee_id && myCommitteeIds.has(e.committee_id));
 
-  const normalizedSearch = search.toLowerCase();
-  const typedEvents = (events ?? []) as EventRow[];
+  const typedEvents = filteredEvents as EventRow[];
   const typedEntries = (entries ?? []) as LedgerEntry[];
 
   const eventStats = typedEvents
@@ -175,6 +176,10 @@ export default async function EventsFinancePage({
   const totalCollected = eventStats.reduce((acc, curr) => acc + curr.collected, 0);
   const totalPending = eventStats.reduce((acc, curr) => acc + curr.balance, 0);
 
+  const primaryRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
+  const activeRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -200,7 +205,7 @@ export default async function EventsFinancePage({
             </Button>
             {search ? (
               <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/admin/finance/events">Reset</Link>
+                <Link href={`/${activeRole}/finance/events`}>Reset</Link>
               </Button>
             ) : null}
           </form>
@@ -293,7 +298,7 @@ export default async function EventsFinancePage({
                   {event.deadline ? format(new Date(event.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                 </p>
                 <Button asChild size="sm" className="w-full">
-                  <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
+                  <Link href={`/${activeRole}/finance/events/${event.id}`}>Manage</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -334,7 +339,7 @@ export default async function EventsFinancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
+                    <Link href={`/${activeRole}/finance/events/${event.id}`}>Manage</Link>
                   </Button>
                 </TableCell>
               </TableRow>

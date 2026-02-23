@@ -22,6 +22,8 @@ export default async function AiPage() {
       </div>
 
       <AiOrganizerWorkspace
+        role={workspace.role}
+        suggestedPrompts={workspace.suggestions}
         events={workspace.events}
         recentConcepts={workspace.recentConcepts}
         initialInsights={null}

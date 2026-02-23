@@ -85,6 +85,7 @@ export default async function AdminOccupantsPage({
       <OccupantTable
         dormId={activeDormId!}
         occupants={occupants}
+        role="adviser"
         filters={{
           search: trimmedSearch,
           status: trimmedStatus,

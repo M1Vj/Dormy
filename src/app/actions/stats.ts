@@ -159,14 +159,14 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     if (isPayment) {
       const absAmount = Math.abs(amount);
       totalPaid += absAmount;
-      if (ledger.includes("maintenance")) maintenancePaid += absAmount;
-      if (ledger.includes("fines")) finesPaid += absAmount;
-      if (ledger.includes("event")) eventsPaid += absAmount;
+      if (ledger === "maintenance_fee") maintenancePaid += absAmount;
+      if (ledger === "sa_fines") finesPaid += absAmount;
+      if (ledger === "contributions") eventsPaid += absAmount;
     } else {
       totalCharged += amount;
-      if (ledger.includes("maintenance")) maintenanceCharged += amount;
-      if (ledger.includes("fines")) finesCharged += amount;
-      if (ledger.includes("event")) eventsCharged += amount;
+      if (ledger === "maintenance_fee") maintenanceCharged += amount;
+      if (ledger === "sa_fines") finesCharged += amount;
+      if (ledger === "contributions") eventsCharged += amount;
     }
   }
 
@@ -208,6 +208,81 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     finesPaid,
     eventsCharged,
     eventsPaid,
-    clearanceList: clearanceList.sort((a, b) => b.total_balance - a.total_balance),
+    clearanceList,
+  };
+}
+
+export type OccupantReportingData = {
+  balance: {
+    total: number;
+    maintenance: number;
+    fines: number;
+    events: number;
+  };
+  totalPoints: number;
+  totalFines: number;
+  totalEventsAttended: number;
+  recentEntries: any[];
+  clearanceHistory: Array<{
+    semester: string;
+    is_cleared: boolean;
+  }>;
+};
+
+export async function getOccupantReportingData(dormId: string, occupantId: string): Promise<OccupantReportingData | { error: string }> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const [balance, entries, fines, events] = await Promise.all([
+    supabase
+      .from("ledger_entries")
+      .select("ledger, amount_pesos")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", occupantId)
+      .is("voided_at", null),
+    supabase
+      .from("ledger_entries")
+      .select("*, event:events(title), fine:fines(rule:fine_rules(title))")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", occupantId)
+      .order("posted_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("fines")
+      .select("points")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", occupantId)
+      .is("voided_at", null),
+    supabase
+      .from("event_attendance")
+      .select("id")
+      .eq("occupant_id", occupantId)
+      .eq("status", "present")
+  ]);
+
+  const balances = {
+    maintenance: 0,
+    fines: 0,
+    events: 0,
+    total: 0
+  };
+
+  balance.data?.forEach(entry => {
+    const amount = Number(entry.amount_pesos);
+    if (entry.ledger === 'maintenance_fee') balances.maintenance += amount;
+    if (entry.ledger === 'sa_fines') balances.fines += amount;
+    if (entry.ledger === 'contributions') balances.events += amount;
+    balances.total += amount;
+  });
+
+  const totalPoints = fines.data?.reduce((sum, f) => sum + Number(f.points), 0) ?? 0;
+
+  return {
+    balance: balances,
+    totalPoints,
+    totalFines: fines.data?.length ?? 0,
+    totalEventsAttended: events.data?.length ?? 0,
+    recentEntries: entries.data ?? [],
+    clearanceHistory: [] // TODO: Implement if tracking semester-end clearance
   };
 }

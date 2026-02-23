@@ -6,10 +6,12 @@ import { CalendarDays, ClipboardList, FileText, Shield, Wallet } from "lucide-re
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import { getCleaningSnapshot } from "@/app/actions/cleaning";
 import { getEventsOverview } from "@/app/actions/events";
-import { getFineRules } from "@/app/actions/fines";
-import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getDashboardStats } from "@/app/actions/stats";
+import { getFineReports } from "@/app/actions/fine-reports";
+import { StaffStatsGrid } from "@/components/dashboard/staff-stats-grid";
+import { SaDashboard } from "@/components/dashboard/sa-dashboard";
+import { Badge } from "@/components/ui/badge";
+import { Activity, ClipboardList, Sparkles, UserCheck } from "lucide-react";
 import { getActiveDormId } from "@/lib/dorms";
 import { getActiveSemester } from "@/lib/semesters";
 import { getRoleLabel, getRoleSummary } from "@/lib/roles";
@@ -88,9 +90,7 @@ export default async function HomePage() {
 
   const dormId = resolvedMembership.dorm_id;
   const role = resolvedMembership.role;
-  const finesHref = new Set(["admin", "student_assistant"]).has(role)
-    ? "/admin/fines"
-    : "/fines";
+  const finesHref = `/${role}/fines`;
 
   const { data: dorm } = await supabase
     .from("dorms")
@@ -125,15 +125,23 @@ export default async function HomePage() {
       ? null
       : `Level ${currentRoom.level}`;
 
-  const [fineRules, events, cleaningSnapshot, balance, entries] = await Promise.all([
+  const [fineRules, events, cleaningSnapshot, balance, entries, stats, fineReportsResult] = await Promise.all([
     getFineRules(dormId),
     getEventsOverview(dormId),
     getCleaningSnapshot(),
     occupant ? getLedgerBalance(dormId, occupant.id) : Promise.resolve(null),
     occupant ? getLedgerEntries(dormId, occupant.id) : Promise.resolve([]),
+    getDashboardStats(dormId),
+    getFineReports(dormId),
   ]);
 
+  if ("error" in stats) {
+    return <div className="p-6">Error loading stats: {stats.error}</div>;
+  }
+
   const { announcements } = await getDormAnnouncements(dormId, { limit: 3 });
+  const pendingFinesCount = "data" in fineReportsResult ? (fineReportsResult.data?.filter(r => r.status === "pending").length ?? 0) : 0;
+  const todayCleaningCount = cleaningSnapshot && !("error" in cleaningSnapshot) ? cleaningSnapshot.room_plans.length : 0;
 
   const now = new Date();
   const upcomingEvents = events
@@ -178,7 +186,7 @@ export default async function HomePage() {
       const key = String(entry.event_id);
       const current =
         byEvent.get(key) ?? {
-          eventTitle: entry.event?.title ?? "Event contribution",
+          eventTitle: entry.event?.title ?? "Contribution",
           charged: 0,
           paid: 0,
           deadline: null,
@@ -250,304 +258,97 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-t-4 border-t-sky-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Your account</CardTitle>
-            <CardDescription>{getRoleSummary(role)}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {occupant ? (
-              <div className="space-y-2 text-sm">
-                <div>
-                  <div className="text-muted-foreground">Resident</div>
-                  <div className="font-medium">{occupant.full_name ?? "Occupant profile"}</div>
-                  <div className="text-xs text-muted-foreground">{occupant.course ?? ""}</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md border bg-muted/30 px-2 py-1 text-xs">{roomLabel}</span>
-                  {levelLabel ? (
-                    <span className="rounded-md border bg-muted/30 px-2 py-1 text-xs">{levelLabel}</span>
-                  ) : null}
-                  {occupant.status ? (
-                    <span className="rounded-md border bg-muted/30 px-2 py-1 text-xs capitalize">
-                      {occupant.status.replace(/_/g, " ")}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                Your account is not linked to an occupant profile yet. Payments and personal clearance data may be unavailable.
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/student_assistant/payments">
-                  <Wallet className="mr-2 size-4 text-amber-500" />
-                  Payments
-                </Link>
-              </Button>
-              <Button asChild variant="secondary" size="sm">
-                <Link href={finesHref}>
-                  <FileText className="mr-2 size-4 text-rose-500" />
-                  Fines
-                </Link>
-              </Button>
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/student_assistant/cleaning">
-                  <ClipboardList className="mr-2 size-4 text-lime-500" />
-                  Cleaning
-                </Link>
-              </Button>
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/student_assistant/evaluation">
-                  <Shield className="mr-2 size-4 text-cyan-500" />
-                  Evaluation
-                </Link>
-              </Button>
+      <div className="grid gap-6">
+        {/* Staff Metrics */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Activity className="h-4 w-4" />
+            Dorm Operations
+          </div>
+          <StaffStatsGrid stats={stats} />
+        </div>
+
+        {/* SA Specifics */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <ClipboardList className="h-4 w-4" />
+            Duty Management
+          </div>
+          <SaDashboard 
+            unverifiedFines={pendingFinesCount}
+            todayCleaningCount={todayCleaningCount}
+            role={role}
+          />
+        </div>
+
+        {/* Occupant View (Personal Standing) */}
+        {occupant && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <UserCheck className="h-4 w-4" />
+              Personal Standing
             </div>
-          </CardContent>
-        </Card>
+            <OccupantStanding 
+              balance={balance!}
+              isCleared={balance!.total <= 0}
+              nextCleaning={cleaningPlanForRoom ? {
+                area: cleaningPlanForRoom.area ?? "Unassigned",
+                date: format(new Date(cleaningPlanForRoom.week_start), "MMM d")
+              } : null}
+              role={role}
+            />
+          </div>
+        )}
 
-        <Card className="border-t-4 border-t-amber-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Balances</CardTitle>
-            <CardDescription>Only your own ledgers are shown here.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {balance ? (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <div className="text-xs text-muted-foreground">Total</div>
-                  <div className={`text-lg font-semibold ${balance.total > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                    {formatPesos(balance.total)}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <div className="text-xs text-muted-foreground">Events</div>
-                  <div className="text-lg font-semibold">{formatPesos(balance.events)}</div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <div className="text-xs text-muted-foreground">Fines</div>
-                  <div className="text-lg font-semibold">{formatPesos(balance.fines)}</div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <div className="text-xs text-muted-foreground">Maintenance</div>
-                  <div className="text-lg font-semibold">{formatPesos(balance.maintenance)}</div>
-                </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Announcements Card */}
+          <Card className="border-l-4 border-l-blue-500 h-full">
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle className="text-base text-sky-600 dark:text-sky-400">Announcements</CardTitle>
+                <CardDescription>Dorm-wide updates</CardDescription>
               </div>
-            ) : (
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                Balance summary is not available for your account yet.
-              </div>
-            )}
-
-            <Button asChild className="w-full" variant="outline">
-              <Link href="/student_assistant/payments">View transaction history</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-t-4 border-t-emerald-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">This week</CardTitle>
-            <CardDescription>Cleaning and deadlines at a glance.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {cleaningPlanForRoom ? (
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium text-lime-600 dark:text-lime-400">Cleaning assignment</div>
-                  <div className="text-xs text-muted-foreground">
-                    Week of {format(new Date(cleaningPlanForRoom.week_start), "MMM d")}
-                  </div>
-                </div>
-                <div className="mt-2 text-sm">
-                  {cleaningPlanForRoom.area ? (
-                    <span className="font-medium">{cleaningPlanForRoom.area}</span>
-                  ) : (
-                    <span className="text-muted-foreground">No area assigned yet.</span>
-                  )}
-                </div>
-                {cleaningPlanForRoom.rest_level ? (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Rest level: Level {cleaningPlanForRoom.rest_level}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                Cleaning plan is unavailable for your current room selection.
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Upcoming payables</div>
-              {eventPayables.length ? (
-                <div className="space-y-2">
-                  {eventPayables.map((row) => {
-                    const isOverdue = row.deadline ? row.deadline.getTime() < now.getTime() : false;
-                    return (
-                      <div key={row.eventId} className="rounded-lg border p-3 text-sm">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{row.eventTitle}</div>
-                            {row.label ? (
-                              <div className="truncate text-xs text-muted-foreground">{row.label}</div>
-                            ) : null}
-                          </div>
-                          <div className={`shrink-0 font-semibold ${isOverdue ? "text-rose-600" : "text-amber-600"}`}>
-                            {formatPesos(row.balance)}
-                          </div>
-                        </div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          {row.deadline ? (
-                            <span className={isOverdue ? "text-rose-600" : ""}>
-                              Deadline: {format(row.deadline, "MMM d, yyyy h:mm a")}
-                            </span>
-                          ) : (
-                            <span>Deadline not set.</span>
-                          )}
-                        </div>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/${role}/home/announcements`}>View all</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {announcements.length ? (
+                <div className="space-y-3">
+                  {announcements.map((announcement) => (
+                    <div key={announcement.id} className="text-sm">
+                      <div className="font-medium">{announcement.title}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                        {announcement.body}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                  No unpaid event contributions found.
-                </div>
+                <p className="text-sm text-muted-foreground italic">No recent announcements.</p>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
 
-      <Card className="border-l-4 border-l-blue-500">
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-base text-sky-600 dark:text-sky-400">Announcements</CardTitle>
-            <CardDescription>Shared dorm updates visible to your role.</CardDescription>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/student_assistant/home/announcements">View all</Link>
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {announcements.length ? (
-            <div className="space-y-2">
-              {announcements.map((announcement) => {
-                const preview =
-                  announcement.body.length > 220
-                    ? `${announcement.body.slice(0, 220).trim()}…`
-                    : announcement.body;
-                return (
-                  <div key={announcement.id} className="rounded-lg border p-3 text-sm">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{announcement.title}</div>
-                        {announcement.committee ? (
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            {announcement.committee.name} · {announcement.audience === "committee" ? "Committee members" : "Whole dorm"}
-                          </div>
-                        ) : null}
-                        <div className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
-                          {preview}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-xs text-muted-foreground">
-                        {announcement.starts_at
-                          ? format(new Date(announcement.starts_at), "MMM d, yyyy")
-                          : ""}
-                      </div>
-                    </div>
-                    {announcement.visibility === "staff" ? (
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        Visibility: <span className="font-medium">staff</span>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-              No announcements yet.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-t-4 border-t-orange-500">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="text-base text-orange-600 dark:text-orange-400">Upcoming events</CardTitle>
-              <CardDescription>From your current semester calendar.</CardDescription>
-            </div>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/student_assistant/events">
-                <CalendarDays className="mr-2 size-4 text-orange-500" />
-                Open calendar
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {upcomingEvents.length ? (
-              <div className="space-y-2">
-                {upcomingEvents.map((event) => (
-                  <div key={event.id} className="rounded-lg border p-3 text-sm">
-                    <div className="font-medium">{event.title}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {event.starts_at ? format(new Date(event.starts_at), "MMM d, yyyy h:mm a") : "Date TBD"}
-                      {event.location ? ` • ${event.location}` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                No upcoming events found.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-t-4 border-t-rose-500">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="text-base text-rose-600 dark:text-rose-400">Rules snapshot</CardTitle>
-              <CardDescription>Visible dorm rules and default penalties.</CardDescription>
-            </div>
-            <Button asChild size="sm" variant="outline">
-              <Link href={finesHref}>
-                <FileText className="mr-2 size-4 text-rose-500" />
-                View fines
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="text-xs text-muted-foreground">Active rules</div>
-                <div className="text-lg font-semibold">{rulesSummary.total}</div>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <div className="text-xs text-muted-foreground">Severity mix</div>
-                <div className="mt-1 text-sm">
-                  Minor: <span className="font-medium text-emerald-600">{rulesSummary.minor}</span> · Major:{" "}
-                  <span className="font-medium text-amber-600">{rulesSummary.major}</span> · Severe:{" "}
-                  <span className="font-medium text-rose-600">{rulesSummary.severe}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border bg-muted/10 p-3 text-sm text-muted-foreground">
-              This page intentionally avoids exposing other occupants’ personal details. You’ll only see shared dorm data and your own records.
-            </div>
-          </CardContent>
-        </Card>
+          {/* AI Shortcut */}
+          <Card className="bg-gradient-to-br from-purple-500/5 to-sky-500/5 border-purple-500/20">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                Intelligent Assistant
+              </CardTitle>
+              <CardDescription>AI-powered reporting and summaries</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Ask Dormy AI to summarize your ledger, generate event reports, or check occupant standing.
+              </p>
+              <Button asChild className="w-full bg-purple-600 hover:bg-purple-700">
+                <Link href={`/${role}/ai`}>Open AI Workspace</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

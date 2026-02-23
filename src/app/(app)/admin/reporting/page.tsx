@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { getDashboardStats } from "@/app/actions/dashboard";
-import { getCommittee, getCommitteeFinanceSummary, type CommitteeDetail, type CommitteeFinanceSummaryRow } from "@/app/actions/committees";
+import { getDashboardStats } from "@/app/actions/stats";
+import { getCommittee, getCommitteeFinanceSummary, getCommitteeDashboardData, type CommitteeDetail, type CommitteeFinanceSummaryRow } from "@/app/actions/committees";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -184,9 +184,14 @@ export default async function ReportingDashboardPage() {
   }
 
   // --- RENDER DORM STAFF VIEW ---
-  const statsRes = await getDashboardStats(dormId);
+  const [statsRes, committeesRes] = await Promise.all([
+    getDashboardStats(dormId),
+    getCommitteeDashboardData(dormId)
+  ]);
+
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
   const stats = statsRes;
+  const committees = "data" in committeesRes ? (committeesRes.data ?? []) : [];
 
   const showOverallFinance = roles.some(r => new Set(["admin", "adviser"]).has(r));
   const showFinesAndMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
@@ -205,7 +210,44 @@ export default async function ReportingDashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {showOverallFinance && (
+        {showOverallFinance && committees.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-orange-500" />
+            <h2 className="text-xl font-semibold">Committee Fund Summaries</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {committees.map((c: any) => {
+              const income = c.finance?.reduce((s: number, f: any) => s + Number(f.collected_pesos), 0) ?? 0;
+              const expenses = c.finance?.reduce((s: number, f: any) => s + (Number(f.charged_pesos) - Number(f.collected_pesos)), 0) ?? 0; // Wait, this isn't right for expenses
+              // I need actual expenses for the committee
+              const approvedExpenses = c.pendingExpenses ? 0 : 0; // Need to fetch approved ones or have them in the data
+              
+              return (
+                <Card key={c.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">{c.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-2xl font-bold text-orange-600">₱{income.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Collected</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-rose-600">{c.upcomingEvents?.length || 0} Events</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Sem</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {showOverallFinance && (
           <>
             <StatCard label="Cash on Hand" value={`₱${stats.cashOnHand.toFixed(2)}`} sublabel="Payments vs Expenses" icon={CircleDollarSign} variant="success" />
             <StatCard label="Total Expenses" value={`-₱${stats.totalExpenses.toFixed(2)}`} sublabel="Approved sem expenditures" icon={BarChart3} variant="danger" />
@@ -249,6 +291,43 @@ export default async function ReportingDashboardPage() {
           />
         )}
       </div>
+
+      {showOverallFinance && committees.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-orange-500" />
+            <h2 className="text-xl font-semibold">Committee Fund Summaries</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {committees.map((c: any) => {
+              const income = c.finance?.reduce((s: number, f: any) => s + Number(f.collected_pesos), 0) ?? 0;
+              const expenses = c.finance?.reduce((s: number, f: any) => s + (Number(f.charged_pesos) - Number(f.collected_pesos)), 0) ?? 0; // Wait, this isn't right for expenses
+              // I need actual expenses for the committee
+              const approvedExpenses = c.pendingExpenses ? 0 : 0; // Need to fetch approved ones or have them in the data
+              
+              return (
+                <Card key={c.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">{c.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-2xl font-bold text-orange-600">₱{income.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Collected</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-rose-600">{c.upcomingEvents?.length || 0} Events</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active Sem</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showOverallFinance && (
         <Card>

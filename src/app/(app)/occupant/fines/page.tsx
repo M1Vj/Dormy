@@ -146,7 +146,7 @@ export default async function FinesPage({
   const effectiveRole = isOccupantMode ? "occupant" : role;
 
   if (new Set(["admin", "student_assistant"]).has(role) && effectiveRole !== "occupant") {
-    redirect("/admin/fines");
+    redirect(`/${role}/fines`);
   }
 
   // Occupants: only see their own fines
@@ -177,7 +177,7 @@ export default async function FinesPage({
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link href="/occupant/fines/reports">Report a violation</Link>
+          <Link href={`/${effectiveRole}/fines/reports`}>Report a violation</Link>
         </Button>
       </div>
 
@@ -231,7 +231,7 @@ export default async function FinesPage({
             </Button>
             {hasFilters ? (
               <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/occupant/fines">Reset</Link>
+                <Link href={`/${effectiveRole}/fines`}>Reset</Link>
               </Button>
             ) : null}
           </form>

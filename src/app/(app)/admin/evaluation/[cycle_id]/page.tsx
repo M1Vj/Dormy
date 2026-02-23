@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getEvaluationCycle, getEvaluationTemplates } from "@/app/actions/evaluation";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,12 +27,27 @@ export default async function CycleDetailsPage({ params }: Props) {
   const templates = await getEvaluationTemplates(dormId, cycle_id);
   const dormOptions = await getUserDorms();
 
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return <div>Supabase not configured.</div>;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return <div>Unauthorized</div>;
+
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  const roles = memberships?.map(m => m.role) ?? ["occupant"];
+  const myRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-6 p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/admin/evaluation">
+            <Link href={`/${myRole}/evaluation`}>
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -104,7 +120,7 @@ export default async function CycleDetailsPage({ params }: Props) {
                       ))}
                     </div>
                     <Button variant="outline" className="w-full" asChild>
-                      <Link href={`/admin/evaluation/${cycle_id}/templates/${template.id}`}>
+                      <Link href={`/${myRole}/evaluation/${cycle_id}/templates/${template.id}`}>
                         Edit Metrics & Weights
                       </Link>
                     </Button>

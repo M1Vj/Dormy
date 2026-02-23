@@ -293,7 +293,7 @@ export default async function EventsFinancePage({
                   {event.deadline ? format(new Date(event.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                 </p>
                 <Button asChild size="sm" className="w-full">
-                  <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
+                  <Link href={`/treasurer/finance/events/${event.id}`}>Manage</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -334,7 +334,7 @@ export default async function EventsFinancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/admin/finance/events/${event.id}`}>Manage</Link>
+                    <Link href={`/treasurer/finance/events/${event.id}`}>Manage</Link>
                   </Button>
                 </TableCell>
               </TableRow>

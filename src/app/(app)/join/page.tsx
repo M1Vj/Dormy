@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/join";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { JoinDorm } from "@/components/join/join-dorm";
+import { getActiveRole } from "@/lib/roles-server";
 
 export default async function JoinPage() {
   const supabase = await createSupabaseServerClient();
@@ -26,14 +27,9 @@ export default async function JoinPage() {
     redirect("/login");
   }
 
-  const { data: existingMembership } = await supabase
-    .from("dorm_memberships")
-    .select("id")
-    .eq("user_id", user.id)
-    .limit(1);
-
-  if (existingMembership?.length) {
-    redirect("/occupant/home");
+  const role = await getActiveRole();
+  if (role) {
+    redirect(`/${role}/home`);
   }
 
   const [dorms, applications, invites] = await Promise.all([

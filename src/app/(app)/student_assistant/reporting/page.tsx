@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
-import { getDashboardStats } from "@/app/actions/dashboard";
+import { getDashboardStats } from "@/app/actions/stats";
 import { getCommittee, getCommitteeFinanceSummary, type CommitteeDetail, type CommitteeFinanceSummaryRow } from "@/app/actions/committees";
+import { getCleaningSnapshot } from "@/app/actions/cleaning";
+import { getFines } from "@/app/actions/fines";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -184,9 +186,16 @@ export default async function ReportingDashboardPage() {
   }
 
   // --- RENDER DORM STAFF VIEW ---
-  const statsRes = await getDashboardStats(dormId);
+  const [statsRes, cleaningRes, finesRes] = await Promise.all([
+    getDashboardStats(dormId),
+    getCleaningSnapshot(),
+    getFines(dormId, { status: "active" })
+  ]);
+
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
   const stats = statsRes;
+  const cleaning = "error" in cleaningRes ? null : cleaningRes;
+  const activeFines = "data" in finesRes ? (finesRes.data ?? []) : [];
 
   const showOverallFinance = roles.some(r => new Set(["admin", "adviser"]).has(r));
   const showFinesAndMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
@@ -205,7 +214,63 @@ export default async function ReportingDashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {showOverallFinance && (
+        <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cleaning Snapshot</CardTitle>
+            <CardDescription>Current week assignments</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {!cleaning || cleaning.assignments.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">No cleaning assignments for this week.</p>
+              )}
+              {cleaning?.assignments.slice(0, 5).map((asg: any) => (
+                <div key={asg.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <p className="font-medium text-sm">Room {asg.room_code}</p>
+                    <p className="text-xs text-muted-foreground">{asg.area_name}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase">Active</span>
+                  </div>
+                </div>
+              ))}
+              {cleaning && cleaning.assignments.length > 5 && (
+                <p className="text-xs text-center text-muted-foreground">And {cleaning.assignments.length - 5} more...</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Active Fines</CardTitle>
+            <CardDescription>Latest unpaid penalties</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {activeFines.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">No active fines recorded.</p>
+              )}
+              {activeFines.slice(0, 5).map((fine: any) => (
+                <div key={fine.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <p className="font-medium text-sm">{fine.occupant?.full_name ?? "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground">{fine.rule?.title ?? "Fine"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm text-amber-600">₱{Number(fine.pesos).toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground">{fine.points} pts</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showOverallFinance && (
           <>
             <StatCard label="Cash on Hand" value={`₱${stats.cashOnHand.toFixed(2)}`} sublabel="Payments vs Expenses" icon={CircleDollarSign} variant="success" />
             <StatCard label="Total Expenses" value={`-₱${stats.totalExpenses.toFixed(2)}`} sublabel="Approved sem expenditures" icon={BarChart3} variant="danger" />
@@ -248,6 +313,62 @@ export default async function ReportingDashboardPage() {
             variant={clearancePercentage < 100 ? "warn" : "success"}
           />
         )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cleaning Snapshot</CardTitle>
+            <CardDescription>Current week assignments</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {!cleaning || cleaning.assignments.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">No cleaning assignments for this week.</p>
+              )}
+              {cleaning?.assignments.slice(0, 5).map((asg: any) => (
+                <div key={asg.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <p className="font-medium text-sm">Room {asg.room_code}</p>
+                    <p className="text-xs text-muted-foreground">{asg.area_name}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase">Active</span>
+                  </div>
+                </div>
+              ))}
+              {cleaning && cleaning.assignments.length > 5 && (
+                <p className="text-xs text-center text-muted-foreground">And {cleaning.assignments.length - 5} more...</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Active Fines</CardTitle>
+            <CardDescription>Latest unpaid penalties</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {activeFines.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">No active fines recorded.</p>
+              )}
+              {activeFines.slice(0, 5).map((fine: any) => (
+                <div key={fine.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <p className="font-medium text-sm">{fine.occupant?.full_name ?? "Unknown"}</p>
+                    <p className="text-xs text-muted-foreground">{fine.rule?.title ?? "Fine"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-sm text-amber-600">₱{Number(fine.pesos).toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground">{fine.points} pts</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {showOverallFinance && (

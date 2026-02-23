@@ -100,7 +100,20 @@ export default async function MaintenancePage({
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
+
+  const { data: dormData } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", activeDormId)
+    .single();
+  
+  // Officer should have access to maintenance if enabled
+  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {}
+  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true
+  
+  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r)) || 
+                  (allowTreasurerMaintenance && roles.includes("officer"));
+
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
@@ -240,7 +253,7 @@ export default async function MaintenancePage({
         </Button>
         {search || statusFilter ? (
           <Button asChild type="button" variant="ghost" size="sm">
-            <Link href="/officer/finance/maintenance">Reset</Link>
+            <Link href={`/${activeRole}/finance/maintenance`}>Reset</Link>
           </Button>
         ) : null}
       </form>

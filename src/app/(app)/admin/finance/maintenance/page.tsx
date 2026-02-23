@@ -195,6 +195,8 @@ export default async function MaintenancePage({
 
   const totalCollectible = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
 
+  const primaryRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-6">
       {/* Header row */}
@@ -240,7 +242,7 @@ export default async function MaintenancePage({
         </Button>
         {search || statusFilter ? (
           <Button asChild type="button" variant="ghost" size="sm">
-            <Link href="/admin/finance/maintenance">Reset</Link>
+            <Link href={`/${primaryRole}/finance/maintenance`}>Reset</Link>
           </Button>
         ) : null}
       </form>

@@ -175,6 +175,8 @@ export default async function AdminFineReportDetailPage({
 
   const reporterUserId = reporter?.user_id ?? null;
 
+  const activeRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -185,7 +187,7 @@ export default async function AdminFineReportDetailPage({
           </p>
         </div>
         <Button asChild variant="secondary">
-          <Link href="/admin/fines">Back to fines</Link>
+          <Link href={`/${activeRole}/fines`}>Back to fines</Link>
         </Button>
       </div>
 

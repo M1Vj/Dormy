@@ -164,7 +164,7 @@ export default async function AdminAuditPage({
             <div className="md:col-span-5 flex items-center gap-2">
               <Button type="submit" size="sm">Apply filters</Button>
               <Button asChild type="button" size="sm" variant="ghost">
-                <Link href="/admin/audit">Reset</Link>
+                <Link href={`/${membership.role}/audit`}>Reset</Link>
               </Button>
             </div>
           </form>

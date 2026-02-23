@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getUserRolesAllDorms } from "@/lib/access";
 
@@ -24,7 +24,8 @@ export default async function TreasurerLayout({
   const hasAccess = memberships.some((m) => ALLOWED_ROLES.has(m.role));
 
   if (!hasAccess) {
-    redirect("/settings");
+    const role = await getActiveRole() || "occupant";
+    redirect(`/${role}/home`);
   }
 
   return <>{children}</>;

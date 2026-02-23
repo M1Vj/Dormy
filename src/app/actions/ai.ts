@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { getActiveDormId } from "@/lib/dorms";
@@ -27,6 +28,68 @@ const eventConceptSchema = z.object({
   scoring_hints: z.array(z.string().trim().min(1).max(200)).max(40),
   notes: z.string().trim().max(3000),
 });
+
+const ROLE_PROMPTS: Record<DormRole, { system: string; suggestions: string[] }> = {
+  admin: {
+    system: "You are a Management AI for Dormy. Focus on overall dormitory governance, policy enforcement, and strategic planning. Help review evaluations, manage dorm-wide initiatives, and analyze administrative data. Provide high-level summaries and strategic recommendations.",
+    suggestions: [
+      "Review the latest evaluation results and summarize key findings.",
+      "Draft a new policy for dormitory visitors and guest stays.",
+      "Analyze dorm-wide participation in recent events and suggest improvements.",
+      "Draft a memo for staff regarding upcoming semester preparations.",
+      "Summarize the overall dorm performance based on recent metrics.",
+    ],
+  },
+  adviser: {
+    system: "You are an Adviser AI for Dormy. Focus on maintenance oversight, clearance workflows, and student welfare. Help review maintenance fees, manage clearance status, and provide guidance on dorm operations. Your tone should be supportive yet firm on compliance.",
+    suggestions: [
+      "Summarize the current maintenance fee collection status.",
+      "Identify occupants who are pending clearance for this semester.",
+      "Draft a maintenance announcement regarding upcoming facility repairs.",
+      "Review student evaluation feedback and suggest welfare initiatives.",
+      "Draft a guidance note for students struggling with dorm rules.",
+    ],
+  },
+  treasurer: {
+    system: "You are a Treasurer AI for Dormy. Focus on financial analysis, expense tracking, and budget planning. When organizing event concepts, pay special attention to budget items, financial feasibility, and collection strategies. You have access to read-only finance insights to help you analyze expenses and suggest optimizations.",
+    suggestions: [
+      "Analyze recent event expenses and suggest budget optimizations.",
+      "Draft a budget for the upcoming basketball tournament.",
+      "Summarize the current collection status for event contributions.",
+      "Analyze pending expenses for the social committee.",
+      "Draft a financial report for the current semester's contributions.",
+    ],
+  },
+  student_assistant: {
+    system: "You are a Student Assistant AI for Dormy. Focus on dormitory operations, cleaning schedules, and occupant management. Help draft announcements for cleaning duties, manage fine reports, and maintain order in the dorm. Be practical and direct in your communication.",
+    suggestions: [
+      "Draft a cleaning announcement for this weekend's general cleaning.",
+      "Create a cleaning schedule for next week with level-based rotations.",
+      "Summarize recent fine reports and suggest follow-up actions for violators.",
+      "Draft a notice for noise violations and quiet hour enforcement.",
+      "Draft a reminder for occupants to update their room inventory.",
+    ],
+  },
+  officer: {
+    system: "You are an Event Officer AI for Dormy. Focus on event planning, competition management, and student engagement. Help turn raw ideas into exciting event concepts with clear goals, timelines, and scoring systems. Be creative and encouraging.",
+    suggestions: [
+      "Brainstorm ideas for a month-long sports fest with inter-level competitions.",
+      "Draft a competition scoring system and criteria for a talent show.",
+      "Create a detailed timeline for the upcoming dorm anniversary celebration.",
+      "Draft an invitation message for a guest speaker at the next dorm assembly.",
+      "Draft a social media post to promote the upcoming dorm night.",
+    ],
+  },
+  occupant: {
+    system: "You are a Dormitory AI. Help occupants with general inquiries and event participation. Be friendly and helpful.",
+    suggestions: [
+      "What events are coming up?",
+      "How do I pay my fines?",
+      "Who is my room assistant?",
+      "How do I request a room transfer?",
+    ],
+  },
+};
 
 const saveConceptSchema = z.object({
   mode: z.enum(["draft_event", "attach_event"]),
@@ -197,7 +260,7 @@ async function enforceRateLimit(context: AiContext) {
   return { success: true } as const;
 }
 
-async function callGeminiForConcept(rawText: string) {
+async function callGeminiForConcept(rawText: string, role: DormRole = "officer") {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return { concept: fallbackConcept(rawText), model: "fallback" };
@@ -206,7 +269,10 @@ async function callGeminiForConcept(rawText: string) {
   const endpoint =
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
+  const roleContext = ROLE_PROMPTS[role] || ROLE_PROMPTS.officer;
+
   const prompt = [
+    roleContext.system,
     "Return valid JSON only.",
     "Schema:",
     '{"title":"string","goals":["string"],"timeline":["string"],"budget_items":["string"],"tasks":["string"],"team_hints":["string"],"scoring_hints":["string"],"notes":"string"}',
@@ -262,6 +328,7 @@ export async function getAiWorkspaceData(): Promise<
     events: Array<{ id: string; title: string }>;
     recentConcepts: AiConceptRecord[];
     role: DormRole;
+    suggestions: string[];
   }
   | { error: string }
 > {
@@ -271,7 +338,6 @@ export async function getAiWorkspaceData(): Promise<
   }
 
   const { context } = result;
-
   const [{ data: events }, { data: concepts }] = await Promise.all([
     context.supabase
       .from("events")
@@ -286,7 +352,6 @@ export async function getAiWorkspaceData(): Promise<
       .order("created_at", { ascending: false })
       .limit(20),
   ]);
-
   const recentConcepts: AiConceptRecord[] = (concepts ?? []).map(
     (entry: {
       id: string;
@@ -309,10 +374,13 @@ export async function getAiWorkspaceData(): Promise<
     }
   );
 
+  const suggestions = ROLE_PROMPTS[context.role]?.suggestions ?? [];
+
   return {
     events: (events ?? []) as Array<{ id: string; title: string }>,
     recentConcepts,
     role: context.role,
+    suggestions,
   };
 }
 
@@ -334,7 +402,7 @@ export async function organizeEventConcept(formData: FormData) {
     return { error: rateLimit.error };
   }
 
-  const generated = await callGeminiForConcept(sanitized.value);
+  const generated = await callGeminiForConcept(sanitized.value, context.role);
   const validated = eventConceptSchema.safeParse(generated.concept);
   if (!validated.success) {
     return { error: "Failed to generate structured concept." };
@@ -417,10 +485,15 @@ export async function saveEventConcept(formData: FormData) {
 
   if (payload.data.mode === "draft_event") {
     const description = conceptToDescription(payload.data.structured);
+    const { ensureActiveSemesterId } = await import("@/lib/semesters");
+    const semesterResult = await ensureActiveSemesterId(context.dormId, context.supabase);
+    const semesterId = "semesterId" in semesterResult ? semesterResult.semesterId : null;
+
     const { data: event, error } = await context.supabase
       .from("events")
       .insert({
         dorm_id: context.dormId,
+        semester_id: semesterId,
         title: payload.data.structured.title,
         description,
         created_by: context.userId,
@@ -471,10 +544,11 @@ export async function saveEventConcept(formData: FormData) {
     result: summarizeConceptForLog(payload.data.structured),
   });
 
-  revalidatePath("/ai");
-  revalidatePath("/events");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/ai`);
+  revalidatePath(`/${activeRole}/events`);
   if (eventId) {
-    revalidatePath(`/events/${eventId}`);
+    revalidatePath(`/${activeRole}/events/${eventId}`);
   }
 
   return { success: true, eventId };

@@ -87,6 +87,7 @@ export function AppSidebar() {
         { title: "Settings", url: `/${role}/settings`, icon: Settings, color: "text-zinc-500" },
         { title: "Overrides", url: `/${role}/overrides`, icon: Wrench, color: "text-orange-500" },
         { title: "Audit Log", url: `/${role}/audit`, icon: FileText, color: "text-slate-500" },
+        { title: "Dorms", url: `/${role}/dorms`, icon: Building2, color: "text-blue-500" },
       ];
     } else if (role === "student_assistant") {
       return [

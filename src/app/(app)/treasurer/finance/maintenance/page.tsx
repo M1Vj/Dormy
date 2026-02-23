@@ -100,7 +100,20 @@ export default async function MaintenancePage({
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
+
+  const { data: dormData } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", activeDormId)
+    .single();
+  
+  // Treasurer should have access to maintenance if enabled
+  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {}
+  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true
+  
+  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r)) || 
+                  (allowTreasurerMaintenance && roles.includes("treasurer"));
+
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
@@ -195,10 +208,11 @@ export default async function MaintenancePage({
 
   const totalCollectible = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
 
+  const activeRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-6">
-      {/* Header row */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Maintenance Ledger</h1>
           <p className="text-sm text-muted-foreground">
@@ -240,7 +254,7 @@ export default async function MaintenancePage({
         </Button>
         {search || statusFilter ? (
           <Button asChild type="button" variant="ghost" size="sm">
-            <Link href="/treasurer/finance/maintenance">Reset</Link>
+            <Link href={`/${activeRole}/finance/maintenance`}>Reset</Link>
           </Button>
         ) : null}
       </form>

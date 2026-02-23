@@ -21,7 +21,7 @@ export default async function OccupantLayout({
   // Any dorm membership grants access to occupant pages
   const memberships = await getUserRolesAllDorms(supabase, user.id);
   if (memberships.length === 0) {
-    redirect("/settings");
+    redirect("/join");
   }
 
   return <>{children}</>;

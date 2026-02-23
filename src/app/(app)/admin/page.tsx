@@ -54,6 +54,8 @@ export default async function Page() {
     dormAttributes = data || {};
   }
 
+  const primaryRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Admin</h1>
@@ -64,7 +66,7 @@ export default async function Page() {
         <CardContent>
           <div className="flex flex-wrap gap-4">
             <Button asChild>
-              <Link href="/admin/occupants">Manage occupants</Link>
+              <Link href={`/${primaryRole}/occupants`}>Manage occupants</Link>
             </Button>
             {createOccupantAction && (
               <CreateOccupantForm action={createOccupantAction} />
@@ -79,10 +81,10 @@ export default async function Page() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-4">
             <Button asChild>
-              <Link href="/admin/dorms">Manage dorms</Link>
+              <Link href={`/${primaryRole}/dorms`}>Manage dorms</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/admin/dorms/add">Add new dorm</Link>
+              <Link href={`/${primaryRole}/dorms/add`}>Add new dorm</Link>
             </Button>
           </CardContent>
         </Card>
@@ -94,7 +96,7 @@ export default async function Page() {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href="/admin/audit">Open audit trail</Link>
+              <Link href={`/${primaryRole}/audit`}>Open audit trail</Link>
             </Button>
           </CardContent>
         </Card>
@@ -121,7 +123,7 @@ export default async function Page() {
             Group events, fines, cleaning, and evaluations by semester while keeping occupants and money persistent.
           </p>
           <Button asChild>
-            <Link href="/admin/terms">Open semester management</Link>
+            <Link href={`/${primaryRole}/terms`}>Open semester management</Link>
           </Button>
         </CardContent>
       </Card>
@@ -135,7 +137,7 @@ export default async function Page() {
               Handle exceptional corrections across occupants, fines, payments, cleaning, events, and evaluation with required reasons.
             </p>
             <Button asChild>
-              <Link href="/admin/overrides">Open override center</Link>
+              <Link href={`/${primaryRole}/overrides`}>Open override center</Link>
             </Button>
           </CardContent>
         </Card>

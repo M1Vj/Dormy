@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
@@ -177,8 +178,10 @@ export async function submitFineReport(dormId: string, formData: FormData) {
     // Audit is best-effort
   }
 
-  revalidatePath("/fines/reports");
-  revalidatePath("/admin/fines");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/fines/reports`);
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -278,6 +281,7 @@ export async function reviewFineReport(
 
     const { error: ledgerError } = await supabase.from("ledger_entries").insert({
       dorm_id: dormId,
+      semester_id: report.semester_id,
       ledger: "sa_fines",
       entry_type: "charge",
       occupant_id: report.reported_occupant_id,
@@ -341,8 +345,10 @@ export async function reviewFineReport(
     // Audit is best-effort
   }
 
-  revalidatePath("/fines/reports");
-  revalidatePath("/admin/fines");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/fines/reports`);
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -393,8 +399,9 @@ export async function createFineReportComment(dormId: string, formData: FormData
     return { error: insertError.message };
   }
 
-  revalidatePath(`/fines/reports/${report.id}`);
-  revalidatePath(`/admin/fines/reports/${report.id}`);
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/fines/reports/${report.id}`);
   return { success: true };
 }
 

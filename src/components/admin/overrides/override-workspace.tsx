@@ -220,7 +220,7 @@ export function OverrideWorkspace({
       if (result?.error) {
         return { error: result.error, success: "" };
       }
-      return { error: "", success: "Event payable deadline override saved." };
+      return { error: "", success: "Contribution deadline override saved." };
     },
     initialState
   );

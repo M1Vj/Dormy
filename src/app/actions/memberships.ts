@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -118,7 +119,9 @@ export async function updateMembershipRoles(
     },
   });
 
-  revalidatePath("/admin/occupants");
-  revalidatePath("/occupants");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath("/occupants"); // Keep global for safety or remove if unused
   return { success: true };
 }

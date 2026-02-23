@@ -28,10 +28,12 @@ export default async function FinanceDashboard() {
   const canViewEvents = roles.some(r => new Set(["admin", "treasurer"]).has(r))
   const canViewExpenses = roles.some(r => new Set(["admin", "treasurer", "officer", "adviser"]).has(r))
 
+  const role = roles[0] || "occupant";
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
       {canViewMaintenance && (
-        <Link href="/officer/finance/maintenance" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/finance/maintenance`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Wrench className="h-8 w-8 text-blue-500 mb-2" />
@@ -43,7 +45,7 @@ export default async function FinanceDashboard() {
       )}
 
       {canViewEvents && (
-        <Link href="/officer/finance/events" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/finance/events`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Calendar className="h-8 w-8 text-orange-500 mb-2" />
@@ -55,7 +57,7 @@ export default async function FinanceDashboard() {
       )}
 
       {canViewExpenses && (
-        <Link href="/officer/finance/expenses" className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/finance/expenses`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Receipt className="h-8 w-8 text-green-500 mb-2" />

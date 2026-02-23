@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { getDashboardStats } from "@/app/actions/stats";
 import { getCommittee, getCommitteeFinanceSummary, type CommitteeDetail, type CommitteeFinanceSummaryRow } from "@/app/actions/committees";
+import { getDormApplicationsForActiveDorm } from "@/app/actions/join";
+import { getExpenses } from "@/app/actions/expenses";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -184,9 +186,16 @@ export default async function ReportingDashboardPage() {
   }
 
   // --- RENDER DORM STAFF VIEW ---
-  const statsRes = await getDashboardStats(dormId);
+  const [statsRes, appsRes, expensesRes] = await Promise.all([
+    getDashboardStats(dormId),
+    getDormApplicationsForActiveDorm(dormId, "pending"),
+    getExpenses(dormId, { status: "pending" })
+  ]);
+
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
   const stats = statsRes;
+  const pendingApps = appsRes;
+  const pendingExpenses = "data" in expensesRes ? (expensesRes.data ?? []) : [];
 
   const showOverallFinance = roles.some(r => new Set(["admin", "adviser"]).has(r));
   const showFinesAndMaintenance = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
@@ -205,7 +214,83 @@ export default async function ReportingDashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {showOverallFinance && (
+        <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-l-4 border-l-amber-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Critical Alerts
+            </CardTitle>
+            <CardDescription>Items requiring immediate attention</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingApps.length > 0 && (
+                <div className="flex items-center justify-between p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{pendingApps.length} Pending Applications</span>
+                  <span className="text-xs bg-amber-200 dark:bg-amber-800 px-2 py-0.5 rounded-full">Action Required</span>
+                </div>
+              )}
+              {pendingExpenses.length > 0 && (
+                <div className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
+                  <span className="text-sm font-medium text-red-800 dark:text-red-300">{pendingExpenses.length} Pending Expenses</span>
+                  <span className="text-xs bg-red-200 dark:bg-red-800 px-2 py-0.5 rounded-full">Review Needed</span>
+                </div>
+              )}
+              {stats.totalCollectibles > 5000 && (
+                <div className="flex items-center justify-between p-2 bg-rose-50 dark:bg-rose-950/20 rounded-lg border border-rose-200 dark:border-rose-900">
+                  <span className="text-sm font-medium text-rose-800 dark:text-rose-300">High Collectibles: ₱{stats.totalCollectibles.toFixed(0)}</span>
+                  <span className="text-xs bg-rose-200 dark:bg-rose-800 px-2 py-0.5 rounded-full">Financial Risk</span>
+                </div>
+              )}
+              {pendingApps.length === 0 && pendingExpenses.length === 0 && stats.totalCollectibles <= 5000 && (
+                <p className="text-sm text-muted-foreground italic">No critical alerts at this time.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Dorm Health Overview</CardTitle>
+            <CardDescription>Operational efficiency metrics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span>Occupant Clearance</span>
+                  <span>{clearancePercentage.toFixed(0)}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-emerald-500" style={{ width: `${clearancePercentage}%` }} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span>Collection Rate</span>
+                  <span>{stats.totalCharged > 0 ? ((stats.totalPaid / stats.totalCharged) * 100).toFixed(0) : 0}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-sky-500" style={{ width: `${stats.totalCharged > 0 ? (stats.totalPaid / stats.totalCharged) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-2 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold">{stats.totalEvents}</p>
+                  <p className="text-[10px] uppercase text-muted-foreground">Events Held</p>
+                </div>
+                <div className="text-center p-2 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold">{stats.totalFinesActive}</p>
+                  <p className="text-[10px] uppercase text-muted-foreground">Active Fines</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showOverallFinance && (
           <>
             <StatCard label="Cash on Hand" value={`₱${stats.cashOnHand.toFixed(2)}`} sublabel="Payments vs Expenses" icon={CircleDollarSign} variant="success" />
             <StatCard label="Total Expenses" value={`-₱${stats.totalExpenses.toFixed(2)}`} sublabel="Approved sem expenditures" icon={BarChart3} variant="danger" />
@@ -248,6 +333,82 @@ export default async function ReportingDashboardPage() {
             variant={clearancePercentage < 100 ? "warn" : "success"}
           />
         )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-l-4 border-l-amber-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Critical Alerts
+            </CardTitle>
+            <CardDescription>Items requiring immediate attention</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingApps.length > 0 && (
+                <div className="flex items-center justify-between p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{pendingApps.length} Pending Applications</span>
+                  <span className="text-xs bg-amber-200 dark:bg-amber-800 px-2 py-0.5 rounded-full">Action Required</span>
+                </div>
+              )}
+              {pendingExpenses.length > 0 && (
+                <div className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
+                  <span className="text-sm font-medium text-red-800 dark:text-red-300">{pendingExpenses.length} Pending Expenses</span>
+                  <span className="text-xs bg-red-200 dark:bg-red-800 px-2 py-0.5 rounded-full">Review Needed</span>
+                </div>
+              )}
+              {stats.totalCollectibles > 5000 && (
+                <div className="flex items-center justify-between p-2 bg-rose-50 dark:bg-rose-950/20 rounded-lg border border-rose-200 dark:border-rose-900">
+                  <span className="text-sm font-medium text-rose-800 dark:text-rose-300">High Collectibles: ₱{stats.totalCollectibles.toFixed(0)}</span>
+                  <span className="text-xs bg-rose-200 dark:bg-rose-800 px-2 py-0.5 rounded-full">Financial Risk</span>
+                </div>
+              )}
+              {pendingApps.length === 0 && pendingExpenses.length === 0 && stats.totalCollectibles <= 5000 && (
+                <p className="text-sm text-muted-foreground italic">No critical alerts at this time.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Dorm Health Overview</CardTitle>
+            <CardDescription>Operational efficiency metrics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span>Occupant Clearance</span>
+                  <span>{clearancePercentage.toFixed(0)}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-emerald-500" style={{ width: `${clearancePercentage}%` }} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium">
+                  <span>Collection Rate</span>
+                  <span>{stats.totalCharged > 0 ? ((stats.totalPaid / stats.totalCharged) * 100).toFixed(0) : 0}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-sky-500" style={{ width: `${stats.totalCharged > 0 ? (stats.totalPaid / stats.totalCharged) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-2 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold">{stats.totalEvents}</p>
+                  <p className="text-[10px] uppercase text-muted-foreground">Events Held</p>
+                </div>
+                <div className="text-center p-2 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold">{stats.totalFinesActive}</p>
+                  <p className="text-[10px] uppercase text-muted-foreground">Active Fines</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {showOverallFinance && (

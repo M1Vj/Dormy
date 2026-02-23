@@ -22,6 +22,13 @@ export default async function AiPage() {
       </div>
 
       <AiOrganizerWorkspace
+        role={workspace.role}
+        suggestedPrompts={[
+          "Analyze pending expenses",
+          "Summarize collection rates by committee",
+          "Draft a contribution reminder email",
+          "Identify overdue payments"
+        ]}
         events={workspace.events}
         recentConcepts={workspace.recentConcepts}
         initialInsights={null}

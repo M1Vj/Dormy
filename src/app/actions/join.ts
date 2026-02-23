@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
@@ -225,7 +226,8 @@ export async function applyToDorm(formData: FormData) {
     console.error("Failed to write audit event for application:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }
 
@@ -283,7 +285,8 @@ export async function cancelDormApplication(applicationId: string) {
     console.error("Failed to write audit event for cancellation:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }
 
@@ -377,7 +380,8 @@ export async function acceptDormInvite(inviteId: string) {
     console.error("Failed to write audit event for invite claim:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   revalidatePath("/home");
   return { success: true };
 }
@@ -498,7 +502,8 @@ export async function createDormInvite(formData: FormData) {
     console.error("Failed to send invite email:", emailError);
   }
 
-  revalidatePath("/admin/users");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
   return { success: true };
 }
 
@@ -679,6 +684,7 @@ export async function reviewDormApplication(formData: FormData) {
   }
 
   revalidatePath("/applications");
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }

@@ -214,7 +214,7 @@ export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesL
           </Button>
           {hasFilters ? (
             <Button asChild type="button" variant="ghost" size="sm">
-              <Link href="/admin/fines">Reset</Link>
+              <Link href={`/${role}/fines`}>Reset</Link>
             </Button>
           ) : null}
         </form>
