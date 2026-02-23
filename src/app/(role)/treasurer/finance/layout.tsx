@@ -15,7 +15,7 @@ export default function FinanceLayout({
       <div className="flex flex-col space-y-2">
         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Finance</h2>
         <p className="text-muted-foreground">
-          Manage ledgers for Maintenance, Events, and Fines.
+          Manage contribution collections and dorm expense records.
         </p>
       </div>
       <div className="flex-1">{children}</div>

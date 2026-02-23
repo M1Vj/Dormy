@@ -103,16 +103,14 @@ export default async function MaintenancePage({
 
   const { data: dormData } = await supabase
     .from("dorms")
-    .select("attributes")
+    .select("treasurer_maintenance_access")
     .eq("id", activeDormId)
     .single();
-  
-  // Treasurer should have access to maintenance if enabled
-  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {}
-  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true
-  
-  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r)) || 
-                  (allowTreasurerMaintenance && roles.includes("treasurer"));
+
+  const allowTreasurerMaintenance = dormData?.treasurer_maintenance_access === true;
+
+  const hasAccess = roles.some(r => new Set(["admin", "adviser"]).has(r)) ||
+                    (allowTreasurerMaintenance && roles.includes("treasurer"));
 
   if (!hasAccess) {
     return (

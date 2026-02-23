@@ -102,6 +102,12 @@ export default async function TreasurerReportingPage() {
     .eq("user_id", user.id);
 
   const roles = memberships?.map(m => m.role) ?? ["occupant"];
+  const { data: dormRow } = await supabase
+    .from("dorms")
+    .select("treasurer_maintenance_access")
+    .eq("id", dormId)
+    .maybeSingle();
+  const showTreasurerMaintenance = dormRow?.treasurer_maintenance_access === true;
 
   // Check if user is a committee head (fallback for non-staff)
   let committeeData: CommitteeDetail | null = null;
@@ -191,7 +197,14 @@ export default async function TreasurerReportingPage() {
   const contributionExpenseRows = (contributionExpensesRes.data ?? []) as ContributionExpenseRow[];
 
   const collectionRate = stats.eventsCharged > 0 ? (stats.eventsPaid / stats.eventsCharged) * 100 : 0;
-  const overallCollectionRate = stats.totalCharged > 0 ? (stats.totalPaid / stats.totalCharged) * 100 : 0;
+  const visibleTotalCharged = showTreasurerMaintenance
+    ? stats.totalCharged
+    : stats.eventsCharged + stats.finesCharged;
+  const visibleTotalPaid = showTreasurerMaintenance
+    ? stats.totalPaid
+    : stats.eventsPaid + stats.finesPaid;
+  const visibleTotalCollectibles = Math.max(0, visibleTotalCharged - visibleTotalPaid);
+  const overallCollectionRate = visibleTotalCharged > 0 ? (visibleTotalPaid / visibleTotalCharged) * 100 : 0;
   const pendingExpenseTotal = pendingExpenses.reduce((sum, expense) => sum + Number(expense.amount_pesos), 0);
 
   const contributionMap = new Map<
@@ -294,17 +307,17 @@ export default async function TreasurerReportingPage() {
         />
         <StatCard
           label="Total Collections"
-          value={`₱${stats.totalPaid.toFixed(2)}`}
+          value={`₱${visibleTotalPaid.toFixed(2)}`}
           sublabel="Gross payments this semester"
           icon={PiggyBank}
           variant="success"
         />
         <StatCard
           label="Outstanding Collectibles"
-          value={`₱${stats.totalCollectibles.toFixed(2)}`}
+          value={`₱${visibleTotalCollectibles.toFixed(2)}`}
           sublabel={`${overallCollectionRate.toFixed(0)}% collected`}
           icon={AlertTriangle}
-          variant={stats.totalCollectibles > 0 ? "warn" : "success"}
+          variant={visibleTotalCollectibles > 0 ? "warn" : "success"}
         />
         <StatCard
           label="Total Expenses"
@@ -342,25 +355,26 @@ export default async function TreasurerReportingPage() {
                   <span>₱{stats.eventsCharged.toFixed(2)} charged</span>
                 </div>
               </div>
-              {/* Maintenance */}
-              {(() => {
-                const maintRate = stats.maintenanceCharged > 0 ? (stats.maintenancePaid / stats.maintenanceCharged) * 100 : 0;
-                return (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span>Maintenance Fees</span>
-                      <span>{maintRate.toFixed(0)}%</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-sky-500 transition-all" style={{ width: `${maintRate}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>₱{stats.maintenancePaid.toFixed(2)} collected</span>
-                      <span>₱{stats.maintenanceCharged.toFixed(2)} charged</span>
-                    </div>
-                  </div>
-                );
-              })()}
+              {showTreasurerMaintenance
+                ? (() => {
+                    const maintRate = stats.maintenanceCharged > 0 ? (stats.maintenancePaid / stats.maintenanceCharged) * 100 : 0;
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-medium">
+                          <span>Maintenance Fees</span>
+                          <span>{maintRate.toFixed(0)}%</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="h-full bg-sky-500 transition-all" style={{ width: `${maintRate}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>₱{stats.maintenancePaid.toFixed(2)} collected</span>
+                          <span>₱{stats.maintenanceCharged.toFixed(2)} charged</span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                : null}
               {/* Fines */}
               {(() => {
                 const fineRate = stats.finesCharged > 0 ? (stats.finesPaid / stats.finesCharged) * 100 : 0;
@@ -597,12 +611,14 @@ export default async function TreasurerReportingPage() {
                   <td className="px-3 py-3 text-right text-emerald-600 font-medium">₱{stats.eventsPaid.toFixed(2)}</td>
                   <td className="px-3 py-3 text-right font-medium">₱{(stats.eventsCharged - stats.eventsPaid).toFixed(2)}</td>
                 </tr>
-                <tr className="border-b">
-                  <td className="px-3 py-3 font-medium">Maintenance Fees</td>
-                  <td className="px-3 py-3 text-right">₱{stats.maintenanceCharged.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right text-emerald-600 font-medium">₱{stats.maintenancePaid.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right font-medium">₱{(stats.maintenanceCharged - stats.maintenancePaid).toFixed(2)}</td>
-                </tr>
+                {showTreasurerMaintenance ? (
+                  <tr className="border-b">
+                    <td className="px-3 py-3 font-medium">Maintenance Fees</td>
+                    <td className="px-3 py-3 text-right">₱{stats.maintenanceCharged.toFixed(2)}</td>
+                    <td className="px-3 py-3 text-right text-emerald-600 font-medium">₱{stats.maintenancePaid.toFixed(2)}</td>
+                    <td className="px-3 py-3 text-right font-medium">₱{(stats.maintenanceCharged - stats.maintenancePaid).toFixed(2)}</td>
+                  </tr>
+                ) : null}
                 <tr className="border-b last:border-0">
                   <td className="px-3 py-3 font-medium">SA Fines</td>
                   <td className="px-3 py-3 text-right">₱{stats.finesCharged.toFixed(2)}</td>
@@ -611,9 +627,9 @@ export default async function TreasurerReportingPage() {
                 </tr>
                 <tr className="bg-muted/30">
                   <td className="px-3 py-3 font-bold">Total</td>
-                  <td className="px-3 py-3 text-right font-bold">₱{stats.totalCharged.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right font-bold text-emerald-600">₱{stats.totalPaid.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right font-bold">₱{(stats.totalCharged - stats.totalPaid).toFixed(2)}</td>
+                  <td className="px-3 py-3 text-right font-bold">₱{visibleTotalCharged.toFixed(2)}</td>
+                  <td className="px-3 py-3 text-right font-bold text-emerald-600">₱{visibleTotalPaid.toFixed(2)}</td>
+                  <td className="px-3 py-3 text-right font-bold">₱{visibleTotalCollectibles.toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>

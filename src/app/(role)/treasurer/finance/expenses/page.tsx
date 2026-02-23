@@ -20,6 +20,7 @@ import { ReviewExpenseDialog } from "@/components/finance/review-expense-dialog"
 
 type SearchParams = {
   status?: string | string[];
+  category?: string | string[];
 };
 
 export default async function ExpensesPage({
@@ -30,6 +31,9 @@ export default async function ExpensesPage({
   const params = await searchParams;
   const statusFilter =
     (Array.isArray(params?.status) ? params.status[0] : params?.status) || "all";
+  const requestedCategory = Array.isArray(params?.category)
+    ? params.category[0]
+    : params?.category;
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -62,13 +66,12 @@ export default async function ExpensesPage({
 
   const { data: dormData } = await supabase
     .from("dorms")
-    .select("attributes")
+    .select("treasurer_maintenance_access")
     .eq("id", dormId)
     .single();
 
   const roles = memberships?.map(m => m.role) ?? [];
-  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {};
-  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true;
+  const allowTreasurerMaintenance = dormData?.treasurer_maintenance_access === true;
   const canSubmit = roles.some(r => new Set(["admin", "treasurer", "officer"]).has(r));
   const canReview = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
@@ -103,20 +106,18 @@ export default async function ExpensesPage({
     .filter((e) => e.status === "pending")
     .reduce((sum, e) => sum + Number(e.amount_pesos), 0);
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "approved":
-        return (
-          <Badge variant="default" className="bg-emerald-600">
-            Approved
-          </Badge>
-        );
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return <Badge variant="secondary">Pending</Badge>;
-    }
-  };
+  const preferredTab =
+    requestedCategory === "maintenance_fee" || requestedCategory === "contributions"
+      ? requestedCategory
+      : null;
+  const defaultTab =
+    preferredTab === "maintenance_fee" && showMaintenanceTab
+      ? "maintenance_fee"
+      : preferredTab === "contributions" && showContributionsTab
+      ? "contributions"
+      : showMaintenanceTab
+      ? "maintenance_fee"
+      : "contributions";
 
   return (
     <div className="space-y-6">
@@ -169,7 +170,7 @@ export default async function ExpensesPage({
         </Card>
       </div>
 
-      <Tabs defaultValue={showMaintenanceTab ? "maintenance_fee" : "contributions"} className="space-y-4">
+      <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList>
           {showMaintenanceTab && <TabsTrigger value="maintenance_fee">Maintenance</TabsTrigger>}
           {showContributionsTab && <TabsTrigger value="contributions">Contributions</TabsTrigger>}

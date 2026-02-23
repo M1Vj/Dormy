@@ -11,6 +11,7 @@ import {
   DoorOpen,
   FileText,
   Home,
+  Receipt,
   Shield,
   Users,
   Wallet,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/sidebar";
 import { DormSwitcher } from "@/components/nav/dorm-switcher";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useDorm } from "@/components/providers/dorm-provider";
 
 type MenuItem = {
   title: string;
@@ -37,7 +39,7 @@ type MenuItem = {
   color: string;
 };
 
-function getMenuItems(role: string | null): MenuItem[] {
+function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): MenuItem[] {
   if (!role) {
     return [{ title: "Join", url: "/join", icon: Building2, color: "text-slate-500" }];
   }
@@ -96,12 +98,20 @@ function getMenuItems(role: string | null): MenuItem[] {
   }
 
   if (role === "treasurer") {
-    return [
+    const treasurerItems: MenuItem[] = [
       { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
-      { title: "Finance", url: "/treasurer/finance", icon: Wallet, color: "text-amber-500" },
+      { title: "Contributions", url: "/treasurer/finance/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-violet-500" },
       { title: "Reporting", url: "/treasurer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Events", url: "/treasurer/events", icon: Calendar, color: "text-orange-500" },
     ];
+
+    if (showTreasurerMaintenance) {
+      treasurerItems.splice(2, 0, { title: "Maintenance", url: "/treasurer/finance/maintenance", icon: Wallet, color: "text-cyan-500" });
+      treasurerItems.splice(3, 0, { title: "Maintenance Expenses", url: "/treasurer/finance/expenses?category=maintenance_fee", icon: FileText, color: "text-emerald-500" });
+    }
+
+    return treasurerItems;
   }
 
   if (role === "officer") {
@@ -122,9 +132,11 @@ function getMenuItems(role: string | null): MenuItem[] {
 export function AppSidebar() {
   const pathname = usePathname();
   const { role } = useAuth();
+  const { activeDorm } = useDorm();
   const { isMobile, setOpenMobile } = useSidebar();
+  const showTreasurerMaintenance = activeDorm?.treasurer_maintenance_access === true;
 
-  const menuItems = useMemo(() => getMenuItems(role), [role]);
+  const menuItems = useMemo(() => getMenuItems(role, showTreasurerMaintenance), [role, showTreasurerMaintenance]);
 
   return (
     <Sidebar>
@@ -137,7 +149,8 @@ export function AppSidebar() {
             <SidebarMenu>
               {menuItems.map((item) => {
                 const resolvedUrl = item.url;
-                const isActive = pathname === resolvedUrl || (resolvedUrl !== "/" && pathname.startsWith(`${resolvedUrl}/`));
+                const resolvedPath = resolvedUrl.split("?")[0];
+                const isActive = pathname === resolvedPath || (resolvedPath !== "/" && pathname.startsWith(`${resolvedPath}/`));
 
                 return (
                   <SidebarMenuItem key={item.title}>
