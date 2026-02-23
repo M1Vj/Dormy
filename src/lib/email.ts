@@ -261,6 +261,118 @@ export function renderPaymentReceiptEmail(input: {
   };
 }
 
+export function renderContributionBatchReceiptEmail(input: {
+  recipientName: string | null;
+  paidAtIso: string;
+  method: string | null;
+  contributions: Array<{
+    title: string;
+    amountPesos: number;
+  }>;
+  totalAmountPesos: number;
+  customMessage: string | null;
+  subjectOverride?: string | null;
+  signatureOverride?: string | null;
+  logoUrl?: string | null;
+}) {
+  const subject = input.subjectOverride?.trim() || "Contribution payment receipt";
+  const paidAt = new Date(input.paidAtIso);
+  const paidAtLabel = Number.isNaN(paidAt.getTime())
+    ? input.paidAtIso
+    : paidAt.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+
+  const safeRows = input.contributions.filter((item) => item.amountPesos > 0);
+  const greeting = input.recipientName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const messageHtml = input.customMessage?.trim()
+    ? textToHtml(input.customMessage)
+    : `<p style="margin:0 0 12px 0;">We received your contribution payment. Thank you.</p>`;
+
+  const logoHtml = input.logoUrl?.trim()
+    ? `<div style="margin:0 0 12px 0;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:56px; width:auto;"/></div>`
+    : "";
+
+  const lineItemsTable = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${safeRows
+          .map(
+            (item) => `
+              <tr>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">${escapeHtml(item.title)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
+              </tr>
+            `.trim()
+          )
+          .join("")}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="padding:12px 0 0 0; color:#334155; font-weight:700;">Total</td>
+          <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(input.totalAmountPesos)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `.trim();
+
+  const detailsHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:14px;">
+      <tbody>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:140px;">Date</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(paidAtLabel)}</td>
+        </tr>
+        ${input.method?.trim()
+          ? `
+              <tr>
+                <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Method</td>
+                <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(input.method.trim())}</td>
+              </tr>
+            `.trim()
+          : ""}
+      </tbody>
+    </table>
+  `.trim();
+
+  const bodyHtml = [
+    logoHtml,
+    greeting,
+    messageHtml,
+    lineItemsTable,
+    detailsHtml,
+    input.signatureOverride?.trim()
+      ? `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(input.signatureOverride.trim())}</strong></p>`
+      : "",
+  ].join("");
+
+  const text = [
+    input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
+    input.customMessage?.trim() || "We received your contribution payment. Thank you.",
+    "",
+    ...safeRows.map((item) => `${item.title}: ${normalizePesos(item.amountPesos)}`),
+    `Total: ${normalizePesos(input.totalAmountPesos)}`,
+    `Date: ${paidAtLabel}`,
+    input.method?.trim() ? `Method: ${input.method.trim()}` : "",
+    input.signatureOverride?.trim() ? `\n—\n${input.signatureOverride.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Contribution receipt", bodyHtml }),
+    text,
+  };
+}
+
 export function renderAccountWelcomeEmail(input: {
   recipientEmail: string;
   recipientName: string | null;

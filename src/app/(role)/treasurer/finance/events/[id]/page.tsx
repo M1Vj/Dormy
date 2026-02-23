@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle, ReceiptText, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
+import { ContributionPayableOverrideDialog } from "@/components/finance/contribution-payable-override-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
-import { PublicShareDialog } from "@/components/finance/public-share-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
-import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
+import { getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -46,18 +46,24 @@ type OccupantRow = {
   full_name?: string | null;
   student_id?: string | null;
   current_room_assignment?: AssignmentRef | null;
+  status?: "active" | "left" | "removed";
 };
 
 type EntryRow = {
+  id: string;
+  semester_id?: string | null;
   occupant_id?: string | null;
+  entry_type: string;
   amount_pesos?: number | string | null;
+  event_id?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 
 type OccupantWithStatus = OccupantRow & {
+  payable: number;
   paid: number;
-  charged: number;
-  status: "paid" | "partial" | "unpaid";
+  remaining: number;
+  paymentStatus: "paid" | "partial" | "unpaid";
   deadline: string | null;
   overdue: boolean;
 };
@@ -76,7 +82,7 @@ const getRoomCode = (occupant: OccupantRow) => {
   return room?.code ?? null;
 };
 
-function StatusBadge({ status }: { status: OccupantWithStatus["status"] }) {
+function StatusBadge({ status }: { status: OccupantWithStatus["paymentStatus"] }) {
   if (status === "paid") {
     return (
       <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700">
@@ -114,6 +120,34 @@ function parseDeadline(value: unknown) {
   return parsed.toISOString();
 }
 
+function parseContributionMetadata(entry: EntryRow) {
+  const metadata = entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {};
+  const contributionIdRaw = metadata.contribution_id ?? metadata.payable_batch_id ?? entry.event_id ?? null;
+  const contributionId =
+    typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
+      ? contributionIdRaw
+      : null;
+
+  return {
+    contributionId,
+    title:
+      typeof metadata.contribution_title === "string" && metadata.contribution_title.trim().length > 0
+        ? metadata.contribution_title.trim()
+        : typeof metadata.payable_label === "string" && metadata.payable_label.trim().length > 0
+          ? metadata.payable_label.trim()
+          : null,
+    details:
+      typeof metadata.contribution_details === "string" && metadata.contribution_details.trim().length > 0
+        ? metadata.contribution_details.trim()
+        : null,
+    eventTitle:
+      typeof metadata.contribution_event_title === "string" && metadata.contribution_event_title.trim().length > 0
+        ? metadata.contribution_event_title.trim()
+        : null,
+    deadline: parseDeadline(metadata.payable_deadline),
+  };
+}
+
 export default async function EventDetailsPage({
   params,
   searchParams,
@@ -121,7 +155,7 @@ export default async function EventDetailsPage({
   params: Promise<Params>;
   searchParams: Promise<SearchParams>;
 }) {
-  const [{ id: eventId }, paramValues] = await Promise.all([params, searchParams]);
+  const [{ id: contributionId }, paramValues] = await Promise.all([params, searchParams]);
   const search = normalizeParam(paramValues?.search)?.trim() || "";
   const statusFilter = normalizeParam(paramValues?.status)?.trim() || "";
 
@@ -146,13 +180,14 @@ export default async function EventDetailsPage({
     return <div className="p-6 text-sm text-muted-foreground">Unauthorized.</div>;
   }
 
-  const { data: memberships } = await supabase.from("dorm_memberships")
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    ;
-  const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
+    .eq("user_id", user.id);
+
+  const roles = memberships?.map((membership) => membership.role) ?? [];
+  const hasAccess = roles.some((role) => new Set(["admin", "treasurer"]).has(role));
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
@@ -161,90 +196,116 @@ export default async function EventDetailsPage({
     );
   }
 
-  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
-  if ("error" in semesterResult) {
-    return (
-      <div className="p-6 text-sm text-destructive">
-        {semesterResult.error ?? "Failed to resolve active semester."}
-      </div>
-    );
-  }
-
   const activeSemester = await getActiveSemester(dormId, supabase);
 
-  const [{ data: event, error: eventError }, occupants, { data: entries, error: entriesError }] =
-    await Promise.all([
-      supabase
-        .from("events")
-        .select("id, title, starts_at, description")
-        .eq("id", eventId)
-        .eq("dorm_id", dormId)
-        .eq("semester_id", semesterResult.semesterId)
-        .maybeSingle(),
-      getOccupants(dormId, { status: "active" }),
-      supabase
-        .from("ledger_entries")
-        .select("occupant_id, amount_pesos, metadata")
-        .eq("dorm_id", dormId)
-        .eq("ledger", "contributions")
-        .eq("event_id", eventId)
-        .is("voided_at", null),
-    ]);
+  const [{ data: rawEntries, error: entriesError }, occupants, { data: dormConfig }] = await Promise.all([
+    supabase
+      .from("ledger_entries")
+      .select("id, semester_id, occupant_id, event_id, entry_type, amount_pesos, metadata")
+      .eq("dorm_id", dormId)
+      .eq("ledger", "contributions")
+      .is("voided_at", null),
+    getOccupants(dormId, { status: "active" }),
+    supabase
+      .from("dorms")
+      .select("attributes")
+      .eq("id", dormId)
+      .maybeSingle(),
+  ]);
 
-  if (eventError || !event) {
+  if (entriesError) {
+    return <div className="p-6 text-sm text-destructive">Error loading contribution entries.</div>;
+  }
+
+  const entryRows = ((rawEntries ?? []) as EntryRow[]).filter((entry) => {
+    const metadata = parseContributionMetadata(entry);
+    return metadata.contributionId === contributionId;
+  });
+
+  if (!entryRows.length) {
     notFound();
   }
 
-  if (entriesError) {
-    return <div className="p-6 text-sm text-destructive">Error loading ledger entries.</div>;
-  }
+  const dormAttributes =
+    typeof dormConfig?.attributes === "object" && dormConfig.attributes !== null
+      ? (dormConfig.attributes as Record<string, unknown>)
+      : {};
+  const allowHistoricalEdit = dormAttributes.finance_non_current_semester_override === true;
+  const activeSemesterId = activeSemester?.id ?? null;
+  const includesActiveSemester = activeSemesterId
+    ? entryRows.some((entry) => entry.semester_id === activeSemesterId)
+    : false;
+  const isReadOnlyView = !includesActiveSemester && !allowHistoricalEdit;
 
-  const occupantRows = (occupants ?? []) as OccupantRow[];
-  const entryRows = (entries ?? []) as EntryRow[];
-  const nowIso = new Date().toISOString();
+  const contributionTitle =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).title)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ?? "Contribution";
 
-  const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
-    const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
-    const chargeEntries = occupantEntries.filter(
-      (entry) => Number(entry.amount_pesos ?? 0) > 0
-    );
+  const contributionDetails =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).details)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ?? null;
 
-    const paid = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      return amount < 0 ? sum + Math.abs(amount) : sum;
-    }, 0);
+  const linkedEventTitle =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).eventTitle)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ?? null;
 
-    const charged = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      return amount > 0 ? sum + amount : sum;
-    }, 0);
-
-    let status: OccupantWithStatus["status"] = "unpaid";
-    if (charged > 0 && paid >= charged) {
-      status = "paid";
-    } else if (charged > 0 && paid > 0) {
-      status = "partial";
-    } else if (charged === 0 && paid > 0) {
-      status = "paid";
-    }
-
-    const deadline = chargeEntries
-      .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
+  const contributionDeadline =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).deadline)
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
 
-    const overdue =
-      deadline !== null &&
-      deadline < nowIso &&
-      charged > 0 &&
-      paid < charged;
+  const occupantRows = (occupants ?? []) as OccupantRow[];
+  const nowIso = new Date().toISOString();
+
+  const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
+    const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
+
+    const payable = occupantEntries.reduce((sum, entry) => {
+      const amount = Number(entry.amount_pesos ?? 0);
+      if (entry.entry_type === "payment") {
+        return sum;
+      }
+      return sum + amount;
+    }, 0);
+
+    const paid = occupantEntries.reduce((sum, entry) => {
+      const amount = Number(entry.amount_pesos ?? 0);
+      if (entry.entry_type === "payment" || amount < 0) {
+        return sum + Math.abs(amount);
+      }
+      return sum;
+    }, 0);
+
+    const remaining = payable - paid;
+
+    let paymentStatus: OccupantWithStatus["paymentStatus"] = "unpaid";
+    if (paid > 0 && remaining > 0) {
+      paymentStatus = "partial";
+    }
+    if (remaining <= 0 && (payable > 0 || paid > 0)) {
+      paymentStatus = "paid";
+    }
+
+    const deadline =
+      occupantEntries
+        .map((entry) => parseContributionMetadata(entry).deadline)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? contributionDeadline;
+
+    const overdue = deadline !== null && deadline < nowIso && remaining > 0;
 
     return {
       ...occupant,
+      payable,
       paid,
-      charged,
-      status,
+      remaining,
+      paymentStatus,
       deadline,
       overdue,
     };
@@ -257,22 +318,15 @@ export default async function EventDetailsPage({
       (occupant.full_name ?? "").toLowerCase().includes(normalizedSearch) ||
       (occupant.student_id ?? "").toLowerCase().includes(normalizedSearch);
 
-    const matchesStatus = !statusFilter || occupant.status === statusFilter;
+    const matchesStatus = !statusFilter || occupant.paymentStatus === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
 
-  const totalCollected = occupantStatus.reduce((acc, curr) => acc + curr.paid, 0);
-  const totalExpected = occupantStatus.reduce((acc, curr) => acc + curr.charged, 0);
-  const payersCount = occupantStatus.filter((occupant) => occupant.paid > 0).length;
-  const participationRate = occupantRows.length > 0 ? (payersCount / occupantRows.length) * 100 : 0;
+  const totalCollected = occupantStatus.reduce((sum, occupant) => sum + occupant.paid, 0);
+  const totalPayable = occupantStatus.reduce((sum, occupant) => sum + occupant.payable, 0);
+  const totalRemaining = occupantStatus.reduce((sum, occupant) => sum + Math.max(0, occupant.remaining), 0);
   const overdueCount = occupantStatus.filter((occupant) => occupant.overdue).length;
-  const eventDeadline =
-    entryRows
-      .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
-      .filter((value): value is string => Boolean(value))
-      .sort()
-      .at(-1) ?? null;
 
   return (
     <div className="space-y-6">
@@ -284,9 +338,9 @@ export default async function EventDetailsPage({
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{event.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{contributionTitle}</h1>
             <p className="text-sm text-muted-foreground">
-              {event.starts_at ? format(new Date(event.starts_at), "MMMM d, yyyy") : "No date"}
+              {linkedEventTitle ? `Linked event: ${linkedEventTitle}` : "No linked event"}
             </p>
             {activeSemester ? (
               <p className="text-xs text-muted-foreground">{activeSemester.label}</p>
@@ -294,22 +348,41 @@ export default async function EventDetailsPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <LedgerOverwriteDialog dormId={dormId} />
-          <PublicShareDialog
-            dormId={dormId}
-            entityId={eventId}
-            entityType="event"
-            title={event.title}
-          />
-          <ContributionBatchDialog
-            dormId={dormId}
-            eventId={eventId}
-            trigger={<Button>Create contribution</Button>}
-          />
+          {!isReadOnlyView ? (
+            <>
+              <LedgerOverwriteDialog dormId={dormId} />
+              <ContributionBatchDialog
+                dormId={dormId}
+                trigger={<Button variant="outline">Create Another Contribution</Button>}
+              />
+            </>
+          ) : (
+            <Badge variant="outline">View-only semester</Badge>
+          )}
+          <Button asChild variant="secondary">
+            <Link href={`/treasurer/finance/events/${contributionId}/receipt`}>
+              <ReceiptText className="mr-2 h-4 w-4" />
+              Receipt Builder
+            </Link>
+          </Button>
         </div>
       </div>
 
+      {contributionDetails ? (
+        <Card>
+          <CardContent className="pt-6 text-sm text-muted-foreground">{contributionDetails}</CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Payable</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">₱{totalPayable.toFixed(2)}</div>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Collected</CardTitle>
@@ -320,27 +393,18 @@ export default async function EventDetailsPage({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Expected</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Remaining</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">₱{totalExpected.toFixed(2)}</div>
+            <div className="text-2xl font-semibold text-rose-600">₱{totalRemaining.toFixed(2)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Participation</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Occupants</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">{participationRate.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">{payersCount} payers</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Visible Occupants</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{filteredOccupants.length}</div>
+            <div className="text-2xl font-semibold">{occupantRows.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -349,7 +413,7 @@ export default async function EventDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="text-base font-semibold">
-              {eventDeadline ? format(new Date(eventDeadline), "MMM d, yyyy h:mm a") : "Not set"}
+              {contributionDeadline ? format(new Date(contributionDeadline), "MMM d, yyyy h:mm a") : "Not set"}
             </div>
             <p className="text-xs text-muted-foreground">
               {overdueCount} overdue occupant{overdueCount === 1 ? "" : "s"}
@@ -360,9 +424,7 @@ export default async function EventDetailsPage({
 
       <Card>
         <CardHeader className="space-y-4">
-          <div>
-            <CardTitle>Occupant payments</CardTitle>
-          </div>
+          <CardTitle>Occupant payments</CardTitle>
           <form className="grid gap-2 sm:grid-cols-[1fr_180px_auto]" method="GET">
             <Input
               name="search"
@@ -386,7 +448,7 @@ export default async function EventDetailsPage({
               </Button>
               {search || statusFilter ? (
                 <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/treasurer/finance/events/${eventId}`}>Reset</Link>
+                  <Link href={`/treasurer/finance/events/${contributionId}`}>Reset</Link>
                 </Button>
               ) : null}
             </div>
@@ -413,7 +475,7 @@ export default async function EventDetailsPage({
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <StatusBadge status={occupant.status} />
+                        <StatusBadge status={occupant.paymentStatus} />
                         {occupant.overdue ? (
                           <Badge variant="destructive" className="text-[10px]">
                             Overdue
@@ -421,36 +483,58 @@ export default async function EventDetailsPage({
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Charged</span>
-                      <span className="font-mono">
-                        {occupant.charged > 0 ? `₱${occupant.charged.toFixed(2)}` : "-"}
-                      </span>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Payable</p>
+                        <p className="font-medium">₱{occupant.payable.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Paid</p>
+                        <p className="font-medium text-emerald-600">₱{occupant.paid.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Remaining</p>
+                        <p className={`font-medium ${occupant.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                          ₱{occupant.remaining.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Paid</span>
-                      <span className="font-mono">{occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}</span>
+
+                    <p className="text-xs text-muted-foreground">
+                      Deadline: {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                    </p>
+
+                    <div className="flex flex-col gap-2">
+                      {!isReadOnlyView ? (
+                        <>
+                          <ContributionPayableOverrideDialog
+                            dormId={dormId}
+                            contributionId={contributionId}
+                            occupantId={occupant.id}
+                            currentPayable={occupant.payable}
+                          />
+                          <PaymentDialog
+                            dormId={dormId}
+                            occupantId={occupant.id}
+                            category="contributions"
+                            eventTitle={contributionTitle}
+                            metadata={{
+                              contribution_id: contributionId,
+                              contribution_title: contributionTitle,
+                              contribution_details: contributionDetails,
+                              contribution_event_title: linkedEventTitle,
+                              payable_deadline: occupant.deadline,
+                            }}
+                            trigger={
+                              <Button size="sm" variant="outline" className="w-full">
+                                Record Payment
+                              </Button>
+                            }
+                          />
+                        </>
+                      ) : null}
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Deadline</span>
-                      <span>
-                        {occupant.deadline
-                          ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
-                          : "Not set"}
-                      </span>
-                    </div>
-                    <PaymentDialog
-                      dormId={dormId}
-                      occupantId={occupant.id}
-                      category="contributions"
-                      eventId={eventId}
-                      eventTitle={event.title}
-                      trigger={
-                        <Button size="sm" variant="outline" className="w-full">
-                          Record Payment
-                        </Button>
-                      }
-                    />
                   </div>
                 );
               })
@@ -463,8 +547,9 @@ export default async function EventDetailsPage({
                 <TableRow>
                   <TableHead>Occupant</TableHead>
                   <TableHead>Room</TableHead>
-                  <TableHead className="text-right">Charged</TableHead>
+                  <TableHead className="text-right">Payable</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Remaining</TableHead>
                   <TableHead className="text-right">Deadline</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
@@ -474,24 +559,21 @@ export default async function EventDetailsPage({
                 {filteredOccupants.map((occupant) => (
                   <TableRow key={occupant.id}>
                     <TableCell>
-                      <div className="font-medium">{occupant.full_name}</div>
+                      <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
                     </TableCell>
                     <TableCell>{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {occupant.charged > 0 ? `₱${occupant.charged.toFixed(2)}` : "-"}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}
+                    <TableCell className="text-right font-mono">₱{occupant.payable.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-emerald-600">₱{occupant.paid.toFixed(2)}</TableCell>
+                    <TableCell className={`text-right font-mono ${occupant.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                      ₱{occupant.remaining.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right text-xs">
-                      {occupant.deadline
-                        ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
-                        : "Not set"}
+                      {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <StatusBadge status={occupant.status} />
+                        <StatusBadge status={occupant.paymentStatus} />
                         {occupant.overdue ? (
                           <Badge variant="destructive" className="text-[10px]">
                             Overdue
@@ -500,24 +582,47 @@ export default async function EventDetailsPage({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <PaymentDialog
-                        dormId={dormId}
-                        occupantId={occupant.id}
-                        category="contributions"
-                        eventId={eventId}
-                        eventTitle={event.title}
-                        trigger={
-                          <Button size="sm" variant="outline">
-                            Record Pay
-                          </Button>
-                        }
-                      />
+                      {!isReadOnlyView ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <ContributionPayableOverrideDialog
+                            dormId={dormId}
+                            contributionId={contributionId}
+                            occupantId={occupant.id}
+                            currentPayable={occupant.payable}
+                            trigger={
+                              <Button size="sm" variant="secondary">
+                                Change Payable
+                              </Button>
+                            }
+                          />
+                          <PaymentDialog
+                            dormId={dormId}
+                            occupantId={occupant.id}
+                            category="contributions"
+                            eventTitle={contributionTitle}
+                            metadata={{
+                              contribution_id: contributionId,
+                              contribution_title: contributionTitle,
+                              contribution_details: contributionDetails,
+                              contribution_event_title: linkedEventTitle,
+                              payable_deadline: occupant.deadline,
+                            }}
+                            trigger={
+                              <Button size="sm" variant="outline">
+                                Record Pay
+                              </Button>
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">View only</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
                 {filteredOccupants.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       No occupants found.
                     </TableCell>
                   </TableRow>

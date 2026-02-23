@@ -38,10 +38,35 @@ const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
 
 const contributionBatchSchema = z.object({
   amount: z.number().positive(),
-  description: z.string().trim().min(2).max(200),
+  title: z.string().trim().min(2).max(120),
+  details: z.string().trim().max(1200).optional().nullable(),
+  description: z.string().trim().min(2).max(200).optional().nullable(),
   deadline: z.string().datetime().nullable(),
   event_id: z.string().uuid().optional().nullable(),
+  event_title: z.string().trim().max(200).optional().nullable(),
   include_already_charged: z.boolean().default(false),
+});
+
+const contributionBatchPaymentSchema = z.object({
+  occupant_id: z.string().uuid(),
+  contribution_ids: z.array(z.string().uuid()).min(1),
+  amount: z.number().positive(),
+  method: z.enum(["cash", "gcash"]),
+  paid_at_iso: z.string().datetime(),
+  allocation_target_id: z.string().uuid().optional().nullable(),
+  send_receipt_email: z.boolean().default(true),
+  receipt_email_override: z.string().email().optional().nullable(),
+  receipt_subject: z.string().trim().max(140).optional().nullable(),
+  receipt_message: z.string().trim().max(2000).optional().nullable(),
+  receipt_signature: z.string().trim().max(100).optional().nullable(),
+  receipt_logo_url: z.string().url().optional().nullable(),
+});
+
+const contributionPayableOverrideSchema = z.object({
+  contribution_id: z.string().uuid(),
+  occupant_id: z.string().uuid(),
+  new_payable: z.number().min(0),
+  reason: z.string().trim().min(3).max(300),
 });
 
 const overwriteLedgerSchema = z.object({
@@ -51,6 +76,67 @@ const overwriteLedgerSchema = z.object({
   reason: z.string().trim().min(2).max(300),
   method: z.string().trim().max(60).optional(),
 });
+
+type ContributionMetadata = {
+  contribution_id: string;
+  contribution_title: string;
+  contribution_details: string | null;
+  contribution_event_title: string | null;
+  payable_deadline: string | null;
+};
+
+function asMetadataRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseContributionMetadata(
+  metadataInput: unknown,
+  fallback: {
+    eventId?: string | null;
+    note?: string | null;
+  } = {}
+): ContributionMetadata {
+  const metadata = asMetadataRecord(metadataInput);
+  const contributionIdRaw =
+    metadata.contribution_id ??
+    metadata.payable_batch_id ??
+    fallback.eventId ??
+    null;
+  const contributionTitleRaw =
+    metadata.contribution_title ??
+    metadata.payable_label ??
+    fallback.note ??
+    "Contribution";
+  const detailsRaw = metadata.contribution_details;
+  const eventTitleRaw = metadata.contribution_event_title;
+  const deadlineRaw = metadata.payable_deadline;
+
+  return {
+    contribution_id:
+      typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
+        ? contributionIdRaw
+        : crypto.randomUUID(),
+    contribution_title:
+      typeof contributionTitleRaw === "string" && contributionTitleRaw.trim().length > 0
+        ? contributionTitleRaw.trim()
+        : "Contribution",
+    contribution_details:
+      typeof detailsRaw === "string" && detailsRaw.trim().length > 0
+        ? detailsRaw.trim()
+        : null,
+    contribution_event_title:
+      typeof eventTitleRaw === "string" && eventTitleRaw.trim().length > 0
+        ? eventTitleRaw.trim()
+        : null,
+    payable_deadline:
+      typeof deadlineRaw === "string" && deadlineRaw.trim().length > 0
+        ? deadlineRaw
+        : null,
+  };
+}
 
 // --- Actions ---
 
@@ -396,17 +482,23 @@ export async function createContributionBatch(
   dormId: string,
   payload: {
     amount: number;
-    description: string;
+    title: string;
+    details?: string | null;
+    description?: string | null;
     deadline?: string | null;
     event_id?: string | null;
+    event_title?: string | null;
     include_already_charged?: boolean;
   }
 ) {
   const parsed = contributionBatchSchema.safeParse({
     amount: payload.amount,
-    description: payload.description,
+    title: payload.title,
+    details: payload.details ?? null,
+    description: payload.description ?? null,
     deadline: payload.deadline ?? null,
     event_id: payload.event_id ?? null,
+    event_title: payload.event_title ?? null,
     include_already_charged: payload.include_already_charged ?? false,
   });
 
@@ -444,7 +536,7 @@ export async function createContributionBatch(
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
-  let eventTitle: string | null = null;
+  let eventTitle: string | null = parsed.data.event_title?.trim() || null;
   if (parsed.data.event_id) {
     const { data: event, error: eventError } = await supabase
       .from("events")
@@ -457,7 +549,7 @@ export async function createContributionBatch(
     if (eventError || !event) {
       return { error: "Event not found for this dorm." };
     }
-    eventTitle = event.title;
+    eventTitle = event.title?.trim() || eventTitle;
   }
 
   const { data: occupants, error: occupantsError } = await supabase
@@ -512,6 +604,8 @@ export async function createContributionBatch(
   const deadlineIso = parsed.data.deadline
     ? new Date(parsed.data.deadline).toISOString()
     : null;
+  const contributionTitle = parsed.data.title.trim();
+  const contributionDetails = parsed.data.details?.trim() || parsed.data.description?.trim() || null;
 
   const { error: insertError } = await supabase.from("ledger_entries").insert(
     targetOccupantIds.map((occupantId) => ({
@@ -523,11 +617,15 @@ export async function createContributionBatch(
       event_id: parsed.data.event_id || null,
       amount_pesos: Math.abs(parsed.data.amount),
       method: "manual_charge",
-      note: parsed.data.description,
+      note: contributionTitle,
       metadata: {
+        contribution_id: batchId,
+        contribution_title: contributionTitle,
+        contribution_details: contributionDetails,
+        contribution_event_title: eventTitle,
         payable_batch_id: batchId,
         payable_deadline: deadlineIso,
-        payable_label: parsed.data.description,
+        payable_label: contributionTitle,
       },
       created_by: user.id,
     }))
@@ -547,8 +645,9 @@ export async function createContributionBatch(
       metadata: {
         event_id: parsed.data.event_id || null,
         event_title: eventTitle,
+        contribution_title: contributionTitle,
+        contribution_details: contributionDetails,
         amount_pesos: Math.abs(parsed.data.amount),
-        description: parsed.data.description,
         deadline: deadlineIso,
         charged_count: targetOccupantIds.length,
         include_already_charged: parsed.data.include_already_charged,
@@ -560,15 +659,443 @@ export async function createContributionBatch(
 
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/finance/events`);
-  if (parsed.data.event_id) {
-    revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/finance/events/${batchId}`);
+  revalidatePath(`/${activeRole}/payments`);
+
+  return {
+    success: true,
+    contributionId: batchId,
+    chargedCount: targetOccupantIds.length,
+  };
+}
+
+type ContributionGroupEntry = {
+  contributionId: string;
+  title: string;
+  details: string | null;
+  eventTitle: string | null;
+  semesterId: string | null;
+  eventId: string | null;
+  deadline: string | null;
+  payable: number;
+  paid: number;
+  outstanding: number;
+};
+
+export async function recordContributionBatchPayment(
+  dormId: string,
+  payload: z.infer<typeof contributionBatchPaymentSchema>
+) {
+  const parsed = contributionBatchPaymentSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid batch payment request." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+    return { error: "Only admins and treasurers can record contribution payments." };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  }
+
+  const { data: rawEntries, error: rawEntriesError } = await supabase
+    .from("ledger_entries")
+    .select("id, semester_id, event_id, entry_type, amount_pesos, metadata")
+    .eq("dorm_id", dormId)
+    .eq("ledger", "contributions")
+    .eq("occupant_id", input.occupant_id)
+    .is("voided_at", null);
+
+  if (rawEntriesError) {
+    return { error: rawEntriesError.message };
+  }
+
+  const selectedIds = new Set(input.contribution_ids);
+  const contributionMap = new Map<string, ContributionGroupEntry>();
+
+  for (const row of rawEntries ?? []) {
+    const metadata = parseContributionMetadata(row.metadata, {
+      eventId: row.event_id,
+      note: null,
+    });
+
+    if (!selectedIds.has(metadata.contribution_id)) {
+      continue;
+    }
+
+    const existing = contributionMap.get(metadata.contribution_id) ?? {
+      contributionId: metadata.contribution_id,
+      title: metadata.contribution_title,
+      details: metadata.contribution_details,
+      eventTitle: metadata.contribution_event_title,
+      semesterId: row.semester_id ?? null,
+      eventId: row.event_id ?? null,
+      deadline: metadata.payable_deadline,
+      payable: 0,
+      paid: 0,
+      outstanding: 0,
+    };
+
+    const amount = Number(row.amount_pesos ?? 0);
+    if (row.entry_type === "payment" || amount < 0) {
+      existing.paid += Math.abs(amount);
+    } else {
+      existing.payable += amount;
+    }
+    existing.outstanding += amount;
+
+    if (!existing.semesterId && row.semester_id) {
+      existing.semesterId = row.semester_id;
+    }
+    if (!existing.eventId && row.event_id) {
+      existing.eventId = row.event_id;
+    }
+    if (!existing.deadline && metadata.payable_deadline) {
+      existing.deadline = metadata.payable_deadline;
+    }
+    if (!existing.eventTitle && metadata.contribution_event_title) {
+      existing.eventTitle = metadata.contribution_event_title;
+    }
+    if (!existing.details && metadata.contribution_details) {
+      existing.details = metadata.contribution_details;
+    }
+
+    contributionMap.set(metadata.contribution_id, existing);
+  }
+
+  const contributionRows = Array.from(contributionMap.values());
+  if (!contributionRows.length) {
+    return { error: "No selected contributions found for this occupant." };
+  }
+
+  const dueByContribution = new Map<string, number>();
+  for (const row of contributionRows) {
+    dueByContribution.set(row.contributionId, Math.max(0, row.outstanding));
+  }
+
+  const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
+  if (totalDue <= 0) {
+    return { error: "Selected contributions are already settled." };
+  }
+
+  const allocations = new Map(dueByContribution);
+  const difference = Number((input.amount - totalDue).toFixed(2));
+  if (Math.abs(difference) >= 0.01) {
+    if (!input.allocation_target_id) {
+      return {
+        error: "Select where to apply the payment difference when amount is not exact.",
+      };
+    }
+    const existingTarget = allocations.get(input.allocation_target_id);
+    if (existingTarget === undefined) {
+      return { error: "Allocation target must be one of the selected contributions." };
+    }
+    const adjusted = Number((existingTarget + difference).toFixed(2));
+    if (adjusted < 0) {
+      return { error: "Difference is too large for the selected allocation target." };
+    }
+    allocations.set(input.allocation_target_id, adjusted);
+  }
+
+  const allocRows = contributionRows
+    .map((row) => ({
+      ...row,
+      allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
+    }))
+    .filter((row) => row.allocation > 0);
+
+  if (!allocRows.length) {
+    return { error: "Nothing to record after allocation." };
+  }
+
+  const batchPaymentId = crypto.randomUUID();
+  const { error: insertError } = await supabase.from("ledger_entries").insert(
+    allocRows.map((row) => ({
+      dorm_id: dormId,
+      semester_id: row.semesterId ?? semesterResult.semesterId,
+      ledger: "contributions",
+      entry_type: "payment",
+      occupant_id: input.occupant_id,
+      event_id: row.eventId,
+      amount_pesos: -Math.abs(row.allocation),
+      method: input.method,
+      note: `Batch payment • ${row.title}`,
+      posted_at: input.paid_at_iso,
+      metadata: {
+        contribution_id: row.contributionId,
+        contribution_title: row.title,
+        contribution_details: row.details,
+        contribution_event_title: row.eventTitle,
+        payable_deadline: row.deadline,
+        payment_batch_id: batchPaymentId,
+        payment_allocation_pesos: row.allocation,
+      },
+      created_by: user.id,
+    }))
+  );
+
+  if (insertError) {
+    return { error: insertError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.contribution_batch_payment_recorded",
+      entityType: "finance",
+      entityId: batchPaymentId,
+      metadata: {
+        occupant_id: input.occupant_id,
+        contribution_ids: input.contribution_ids,
+        total_paid: input.amount,
+        method: input.method,
+        paid_at_iso: input.paid_at_iso,
+        allocation_target_id: input.allocation_target_id ?? null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for contribution batch payment:", auditError);
+  }
+
+  if (input.send_receipt_email) {
+    try {
+      const { sendEmail, renderContributionBatchReceiptEmail } = await import("@/lib/email");
+
+      const { data: occupant } = await supabase
+        .from("occupants")
+        .select("id, user_id, full_name, contact_email")
+        .eq("dorm_id", dormId)
+        .eq("id", input.occupant_id)
+        .maybeSingle();
+
+      if (!occupant) {
+        throw new Error("Occupant not found for receipt.");
+      }
+
+      let recipientEmail = input.receipt_email_override?.trim() || occupant.contact_email?.trim() || "";
+
+      if (!recipientEmail && occupant.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const { createClient } = await import("@supabase/supabase-js");
+        const adminClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          }
+        );
+        const { data: authUser } = await adminClient.auth.admin.getUserById(occupant.user_id);
+        recipientEmail = authUser.user?.email?.trim() || "";
+      }
+
+      if (recipientEmail) {
+        const rendered = renderContributionBatchReceiptEmail({
+          recipientName: occupant.full_name ?? null,
+          paidAtIso: input.paid_at_iso,
+          method: input.method,
+          contributions: allocRows.map((row) => ({
+            title: row.title,
+            amountPesos: row.allocation,
+          })),
+          totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
+          customMessage: input.receipt_message?.trim() || null,
+          subjectOverride: input.receipt_subject?.trim() || null,
+          signatureOverride: input.receipt_signature?.trim() || null,
+          logoUrl: input.receipt_logo_url?.trim() || null,
+        });
+
+        const emailResult = await sendEmail({
+          to: recipientEmail,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+        });
+
+        if (!emailResult.success) {
+          console.warn("Failed to send contribution batch receipt email:", emailResult.error);
+        }
+      }
+    } catch (emailError) {
+      console.error("Contribution batch receipt email error:", emailError);
+    }
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance/events`);
+  for (const row of allocRows) {
+    revalidatePath(`/${activeRole}/finance/events/${row.contributionId}`);
   }
   revalidatePath(`/${activeRole}/payments`);
 
   return {
     success: true,
-    chargedCount: targetOccupantIds.length,
+    paidCount: allocRows.length,
+    totalPaid: allocRows.reduce((sum, row) => sum + row.allocation, 0),
   };
+}
+
+export async function overrideContributionPayable(
+  dormId: string,
+  payload: z.infer<typeof contributionPayableOverrideSchema>
+) {
+  const parsed = contributionPayableOverrideSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid payable override payload." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError || !membership?.role) {
+    return { error: "Forbidden" };
+  }
+
+  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+    return { error: "Only admins and treasurers can update payable amounts." };
+  }
+
+  const { data: entries, error: entriesError } = await supabase
+    .from("ledger_entries")
+    .select("id, semester_id, event_id, amount_pesos, entry_type, metadata")
+    .eq("dorm_id", dormId)
+    .eq("ledger", "contributions")
+    .eq("occupant_id", input.occupant_id)
+    .is("voided_at", null);
+
+  if (entriesError) {
+    return { error: entriesError.message };
+  }
+
+  const contributionEntries = (entries ?? []).filter((entry) => {
+    const metadata = parseContributionMetadata(entry.metadata, {
+      eventId: entry.event_id,
+      note: null,
+    });
+    return metadata.contribution_id === input.contribution_id;
+  });
+
+  if (!contributionEntries.length) {
+    return { error: "Contribution record not found for this occupant." };
+  }
+
+  const currentPayable = contributionEntries.reduce((sum, entry) => {
+    const amount = Number(entry.amount_pesos ?? 0);
+    if (entry.entry_type === "payment") {
+      return sum;
+    }
+    return sum + amount;
+  }, 0);
+
+  const delta = Number((input.new_payable - currentPayable).toFixed(2));
+  if (Math.abs(delta) < 0.01) {
+    return { success: true, payable: input.new_payable };
+  }
+
+  const referenceRow = contributionEntries[0];
+  const referenceMetadata = parseContributionMetadata(referenceRow.metadata, {
+    eventId: referenceRow.event_id,
+    note: null,
+  });
+  const semesterId =
+    contributionEntries.find((entry) => entry.semester_id)?.semester_id ?? referenceRow.semester_id ?? null;
+
+  const { error: insertError } = await supabase.from("ledger_entries").insert({
+    dorm_id: dormId,
+    semester_id: semesterId,
+    ledger: "contributions",
+    entry_type: "adjustment",
+    occupant_id: input.occupant_id,
+    event_id: referenceRow.event_id,
+    amount_pesos: delta,
+    method: "payable_override",
+    note: `Payable override: ${input.reason}`,
+    metadata: {
+      contribution_id: input.contribution_id,
+      contribution_title: referenceMetadata.contribution_title,
+      contribution_details: referenceMetadata.contribution_details,
+      contribution_event_title: referenceMetadata.contribution_event_title,
+      payable_deadline: referenceMetadata.payable_deadline,
+      override_reason: input.reason,
+      override_previous_payable: currentPayable,
+      override_new_payable: input.new_payable,
+    },
+    created_by: user.id,
+  });
+
+  if (insertError) {
+    return { error: insertError.message };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.contribution_payable_overridden",
+      entityType: "finance",
+      entityId: input.contribution_id,
+      metadata: {
+        occupant_id: input.occupant_id,
+        reason: input.reason,
+        old_payable: currentPayable,
+        new_payable: input.new_payable,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for payable override:", auditError);
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/payments`);
+
+  return { success: true, payable: input.new_payable };
 }
 
 export async function createMaintenanceBatch(
@@ -582,8 +1109,10 @@ export async function createMaintenanceBatch(
   // We can reuse the same schema logic as contribution
   const parsed = contributionBatchSchema.safeParse({
     amount: payload.amount,
-    description: payload.description,
+    title: payload.description,
+    details: payload.description,
     deadline: payload.deadline ?? null,
+    include_already_charged: false,
   });
 
   if (!parsed.success) {
@@ -651,11 +1180,11 @@ export async function createMaintenanceBatch(
       occupant_id: occupantId,
       amount_pesos: Math.abs(parsed.data.amount),
       method: "manual_charge",
-      note: parsed.data.description,
+      note: parsed.data.title,
       metadata: {
         payable_batch_id: batchId,
         payable_deadline: deadlineIso,
-        payable_label: parsed.data.description,
+        payable_label: parsed.data.title,
       },
       created_by: user.id,
     }))
@@ -674,7 +1203,7 @@ export async function createMaintenanceBatch(
       entityId: batchId,
       metadata: {
         amount_pesos: Math.abs(parsed.data.amount),
-        description: parsed.data.description,
+        description: parsed.data.title,
         deadline: deadlineIso,
         charged_count: targetOccupantIds.length,
       },

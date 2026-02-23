@@ -57,10 +57,19 @@ interface PaymentDialogProps {
   category: LedgerCategory;
   eventId?: string;
   eventTitle?: string;
+  metadata?: Record<string, unknown>;
   trigger?: React.ReactNode;
 }
 
-export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitle, trigger }: PaymentDialogProps) {
+export function PaymentDialog({
+  dormId,
+  occupantId,
+  category,
+  eventId,
+  eventTitle,
+  metadata,
+  trigger,
+}: PaymentDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
@@ -130,6 +139,7 @@ export function PaymentDialog({ dormId, occupantId, category, eventId, eventTitl
         method: values.method,
         note: values.note,
         event_id: eventId,
+        metadata,
         receipt_email: values.sendReceiptEmail
           ? {
             enabled: true,
