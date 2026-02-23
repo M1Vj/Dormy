@@ -65,13 +65,6 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     student_id: string | null;
   }>;
 
-  const { data: activeSemester } = await supabase
-    .from("dorm_semesters")
-    .select("id")
-    .eq("dorm_id", dormId)
-    .eq("status", "active")
-    .maybeSingle();
-
   const { data: entries } = await supabase
     .from("ledger_entries")
     .select("occupant_id, amount_pesos, ledger, entry_type, voided_at, semester_id")
@@ -222,7 +215,7 @@ export type OccupantReportingData = {
   totalPoints: number;
   totalFines: number;
   totalEventsAttended: number;
-  recentEntries: any[];
+  recentEntries: Record<string, unknown>[];
   clearanceHistory: Array<{
     semester: string;
     is_cleared: boolean;
