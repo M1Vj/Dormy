@@ -109,20 +109,6 @@ export default async function ExpensesPage({
     .filter((e) => e.status === "pending")
     .reduce((sum, e) => sum + Number(e.amount_pesos), 0);
 
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "approved":
-        return (
-          <Badge variant="default" className="bg-emerald-600">
-            Approved
-          </Badge>
-        );
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return <Badge variant="secondary">Pending</Badge>;
-    }
-  };
 
   return (
     <div className="space-y-6">

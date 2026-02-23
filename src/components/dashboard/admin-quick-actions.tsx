@@ -5,19 +5,17 @@ import { UserPlus, UserCheck, Clock, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 interface AdminQuickActionsProps {
-  dormId: string;
   totalOccupants: number;
   capacity: number;
   pendingApplications: number;
   role: string;
 }
 
-export function AdminQuickActions({ 
-  dormId, 
-  totalOccupants, 
-  capacity, 
+export function AdminQuickActions({
+  totalOccupants,
+  capacity,
   pendingApplications,
-  role 
+  role
 }: AdminQuickActionsProps) {
   const occupancyRate = capacity > 0 ? (totalOccupants / capacity) * 100 : 0;
 

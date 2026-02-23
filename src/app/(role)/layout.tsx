@@ -1,6 +1,4 @@
-import Image from "next/image"
-import Link from "next/link"
-import { redirect } from "next/navigation"
+
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"

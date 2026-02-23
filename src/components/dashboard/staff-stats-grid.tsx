@@ -1,16 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardStats } from "@/app/actions/stats";
-import { format } from "date-fns";
-import { 
-  Users, 
-  Wallet, 
-  Receipt, 
-  FileText, 
+import {
+  Users,
+  Wallet,
   CalendarDays,
   ArrowUpRight,
-  ArrowDownRight,
-  CheckCircle2,
-  Clock
 } from "lucide-react";
 
 interface StaffStatsGridProps {

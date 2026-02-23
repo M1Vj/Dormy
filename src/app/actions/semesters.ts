@@ -10,27 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
-const booleanish = z.preprocess((value) => {
-  if (typeof value === "boolean") {
-    return value;
-  }
 
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "1", "yes", "on"].includes(normalized)) {
-      return true;
-    }
-    if (["false", "0", "no", "off", ""].includes(normalized)) {
-      return false;
-    }
-  }
-
-  if (typeof value === "number") {
-    return value !== 0;
-  }
-
-  return false;
-}, z.boolean());
 
 const semesterPlanSchema = z.object({
   school_year: z.string().trim().min(4).max(20),
@@ -40,20 +20,6 @@ const semesterPlanSchema = z.object({
   ends_on: z.string().trim().regex(dateRegex),
 });
 
-const activateSchema = z.object({
-  semester_id: z.string().uuid(),
-});
-
-const archiveSchema = z.object({
-  active_semester_id: z.string().uuid(),
-  archive_label: z.string().trim().max(120).optional(),
-  next_school_year: z.string().trim().min(4).max(20),
-  next_semester: z.string().trim().min(1).max(30),
-  next_label: z.string().trim().min(4).max(120),
-  next_starts_on: z.string().trim().regex(dateRegex),
-  next_ends_on: z.string().trim().regex(dateRegex),
-  apply_occupant_turnover: booleanish,
-});
 
 type SemesterWorkspace = {
   activeSemester: Awaited<ReturnType<typeof getActiveSemester>>;

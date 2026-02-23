@@ -461,7 +461,8 @@ export async function getCommitteeFinanceSummary(committeeId: string): Promise<{
   return { data: rows };
 }
 
-export async function getCommitteeDashboardData(dormId: string) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getCommitteeDashboardData(_dormId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase not configured." };
 

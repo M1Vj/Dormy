@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, UserPlus } from "lucide-react";
 
 import { addCommitteeMember } from "@/app/actions/committees";
-import type { CommitteeMemberRole } from "@/app/actions/committees";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

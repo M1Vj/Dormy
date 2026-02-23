@@ -12,7 +12,6 @@ export function CommitteeReportView({
   committeeFinances: CommitteeFinanceSummaryRow[];
   currentDate: string;
 }) {
-  const incomeCharged = committeeFinances.reduce((s, r) => s + r.charged_pesos, 0);
   const incomeCollected = committeeFinances.reduce((s, r) => s + r.collected_pesos, 0);
   const totalApprovedExp = committeeData.expenses
     .filter((e) => e.status === "approved")

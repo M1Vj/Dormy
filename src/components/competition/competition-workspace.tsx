@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trophy, Trash2, Users } from "lucide-react";
+import { Trophy, Trash2, Users } from "lucide-react";
 
 import {
   addCompetitionMember,
