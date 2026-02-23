@@ -9,6 +9,7 @@ import { StatCard } from "@/components/reporting/stat-card";
 import { CommitteeReportView } from "@/components/reporting/committee-report-view";
 import { PrintReportButton } from "@/components/reporting/print-report-button";
 import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   BarChart3,
@@ -21,6 +22,60 @@ import {
   ArrowDownRight,
   Users,
 } from "lucide-react";
+
+type ContributionLedgerRow = {
+  amount_pesos: number | string | null;
+  entry_type: string;
+  metadata: Record<string, unknown> | null;
+};
+
+type ContributionExpenseRow = {
+  amount_pesos: number | string;
+  status: string;
+  expense_group_title: string | null;
+  contribution_reference_title: string | null;
+};
+
+type PendingExpenseCardRow = {
+  id: string;
+  title: string;
+  purchased_at: string;
+  category: string;
+  amount_pesos: number | string;
+};
+
+type CommitteeFinanceRow = {
+  charged_pesos: number | string;
+  collected_pesos: number | string;
+};
+
+type CommitteeDashboardRow = {
+  id: string;
+  name: string;
+  finance: CommitteeFinanceRow[] | null;
+};
+
+function parseContributionGroup(row: ContributionLedgerRow) {
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const idRaw = metadata.contribution_id ?? metadata.payable_batch_id ?? null;
+  const titleRaw = metadata.contribution_title ?? metadata.payable_label ?? "Contribution";
+  const eventTitleRaw = metadata.contribution_event_title ?? null;
+
+  const id =
+    typeof idRaw === "string" && idRaw.trim().length > 0
+      ? idRaw
+      : String(titleRaw);
+  const title =
+    typeof titleRaw === "string" && titleRaw.trim().length > 0
+      ? titleRaw.trim()
+      : "Contribution";
+  const eventTitle =
+    typeof eventTitleRaw === "string" && eventTitleRaw.trim().length > 0
+      ? eventTitleRaw.trim()
+      : null;
+
+  return { id, title, eventTitle };
+}
 
 export default async function TreasurerReportingPage() {
   const supabase = await createSupabaseServerClient();
@@ -103,20 +158,116 @@ export default async function TreasurerReportingPage() {
   }
 
   // --- TREASURER-FOCUSED REPORTING ---
-  const [statsRes, expensesRes, committeesRes] = await Promise.all([
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return <div className="p-6 text-sm text-destructive">{semesterResult.error ?? "No active semester."}</div>;
+  }
+
+  const [statsRes, expensesRes, committeesRes, contributionLedgerRes, contributionExpensesRes] = await Promise.all([
     getDashboardStats(dormId),
     getExpenses(dormId, { status: "pending" }),
-    getCommitteeDashboardData(dormId)
+    getCommitteeDashboardData(dormId),
+    supabase
+      .from("ledger_entries")
+      .select("amount_pesos, entry_type, metadata")
+      .eq("dorm_id", dormId)
+      .eq("ledger", "contributions")
+      .eq("semester_id", semesterResult.semesterId)
+      .is("voided_at", null),
+    getExpenses(dormId, { category: "contributions" }),
   ]);
 
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
   const stats = statsRes;
-  const pendingExpenses = "data" in expensesRes ? (expensesRes.data ?? []) : [];
-  const committees = "data" in committeesRes ? (committeesRes.data ?? []) : [];
+  const pendingExpenses = ("data" in expensesRes ? (expensesRes.data ?? []) : []) as PendingExpenseCardRow[];
+  const committees = ("data" in committeesRes ? (committeesRes.data ?? []) : []) as CommitteeDashboardRow[];
+  if (contributionLedgerRes.error) {
+    return <div className="p-6 text-sm text-destructive">{contributionLedgerRes.error.message}</div>;
+  }
+  if ("error" in contributionExpensesRes) {
+    return <div className="p-6 text-sm text-destructive">{contributionExpensesRes.error}</div>;
+  }
+  const contributionLedgerRows = (contributionLedgerRes.data ?? []) as ContributionLedgerRow[];
+  const contributionExpenseRows = (contributionExpensesRes.data ?? []) as ContributionExpenseRow[];
 
   const collectionRate = stats.eventsCharged > 0 ? (stats.eventsPaid / stats.eventsCharged) * 100 : 0;
   const overallCollectionRate = stats.totalCharged > 0 ? (stats.totalPaid / stats.totalCharged) * 100 : 0;
-  const pendingExpenseTotal = pendingExpenses.reduce((s: number, e: any) => s + Number(e.amount_pesos), 0);
+  const pendingExpenseTotal = pendingExpenses.reduce((sum, expense) => sum + Number(expense.amount_pesos), 0);
+
+  const contributionMap = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      eventTitle: string | null;
+      charged: number;
+      collected: number;
+      approvedExpenses: number;
+      pendingExpenses: number;
+    }
+  >();
+
+  for (const row of contributionLedgerRows) {
+    const group = parseContributionGroup(row);
+    const existing = contributionMap.get(group.id) ?? {
+      id: group.id,
+      title: group.title,
+      eventTitle: group.eventTitle,
+      charged: 0,
+      collected: 0,
+      approvedExpenses: 0,
+      pendingExpenses: 0,
+    };
+    const amount = Number(row.amount_pesos ?? 0);
+    if (amount < 0 || row.entry_type === "payment") {
+      existing.collected += Math.abs(amount);
+    } else {
+      existing.charged += amount;
+    }
+    if (!existing.eventTitle && group.eventTitle) {
+      existing.eventTitle = group.eventTitle;
+    }
+    contributionMap.set(group.id, existing);
+  }
+
+  const contributionByTitle = new Map<string, string>();
+  for (const row of contributionMap.values()) {
+    contributionByTitle.set(row.title.trim().toLowerCase(), row.id);
+  }
+
+  for (const expense of contributionExpenseRows) {
+    const linkTitle =
+      expense.contribution_reference_title?.trim() ||
+      expense.expense_group_title?.trim() ||
+      "";
+    if (!linkTitle) continue;
+
+    const targetId = contributionByTitle.get(linkTitle.toLowerCase());
+    if (!targetId) continue;
+
+    const target = contributionMap.get(targetId);
+    if (!target) continue;
+
+    const amount = Number(expense.amount_pesos ?? 0);
+    if (expense.status === "approved") {
+      target.approvedExpenses += amount;
+    } else if (expense.status === "pending") {
+      target.pendingExpenses += amount;
+    }
+  }
+
+  const contributionReportRows = Array.from(contributionMap.values())
+    .map((row) => ({
+      ...row,
+      remaining: row.charged - row.collected,
+      netAfterExpenses: row.collected - row.approvedExpenses,
+    }))
+    .sort((a, b) => b.charged - a.charged);
+
+  const contributionMaxCharged = contributionReportRows.reduce(
+    (max, row) => Math.max(max, row.charged),
+    0
+  );
 
   return (
     <div className="space-y-8 print:space-y-6">
@@ -259,7 +410,7 @@ export default async function TreasurerReportingPage() {
                   No pending expenses to review.
                 </div>
               )}
-              {pendingExpenses.slice(0, 8).map((exp: any) => (
+              {pendingExpenses.slice(0, 8).map((exp) => (
                 <div key={exp.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                   <div>
                     <p className="font-medium text-sm">{exp.title}</p>
@@ -304,9 +455,9 @@ export default async function TreasurerReportingPage() {
                 {(!committees || committees.length === 0) && (
                   <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No committee data available.</td></tr>
                 )}
-                {committees?.map((c: any) => {
-                  const income = c.finance?.reduce((s: number, f: any) => s + Number(f.collected_pesos), 0) ?? 0;
-                  const charged = c.finance?.reduce((s: number, f: any) => s + Number(f.charged_pesos), 0) ?? 0;
+                {committees?.map((c) => {
+                  const income = c.finance?.reduce((sum, finance) => sum + Number(finance.collected_pesos), 0) ?? 0;
+                  const charged = c.finance?.reduce((sum, finance) => sum + Number(finance.charged_pesos), 0) ?? 0;
                   const rate = charged > 0 ? (income / charged) * 100 : 0;
                   return (
                     <tr key={c.id} className="border-b last:border-0">
@@ -330,6 +481,94 @@ export default async function TreasurerReportingPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Contribution-Expense Group Report */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Contribution-Expense Group Report</CardTitle>
+          <CardDescription>
+            Per-contribution breakdown of collections, remaining balances, and linked expense impact.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr className="border-b">
+                  <th className="px-3 py-2 font-medium">Contribution</th>
+                  <th className="px-3 py-2 text-right font-medium">Charged</th>
+                  <th className="px-3 py-2 text-right font-medium">Collected</th>
+                  <th className="px-3 py-2 text-right font-medium">Remaining</th>
+                  <th className="px-3 py-2 text-right font-medium">Approved Expenses</th>
+                  <th className="px-3 py-2 text-right font-medium">Net After Expenses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contributionReportRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                      No contribution groups found in the active semester.
+                    </td>
+                  </tr>
+                ) : (
+                  contributionReportRows.map((row) => (
+                    <tr key={row.id} className="border-b last:border-0">
+                      <td className="px-3 py-3">
+                        <p className="font-medium">{row.title}</p>
+                        <p className="text-xs text-muted-foreground">{row.eventTitle ?? "No linked event"}</p>
+                      </td>
+                      <td className="px-3 py-3 text-right">₱{row.charged.toFixed(2)}</td>
+                      <td className="px-3 py-3 text-right text-emerald-600 font-medium">₱{row.collected.toFixed(2)}</td>
+                      <td className={`px-3 py-3 text-right font-medium ${row.remaining > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                        ₱{row.remaining.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-3 text-right text-rose-600">₱{row.approvedExpenses.toFixed(2)}</td>
+                      <td className={`px-3 py-3 text-right font-semibold ${row.netAfterExpenses >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        ₱{row.netAfterExpenses.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Contribution Collection Bars</CardTitle>
+          <CardDescription>
+            Visual chart for projector presentations showing charged vs collected amounts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {contributionReportRows.slice(0, 8).map((row) => {
+              const chargedWidth = contributionMaxCharged > 0 ? (row.charged / contributionMaxCharged) * 100 : 0;
+              const collectedWidth = contributionMaxCharged > 0 ? (row.collected / contributionMaxCharged) * 100 : 0;
+
+              return (
+                <div key={`bar-${row.id}`} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{row.title}</span>
+                    <span className="text-muted-foreground">
+                      ₱{row.collected.toFixed(2)} / ₱{row.charged.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="relative h-3 rounded-full bg-muted">
+                    <div className="absolute inset-y-0 left-0 rounded-full bg-slate-400/60" style={{ width: `${chargedWidth}%` }} />
+                    <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${collectedWidth}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+            {contributionReportRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No data available for this chart.</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

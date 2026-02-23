@@ -300,3 +300,107 @@ export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: 
   revalidatePath(`/${activeRole}/finance`);
   return { success: true };
 }
+
+export async function getFinanceHistoricalEditOverride(dormId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!membership) {
+    return { error: "You do not have access to this dorm." };
+  }
+
+  const { data: dorm, error } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .maybeSingle();
+
+  if (error || !dorm) {
+    return { error: error?.message ?? "Dorm not found." };
+  }
+
+  const attributes =
+    typeof dorm.attributes === "object" && dorm.attributes !== null
+      ? (dorm.attributes as Record<string, unknown>)
+      : {};
+
+  return {
+    enabled: attributes.finance_non_current_semester_override === true,
+  };
+}
+
+export async function toggleFinanceHistoricalEditOverride(dormId: string, enabled: boolean) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser", "treasurer"].includes(membership.role)) {
+    return { error: "You do not have permission to update this setting." };
+  }
+
+  const { data: dorm } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .maybeSingle();
+
+  const attributes =
+    typeof dorm?.attributes === "object" && dorm.attributes !== null
+      ? (dorm.attributes as Record<string, unknown>)
+      : {};
+
+  const nextAttributes = {
+    ...attributes,
+    finance_non_current_semester_override: enabled,
+  };
+
+  const { error } = await supabase
+    .from("dorms")
+    .update({ attributes: nextAttributes })
+    .eq("id", dormId);
+
+  if (error) return { error: error.message };
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "dorm.updated",
+      entityType: "dorm",
+      entityId: dormId,
+      metadata: { updates: { finance_non_current_semester_override: enabled } },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for dorm update:", auditError);
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}`);
+  revalidatePath(`/${activeRole}/settings`);
+  revalidatePath(`/${activeRole}/finance`);
+  revalidatePath(`/${activeRole}/finance/events`);
+  return { success: true };
+}
