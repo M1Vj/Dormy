@@ -94,7 +94,6 @@ export function JoinDorm({
   const [requestedRole, setRequestedRole] = useState<AppRole>("occupant");
   const [message, setMessage] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [school, setSchool] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [course, setCourse] = useState("");
   const [yearLevel, setYearLevel] = useState("");
@@ -128,7 +127,6 @@ export function JoinDorm({
     setRequestedRole("occupant");
     setMessage("");
     setStudentId("");
-    setSchool("");
     setRoomNumber("");
     setCourse("");
     setYearLevel("");
@@ -149,7 +147,6 @@ export function JoinDorm({
       formData.set("requestedRole", requestedRole);
       formData.set("message", message);
       formData.set("studentId", studentId);
-      formData.set("school", school);
       formData.set("roomNumber", roomNumber);
       formData.set("course", course);
       formData.set("yearLevel", yearLevel);
@@ -520,4 +517,3 @@ export function JoinDorm({
     </div>
   );
 }
-

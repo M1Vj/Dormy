@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -754,9 +755,12 @@ export async function createEvent(formData: FormData) {
     return { error: participatingDormResult.error };
   }
 
-  revalidatePath("/events");
-  revalidatePath(`/events/${event.id}`);
-  revalidatePath("/admin/finance/events");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/events`);
+  revalidatePath(`/${activeRole}/events/${event.id}`);
+  revalidatePath(`/${activeRole}/finance/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -856,9 +860,12 @@ export async function updateEvent(formData: FormData) {
     return { error: participatingDormResult.error };
   }
 
-  revalidatePath("/events");
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/admin/finance/events");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/events`);
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/finance/events`);
 
   const changedFields = [
     existingEvent.title !== parsed.data.title ? "title" : null,
@@ -960,9 +967,12 @@ export async function deleteEvent(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath("/events");
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/admin/finance/events");
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/events`);
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/finance/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -1052,8 +1062,9 @@ export async function upsertEventRating(formData: FormData) {
     return { error: error?.message ?? "Failed to submit rating." };
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -1128,8 +1139,9 @@ export async function deleteEventRating(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -1227,8 +1239,9 @@ export async function uploadEventPhoto(formData: FormData) {
     return { error: insertError?.message ?? "Failed to save photo record." };
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -1300,8 +1313,9 @@ export async function deleteEventPhoto(formData: FormData) {
     return { error: deleteError.message };
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/events`);
 
   await safeLogEventAudit({
     dormId: context.dormId,

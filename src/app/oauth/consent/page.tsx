@@ -18,18 +18,18 @@ export default function OAuthConsentPage() {
         </CardHeader>
         <CardContent className="text-center space-y-4">
           <p className="text-sm text-muted-foreground">
-            You can now use Google to sign in to Dormy. You are being redirected to your dashboard.
+            You can now use Google to sign in to Dormy. You are being redirected to your home page.
           </p>
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button asChild className="w-full">
-            <Link href="/occupant/home">Continue to App</Link>
+            <Link href="/">Continue to App</Link>
           </Button>
         </CardFooter>
       </Card>
       <script
         dangerouslySetInnerHTML={{
-          __html: `setTimeout(() => { window.location.href = '/home'; }, 3000);`,
+          __html: `setTimeout(() => { window.location.href = '/'; }, 3000);`,
         }}
       />
     </div>

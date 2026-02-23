@@ -52,9 +52,10 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface Props {
   dormId: string;
+  rolePath?: string;
 }
 
-export function CreateCycleDialog({ dormId }: Props) {
+export function CreateCycleDialog({ dormId, rolePath = "admin" }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -87,7 +88,7 @@ export function CreateCycleDialog({ dormId }: Props) {
 
       if (result.success && result.id) {
         toast.success("Evaluation cycle created");
-        router.push(`/admin/evaluation/${result.id}`);
+        router.push(`/${rolePath}/evaluation/${result.id}`);
         router.refresh();
       } else {
         toast.error(result.error || "Failed to create cycle");

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { z } from "zod";
@@ -177,7 +178,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
           ? "Maintenance"
           : tx.category === "sa_fines"
             ? "Fines"
-            : "Event contributions";
+            : "Contributions";
 
       let eventTitle: string | null = null;
       if (tx.event_id) {
@@ -219,8 +220,11 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     }
   }
 
-  revalidatePath("/admin/finance");
-  revalidatePath("/payments"); // Occupant view
+  const { getActiveRole } = await import("@/lib/roles-server");
+  const activeRole = await getActiveRole() || "occupant";
+
+  revalidatePath(`/${activeRole}/finance`);
+  revalidatePath(`/${activeRole}/payments`); // Occupant view
   return { success: true };
 }
 
@@ -313,10 +317,14 @@ export async function overwriteLedgerEntry(
       ? (originalEntry.metadata as Record<string, unknown>)
       : {};
 
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  const semesterId = "semesterId" in semesterResult ? semesterResult.semesterId : null;
+
   const { data: replacementEntry, error: replacementError } = await supabase
     .from("ledger_entries")
     .insert({
       dorm_id: dormId,
+      semester_id: semesterId,
       ledger,
       entry_type: originalEntry.entry_type,
       occupant_id: originalEntry.occupant_id,
@@ -370,11 +378,12 @@ export async function overwriteLedgerEntry(
     console.error("Failed to write audit event for ledger overwrite:", auditError);
   }
 
-  revalidatePath("/payments");
-  revalidatePath("/admin/finance/maintenance");
-  revalidatePath("/admin/finance/events");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/payments`);
+  revalidatePath(`/${activeRole}/finance/maintenance`);
+  revalidatePath(`/${activeRole}/finance/events`);
   if (originalEntry.event_id) {
-    revalidatePath(`/admin/finance/events/${originalEntry.event_id}`);
+    revalidatePath(`/${activeRole}/finance/events/${originalEntry.event_id}`);
   }
 
   return {
@@ -507,6 +516,7 @@ export async function createContributionBatch(
   const { error: insertError } = await supabase.from("ledger_entries").insert(
     targetOccupantIds.map((occupantId) => ({
       dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
       ledger: "contributions",
       entry_type: "charge",
       occupant_id: occupantId,
@@ -548,11 +558,12 @@ export async function createContributionBatch(
     console.error("Failed to write audit event for contribution batch creation:", auditError);
   }
 
-  revalidatePath("/admin/finance/events");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance/events`);
   if (parsed.data.event_id) {
-    revalidatePath(`/admin/finance/events/${parsed.data.event_id}`);
+    revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
   }
-  revalidatePath("/payments");
+  revalidatePath(`/${activeRole}/payments`);
 
   return {
     success: true,
@@ -672,8 +683,9 @@ export async function createMaintenanceBatch(
     console.error("Failed to write audit event for maintenance batch creation:", auditError);
   }
 
-  revalidatePath("/admin/finance/maintenance");
-  revalidatePath("/payments");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance/maintenance`);
+  revalidatePath(`/${activeRole}/payments`);
 
   return {
     success: true,
@@ -744,9 +756,171 @@ export async function getLedgerEntries(dormId: string, occupantId: string) {
 export async function getClearanceStatus(dormId: string, occupantId: string) {
   const balances = await getLedgerBalance(dormId, occupantId);
   if (!balances) return false;
-  // Cleared if total balance is <= 0 (meaning paid up or overpaid).
+  // Strictly separate: must be cleared in EACH ledger category.
   // Assuming positive balance = debt.
-  return balances.total <= 0;
+  return (
+    balances.maintenance <= 0 &&
+    balances.fines <= 0 &&
+    balances.events <= 0
+  );
+}
+
+export type DormFinanceOverview = {
+  maintenance_fee: {
+    charged: number;
+    collected: number;
+    approved_expenses: number;
+    outstanding: number;
+  };
+  contributions: {
+    charged: number;
+    collected: number;
+    approved_expenses: number;
+    outstanding: number;
+  };
+  committee_funds: {
+    approved_expenses: number;
+    pending_expenses: number;
+    committee_count: number;
+  };
+  totals: {
+    charged: number;
+    collected: number;
+    approved_expenses: number;
+    outstanding: number;
+  };
+};
+
+export async function getDormFinanceOverview(dormId: string): Promise<DormFinanceOverview | { error: string }> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership?.id) {
+    return { error: "Forbidden" };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "No active semester found." };
+  }
+
+  const [{ data: ledgerEntries, error: ledgerError }, { data: expenses, error: expensesError }, { count: committeeCount }] =
+    await Promise.all([
+      supabase
+        .from("ledger_entries")
+        .select("ledger, amount_pesos, voided_at, semester_id")
+        .eq("dorm_id", dormId)
+        .eq("semester_id", semesterResult.semesterId)
+        .is("voided_at", null),
+      supabase
+        .from("expenses")
+        .select("amount_pesos, status, category, committee_id, semester_id")
+        .eq("dorm_id", dormId)
+        .eq("semester_id", semesterResult.semesterId),
+      supabase
+        .from("committees")
+        .select("id", { count: "exact", head: true })
+        .eq("dorm_id", dormId),
+    ]);
+
+  if (ledgerError) {
+    return { error: ledgerError.message };
+  }
+  if (expensesError) {
+    return { error: expensesError.message };
+  }
+
+  let maintenanceCharged = 0;
+  let maintenanceCollected = 0;
+  let contributionsCharged = 0;
+  let contributionsCollected = 0;
+
+  for (const entry of ledgerEntries ?? []) {
+    const amount = Number(entry.amount_pesos ?? 0);
+    if (entry.ledger === "maintenance_fee") {
+      if (amount >= 0) maintenanceCharged += amount;
+      else maintenanceCollected += Math.abs(amount);
+    }
+    if (entry.ledger === "contributions") {
+      if (amount >= 0) contributionsCharged += amount;
+      else contributionsCollected += Math.abs(amount);
+    }
+  }
+
+  let maintenanceApprovedExpenses = 0;
+  let contributionsApprovedExpenses = 0;
+  let committeeApprovedExpenses = 0;
+  let committeePendingExpenses = 0;
+
+  for (const expense of expenses ?? []) {
+    const amount = Number(expense.amount_pesos ?? 0);
+    const isApproved = expense.status === "approved";
+    const isPending = expense.status === "pending";
+
+    if (expense.category === "maintenance_fee" && isApproved) {
+      maintenanceApprovedExpenses += amount;
+    }
+
+    if (expense.category === "contributions" && isApproved) {
+      contributionsApprovedExpenses += amount;
+    }
+
+    if (expense.committee_id) {
+      if (isApproved) committeeApprovedExpenses += amount;
+      if (isPending) committeePendingExpenses += amount;
+    }
+  }
+
+  const maintenanceOutstanding = Math.max(0, maintenanceCharged - maintenanceCollected);
+  const contributionsOutstanding = Math.max(0, contributionsCharged - contributionsCollected);
+
+  const totalCharged = maintenanceCharged + contributionsCharged;
+  const totalCollected = maintenanceCollected + contributionsCollected;
+  const totalApprovedExpenses = maintenanceApprovedExpenses + contributionsApprovedExpenses;
+  const totalOutstanding = Math.max(0, totalCharged - totalCollected);
+
+  return {
+    maintenance_fee: {
+      charged: maintenanceCharged,
+      collected: maintenanceCollected,
+      approved_expenses: maintenanceApprovedExpenses,
+      outstanding: maintenanceOutstanding,
+    },
+    contributions: {
+      charged: contributionsCharged,
+      collected: contributionsCollected,
+      approved_expenses: contributionsApprovedExpenses,
+      outstanding: contributionsOutstanding,
+    },
+    committee_funds: {
+      approved_expenses: committeeApprovedExpenses,
+      pending_expenses: committeePendingExpenses,
+      committee_count: committeeCount ?? 0,
+    },
+    totals: {
+      charged: totalCharged,
+      collected: totalCollected,
+      approved_expenses: totalApprovedExpenses,
+      outstanding: totalOutstanding,
+    },
+  };
 }
 
 export async function createPublicViewToken(
@@ -791,7 +965,8 @@ export async function createPublicViewToken(
 
   if (error) return { error: error.message };
 
-  revalidatePath(`/admin/finance/events/${entityId}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance/events/${entityId}`);
   return { success: true, token: data.token };
 }
 
@@ -846,6 +1021,7 @@ export async function togglePublicViewToken(dormId: string, tokenId: string, act
 
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/finance");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance`);
   return { success: true };
 }

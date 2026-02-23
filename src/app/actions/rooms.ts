@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -184,9 +185,12 @@ export async function assignOccupant(
     console.error("Failed to write audit event for room assignment:", auditError);
   }
 
-  revalidatePath("/admin/rooms");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${occupantId}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/rooms`);
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${occupantId}`);
+  revalidatePath(`/${activeRole}/profile`);
+  revalidatePath(`/${activeRole}/home`);
   return { success: true };
 }
 
@@ -256,9 +260,12 @@ export async function removeOccupantFromRoom(assignmentId: string, endDate: stri
     console.error("Failed to write audit event for room assignment removal:", auditError);
   }
 
-  revalidatePath("/admin/rooms");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${assignment.occupant_id}`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/rooms`);
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${assignment.occupant_id}`);
+  revalidatePath(`/${activeRole}/profile`);
+  revalidatePath(`/${activeRole}/home`);
   return { success: true };
 }
 
@@ -318,6 +325,7 @@ export async function overrideRoomLevel(
     console.error("Failed to write audit event for room level override:", auditError);
   }
 
-  revalidatePath("/admin/rooms");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/rooms`);
   return { success: true };
 }

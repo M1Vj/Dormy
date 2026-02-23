@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -297,7 +298,8 @@ export async function createSemester(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for semester creation:", auditError);
   }
 
-  revalidatePath("/admin/terms");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/terms`);
   return { success: true };
 }
 
@@ -381,7 +383,8 @@ export async function updateSemester(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for semester update:", auditError);
   }
 
-  revalidatePath("/admin/terms");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/terms`);
   return { success: true };
 }
 
@@ -425,6 +428,7 @@ export async function deleteSemester(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for semester deletion:", auditError);
   }
 
-  revalidatePath("/admin/terms");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/terms`);
   return { success: true };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
@@ -138,7 +139,8 @@ export async function createDorm(formData: FormData) {
     console.error("Failed to write audit event for dorm creation:", auditError);
   }
 
-  revalidatePath("/admin/dorms");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/dorms`);
   return { success: true };
 }
 
@@ -218,8 +220,9 @@ export async function updateDormAttributes(dormId: string, updates: Record<strin
     console.error("Failed to write audit event for dorm update:", auditError);
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/finance");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}`);
+  revalidatePath(`/${activeRole}/finance`);
   return { success: true };
 }
 
@@ -292,7 +295,8 @@ export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: 
     console.error("Failed to write audit event for dorm update:", auditError);
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/finance");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}`);
+  revalidatePath(`/${activeRole}/finance`);
   return { success: true };
 }
