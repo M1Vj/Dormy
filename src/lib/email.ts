@@ -170,6 +170,39 @@ function normalizePesos(amountPesos: number) {
   return `PHP ${formatted}`;
 }
 
+function isImageSource(value: string) {
+  const trimmed = value.trim();
+  return (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:image/")
+  );
+}
+
+function renderSignatureHtml(signatureValue: string | null | undefined) {
+  const signature = signatureValue?.trim();
+  if (!signature) {
+    return "";
+  }
+
+  if (isImageSource(signature)) {
+    return `<div style="margin:24px 0 0 0;"><img src="${escapeHtml(signature)}" alt="Signature" style="max-height:72px; width:auto;"/></div>`;
+  }
+
+  return `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(signature)}</strong></p>`;
+}
+
+function renderSignatureText(signatureValue: string | null | undefined) {
+  const signature = signatureValue?.trim();
+  if (!signature) {
+    return "";
+  }
+  if (isImageSource(signature)) {
+    return "\n—\n[Signature image attached]";
+  }
+  return `\n—\n${signature}`;
+}
+
 export function renderPaymentReceiptEmail(input: {
   recipientName: string | null;
   amountPesos: number;
@@ -181,6 +214,7 @@ export function renderPaymentReceiptEmail(input: {
   customMessage: string | null;
   subjectOverride?: string | null;
   signatureOverride?: string | null;
+  logoUrl?: string | null;
 }) {
   const subject =
     input.subjectOverride?.trim() ||
@@ -193,6 +227,9 @@ export function renderPaymentReceiptEmail(input: {
 
   const messageHtml = input.customMessage?.trim()
     ? textToHtml(input.customMessage)
+    : "";
+  const logoHtml = input.logoUrl?.trim()
+    ? `<div style="margin:0 0 12px 0;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:56px; width:auto;"/></div>`
     : "";
 
   const greeting = input.recipientName?.trim()
@@ -235,10 +272,11 @@ export function renderPaymentReceiptEmail(input: {
   const defaultMessageHtml = `<p style="margin:0 0 12px 0;">We received your payment. Thank you.</p>`;
 
   const bodyHtml = [
+    logoHtml,
     greeting,
     messageHtml || defaultMessageHtml,
     tableHtml,
-    input.signatureOverride?.trim() ? `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(input.signatureOverride.trim())}</strong></p>` : "",
+    renderSignatureHtml(input.signatureOverride),
   ].join("");
 
   const textParts = [
@@ -251,7 +289,7 @@ export function renderPaymentReceiptEmail(input: {
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
     input.note?.trim() ? `Note: ${input.note.trim()}` : "",
-    input.signatureOverride?.trim() ? `\n—\n${input.signatureOverride.trim()}` : "",
+    renderSignatureText(input.signatureOverride),
   ].filter(Boolean);
 
   return {
@@ -348,9 +386,7 @@ export function renderContributionBatchReceiptEmail(input: {
     messageHtml,
     lineItemsTable,
     detailsHtml,
-    input.signatureOverride?.trim()
-      ? `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(input.signatureOverride.trim())}</strong></p>`
-      : "",
+    renderSignatureHtml(input.signatureOverride),
   ].join("");
 
   const text = [
@@ -361,7 +397,7 @@ export function renderContributionBatchReceiptEmail(input: {
     `Total: ${normalizePesos(input.totalAmountPesos)}`,
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
-    input.signatureOverride?.trim() ? `\n—\n${input.signatureOverride.trim()}` : "",
+    renderSignatureText(input.signatureOverride),
   ]
     .filter(Boolean)
     .join("\n");

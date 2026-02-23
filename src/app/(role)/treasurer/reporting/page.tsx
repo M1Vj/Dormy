@@ -197,12 +197,10 @@ export default async function TreasurerReportingPage() {
   const contributionExpenseRows = (contributionExpensesRes.data ?? []) as ContributionExpenseRow[];
 
   const collectionRate = stats.eventsCharged > 0 ? (stats.eventsPaid / stats.eventsCharged) * 100 : 0;
-  const visibleTotalCharged = showTreasurerMaintenance
-    ? stats.totalCharged
-    : stats.eventsCharged + stats.finesCharged;
-  const visibleTotalPaid = showTreasurerMaintenance
-    ? stats.totalPaid
-    : stats.eventsPaid + stats.finesPaid;
+  const visibleTotalCharged =
+    stats.eventsCharged + (showTreasurerMaintenance ? stats.maintenanceCharged : 0);
+  const visibleTotalPaid =
+    stats.eventsPaid + (showTreasurerMaintenance ? stats.maintenancePaid : 0);
   const visibleTotalCollectibles = Math.max(0, visibleTotalCharged - visibleTotalPaid);
   const overallCollectionRate = visibleTotalCharged > 0 ? (visibleTotalPaid / visibleTotalCharged) * 100 : 0;
   const pendingExpenseTotal = pendingExpenses.reduce((sum, expense) => sum + Number(expense.amount_pesos), 0);
@@ -337,7 +335,7 @@ export default async function TreasurerReportingPage() {
               <TrendingUp className="h-5 w-5 text-emerald-500" />
               Collection Rates
             </CardTitle>
-            <CardDescription>Payment progress across all ledger categories</CardDescription>
+            <CardDescription>Payment progress for treasurer-managed ledgers</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-5">
@@ -375,25 +373,6 @@ export default async function TreasurerReportingPage() {
                     );
                   })()
                 : null}
-              {/* Fines */}
-              {(() => {
-                const fineRate = stats.finesCharged > 0 ? (stats.finesPaid / stats.finesCharged) * 100 : 0;
-                return (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span>SA Fines</span>
-                      <span>{fineRate.toFixed(0)}%</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-amber-500 transition-all" style={{ width: `${fineRate}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>₱{stats.finesPaid.toFixed(2)} collected</span>
-                      <span>₱{stats.finesCharged.toFixed(2)} charged</span>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           </CardContent>
         </Card>
@@ -619,12 +598,6 @@ export default async function TreasurerReportingPage() {
                     <td className="px-3 py-3 text-right font-medium">₱{(stats.maintenanceCharged - stats.maintenancePaid).toFixed(2)}</td>
                   </tr>
                 ) : null}
-                <tr className="border-b last:border-0">
-                  <td className="px-3 py-3 font-medium">SA Fines</td>
-                  <td className="px-3 py-3 text-right">₱{stats.finesCharged.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right text-emerald-600 font-medium">₱{stats.finesPaid.toFixed(2)}</td>
-                  <td className="px-3 py-3 text-right font-medium">₱{(stats.finesCharged - stats.finesPaid).toFixed(2)}</td>
-                </tr>
                 <tr className="bg-muted/30">
                   <td className="px-3 py-3 font-bold">Total</td>
                   <td className="px-3 py-3 text-right font-bold">₱{visibleTotalCharged.toFixed(2)}</td>

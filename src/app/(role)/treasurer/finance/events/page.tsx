@@ -53,6 +53,10 @@ type ContributionGroup = {
   title: string;
   details: string | null;
   eventTitle: string | null;
+  receiptSignature: string | null;
+  receiptSubject: string | null;
+  receiptMessage: string | null;
+  receiptLogoUrl: string | null;
   deadline: string | null;
   charged: number;
   collected: number;
@@ -109,12 +113,36 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
     typeof metadata.payable_deadline === "string" && metadata.payable_deadline.trim().length > 0
       ? metadata.payable_deadline
       : null;
+  const receiptSignature =
+    typeof metadata.contribution_receipt_signature === "string" &&
+    metadata.contribution_receipt_signature.trim().length > 0
+      ? metadata.contribution_receipt_signature.trim()
+      : null;
+  const receiptSubject =
+    typeof metadata.contribution_receipt_subject === "string" &&
+    metadata.contribution_receipt_subject.trim().length > 0
+      ? metadata.contribution_receipt_subject.trim()
+      : null;
+  const receiptMessage =
+    typeof metadata.contribution_receipt_message === "string" &&
+    metadata.contribution_receipt_message.trim().length > 0
+      ? metadata.contribution_receipt_message.trim()
+      : null;
+  const receiptLogoUrl =
+    typeof metadata.contribution_receipt_logo_url === "string" &&
+    metadata.contribution_receipt_logo_url.trim().length > 0
+      ? metadata.contribution_receipt_logo_url.trim()
+      : null;
 
   return {
     contributionId,
     title,
     details,
     eventTitle,
+    receiptSignature,
+    receiptSubject,
+    receiptMessage,
+    receiptLogoUrl,
     deadline,
   };
 }
@@ -269,6 +297,10 @@ export default async function EventsFinancePage({
         details: metadata.details,
         eventTitle: metadata.eventTitle,
         deadline: metadata.deadline,
+        receiptSignature: metadata.receiptSignature,
+        receiptSubject: metadata.receiptSubject,
+        receiptMessage: metadata.receiptMessage,
+        receiptLogoUrl: metadata.receiptLogoUrl,
         charged: 0,
         collected: 0,
         remaining: 0,
@@ -305,6 +337,18 @@ export default async function EventsFinancePage({
     if (!existing.deadline && metadata.deadline) {
       existing.deadline = metadata.deadline;
     }
+    if (!existing.receiptSignature && metadata.receiptSignature) {
+      existing.receiptSignature = metadata.receiptSignature;
+    }
+    if (!existing.receiptSubject && metadata.receiptSubject) {
+      existing.receiptSubject = metadata.receiptSubject;
+    }
+    if (!existing.receiptMessage && metadata.receiptMessage) {
+      existing.receiptMessage = metadata.receiptMessage;
+    }
+    if (!existing.receiptLogoUrl && metadata.receiptLogoUrl) {
+      existing.receiptLogoUrl = metadata.receiptLogoUrl;
+    }
 
     groupMap.set(metadata.contributionId, existing);
   }
@@ -323,6 +367,10 @@ export default async function EventsFinancePage({
         details: group.details,
         eventTitle: group.eventTitle,
         deadline: group.deadline,
+        receiptSignature: group.receiptSignature,
+        receiptSubject: group.receiptSubject,
+        receiptMessage: group.receiptMessage,
+        receiptLogoUrl: group.receiptLogoUrl,
         charged: group.charged,
         collected: group.collected,
         remaining: group.remaining,
@@ -351,6 +399,10 @@ export default async function EventsFinancePage({
       id: group.id,
       title: group.title,
       remaining: Number(group.remaining.toFixed(2)),
+      receiptSignature: group.receiptSignature,
+      receiptSubject: group.receiptSubject,
+      receiptMessage: group.receiptMessage,
+      receiptLogoUrl: group.receiptLogoUrl,
     }));
 
   return (

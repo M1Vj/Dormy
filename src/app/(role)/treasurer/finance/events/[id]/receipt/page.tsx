@@ -34,6 +34,26 @@ function parseContribution(entry: EntryRow) {
         : typeof metadata.payable_label === "string" && metadata.payable_label.trim().length > 0
           ? metadata.payable_label.trim()
           : "Contribution",
+    receiptSignature:
+      typeof metadata.contribution_receipt_signature === "string" &&
+      metadata.contribution_receipt_signature.trim().length > 0
+        ? metadata.contribution_receipt_signature.trim()
+        : null,
+    receiptSubject:
+      typeof metadata.contribution_receipt_subject === "string" &&
+      metadata.contribution_receipt_subject.trim().length > 0
+        ? metadata.contribution_receipt_subject.trim()
+        : null,
+    receiptMessage:
+      typeof metadata.contribution_receipt_message === "string" &&
+      metadata.contribution_receipt_message.trim().length > 0
+        ? metadata.contribution_receipt_message.trim()
+        : null,
+    receiptLogoUrl:
+      typeof metadata.contribution_receipt_logo_url === "string" &&
+      metadata.contribution_receipt_logo_url.trim().length > 0
+        ? metadata.contribution_receipt_logo_url.trim()
+        : null,
   };
 }
 
@@ -101,6 +121,22 @@ export default async function ContributionReceiptBuilderPage({
   }
 
   const contributionTitle = parseContribution(entryRows[0]).title;
+  const contributionTemplate = entryRows
+    .map((entry) => parseContribution(entry))
+    .reduce(
+      (acc, item) => ({
+        signature: acc.signature || item.receiptSignature || "",
+        subject: acc.subject || item.receiptSubject || "",
+        message: acc.message || item.receiptMessage || "",
+        logoUrl: acc.logoUrl || item.receiptLogoUrl || "",
+      }),
+      {
+        signature: "",
+        subject: "",
+        message: "",
+        logoUrl: "",
+      }
+    );
   const totalAmountContext = entryRows.reduce((sum, entry) => {
     const amount = Number(entry.amount_pesos ?? 0);
     if (entry.entry_type === "payment" || amount < 0) {
@@ -133,6 +169,10 @@ export default async function ContributionReceiptBuilderPage({
             contributionId={contributionId}
             contributionTitle={contributionTitle}
             defaultAmount={Number(totalAmountContext.toFixed(2))}
+            initialSignature={contributionTemplate.signature}
+            initialSubject={contributionTemplate.subject}
+            initialMessage={contributionTemplate.message}
+            initialLogoUrl={contributionTemplate.logoUrl}
             occupants={(occupants ?? []).map((occupant) => ({
               id: occupant.id,
               fullName: occupant.full_name ?? "Unnamed",

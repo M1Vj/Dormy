@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarCheck2, Loader2, Mail } from "lucide-react";
+import { CalendarCheck2, Loader2 } from "lucide-react";
 
-import { draftPaymentReceiptEmail } from "@/app/actions/email";
-import { recordContributionBatchPayment } from "@/app/actions/finance";
+import {
+  previewContributionBatchPaymentEmail,
+  recordContributionBatchPayment,
+} from "@/app/actions/finance";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,18 +30,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 type ContributionOption = {
   id: string;
   title: string;
   remaining: number;
+  receiptSignature: string | null;
+  receiptSubject: string | null;
+  receiptMessage: string | null;
+  receiptLogoUrl: string | null;
 };
 
 type OccupantOption = {
   id: string;
   fullName: string;
   studentId?: string | null;
+};
+
+type BatchPaymentPayload = {
+  occupant_id: string;
+  contribution_ids: string[];
+  amount: number;
+  method: "cash" | "gcash";
+  paid_at_iso: string;
+  allocation_target_id: string | null;
+  send_receipt_email: boolean;
+  receipt_email_override: string | null;
+  receipt_subject: string | null;
+  receipt_message: string | null;
+  receipt_signature: string | null;
+  receipt_logo_url: string | null;
 };
 
 function nowLocalDateTimeValue() {
@@ -69,12 +89,15 @@ export function ContributionBatchPaymentDialog({
   const [allocationTargetId, setAllocationTargetId] = useState<string>("");
   const [sendReceiptEmail, setSendReceiptEmail] = useState(true);
   const [receiptEmailOverride, setReceiptEmailOverride] = useState("");
-  const [receiptSubject, setReceiptSubject] = useState("Contribution payment receipt");
-  const [receiptMessage, setReceiptMessage] = useState("");
-  const [receiptSignature, setReceiptSignature] = useState("Dormy Treasurer");
-  const [receiptLogoUrl, setReceiptLogoUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDrafting, setIsDrafting] = useState(false);
+  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<BatchPaymentPayload | null>(null);
+  const [emailPreview, setEmailPreview] = useState<{
+    recipient_email: string;
+    subject: string;
+    text: string;
+  } | null>(null);
 
   const selectedContributions = useMemo(
     () => contributions.filter((contribution) => selectedContributionIds.includes(contribution.id)),
@@ -87,6 +110,65 @@ export function ContributionBatchPaymentDialog({
   );
 
   const amountDifference = useMemo(() => Number((amount - computedTotal).toFixed(2)), [amount, computedTotal]);
+  const selectedContributionSignatureSet = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedContributions
+            .map((contribution) => contribution.receiptSignature?.trim() ?? "")
+            .filter((value) => value.length > 0)
+        )
+      ),
+    [selectedContributions]
+  );
+  const selectedContributionSubjectSet = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedContributions
+            .map((contribution) => contribution.receiptSubject?.trim() ?? "")
+            .filter((value) => value.length > 0)
+        )
+      ),
+    [selectedContributions]
+  );
+  const selectedContributionMessageSet = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedContributions
+            .map((contribution) => contribution.receiptMessage?.trim() ?? "")
+            .filter((value) => value.length > 0)
+        )
+      ),
+    [selectedContributions]
+  );
+  const selectedContributionLogoSet = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedContributions
+            .map((contribution) => contribution.receiptLogoUrl?.trim() ?? "")
+            .filter((value) => value.length > 0)
+        )
+      ),
+    [selectedContributions]
+  );
+  const selectedContributionSignature =
+    selectedContributionSignatureSet.length === 1 ? selectedContributionSignatureSet[0] : "";
+  const selectedContributionSubject =
+    selectedContributionSubjectSet.length === 1 ? selectedContributionSubjectSet[0] : "";
+  const selectedContributionMessage =
+    selectedContributionMessageSet.length === 1 ? selectedContributionMessageSet[0] : "";
+  const selectedContributionLogoUrl =
+    selectedContributionLogoSet.length === 1 ? selectedContributionLogoSet[0] : "";
+  const hasMixedContributionSignatures = selectedContributionSignatureSet.length > 1;
+  const hasMixedContributionSubjects = selectedContributionSubjectSet.length > 1;
+  const hasMixedContributionMessages = selectedContributionMessageSet.length > 1;
+  const hasMixedContributionLogos = selectedContributionLogoSet.length > 1;
+  const hasMissingContributionSignature =
+    selectedContributions.length > 0 &&
+    selectedContributions.some((contribution) => !(contribution.receiptSignature?.trim() ?? ""));
 
   const previewRows = useMemo(() => {
     if (!selectedContributions.length) return [] as Array<{ title: string; amount: number }>;
@@ -135,93 +217,84 @@ export function ContributionBatchPaymentDialog({
       setAmount(0);
       setAllocationTargetId("");
       setPaidAtLocal(nowLocalDateTimeValue());
+      setConfirmOpen(false);
+      setPendingPayload(null);
+      setEmailPreview(null);
     }
   };
 
-  const handleDraft = async () => {
-    if (!occupantId) {
-      toast.error("Select an occupant first.");
-      return;
-    }
-    if (amount <= 0) {
-      toast.error("Enter a valid amount first.");
-      return;
-    }
-
-    setIsDrafting(true);
-    try {
-      const result = await draftPaymentReceiptEmail({
-        dorm_id: dormId,
-        occupant_id: occupantId,
-        category: "contributions",
-        amount,
-        method,
-        note: selectedContributions.map((item) => item.title).join(", "),
-        event_id: null,
-      });
-
-      if (result && "error" in result) {
-        toast.error(result.error);
-        return;
-      }
-
-      if (result?.subject) {
-        setReceiptSubject(result.subject);
-      }
-      if (result?.message) {
-        setReceiptMessage(result.message);
-      }
-      toast.success(result?.model === "fallback" ? "Draft ready (template)." : "AI draft ready.");
-    } catch {
-      toast.error("Failed to draft receipt email.");
-    } finally {
-      setIsDrafting(false);
-    }
-  };
-
-  const handleSubmit = async () => {
+  const buildPayload = () => {
     if (!occupantId) {
       toast.error("Select an occupant.");
-      return;
+      return null;
     }
 
     if (!selectedContributionIds.length) {
       toast.error("Select at least one contribution.");
-      return;
+      return null;
     }
 
     if (amount <= 0) {
       toast.error("Amount must be greater than zero.");
-      return;
+      return null;
     }
 
     if (Math.abs(amountDifference) >= 0.01 && !allocationTargetId) {
       toast.error("Choose where to apply the excess or short payment amount.");
-      return;
+      return null;
     }
 
     const paidAt = new Date(paidAtLocal);
     if (Number.isNaN(paidAt.getTime())) {
       toast.error("Provide a valid payment date and time.");
-      return;
+      return null;
     }
 
+    if (sendReceiptEmail) {
+      if (hasMixedContributionSignatures) {
+        toast.error("Selected contributions use different signatures. Use one signature template.");
+        return null;
+      }
+      if (hasMixedContributionSubjects) {
+        toast.error("Selected contributions use different receipt subjects. Use one receipt template.");
+        return null;
+      }
+      if (hasMixedContributionMessages) {
+        toast.error("Selected contributions use different receipt messages. Use one receipt template.");
+        return null;
+      }
+      if (hasMixedContributionLogos) {
+        toast.error("Selected contributions use different receipt logos. Use one receipt template.");
+        return null;
+      }
+      if (hasMissingContributionSignature || !selectedContributionSignature) {
+        toast.error("Set the contribution receipt signature on the contribution page first.");
+        return null;
+      }
+    }
+
+    const payload: BatchPaymentPayload = {
+      occupant_id: occupantId,
+      contribution_ids: selectedContributionIds,
+      amount,
+      method,
+      paid_at_iso: paidAt.toISOString(),
+      allocation_target_id: allocationTargetId || null,
+      send_receipt_email: sendReceiptEmail,
+      receipt_email_override: receiptEmailOverride.trim() || null,
+      receipt_subject: null,
+      receipt_message: null,
+      receipt_signature: null,
+      receipt_logo_url: null,
+    };
+
+    return payload;
+  };
+
+  const submitPayment = async (payload: BatchPaymentPayload) => {
     setIsSubmitting(true);
     try {
-      const result = await recordContributionBatchPayment(dormId, {
-        occupant_id: occupantId,
-        contribution_ids: selectedContributionIds,
-        amount,
-        method,
-        paid_at_iso: paidAt.toISOString(),
-        allocation_target_id: allocationTargetId || null,
-        send_receipt_email: sendReceiptEmail,
-        receipt_email_override: receiptEmailOverride.trim() || null,
-        receipt_subject: receiptSubject.trim() || null,
-        receipt_message: receiptMessage.trim() || null,
-        receipt_signature: receiptSignature.trim() || null,
-        receipt_logo_url: receiptLogoUrl.trim() || null,
-      });
+      const result = await recordContributionBatchPayment(dormId, payload);
 
       if (result && "error" in result) {
         toast.error(result.error);
@@ -229,6 +302,9 @@ export function ContributionBatchPaymentDialog({
       }
 
       toast.success("Batch payment recorded.");
+      setConfirmOpen(false);
+      setPendingPayload(null);
+      setEmailPreview(null);
       setOpen(false);
       router.refresh();
     } catch {
@@ -238,8 +314,55 @@ export function ContributionBatchPaymentDialog({
     }
   };
 
+  const handleProceedToConfirmation = async () => {
+    const payload = buildPayload();
+    if (!payload) {
+      return;
+    }
+
+    if (!payload.send_receipt_email) {
+      await submitPayment(payload);
+      return;
+    }
+
+    setIsPreparingPreview(true);
+    try {
+      const preview = await previewContributionBatchPaymentEmail(dormId, payload);
+      if (preview && "error" in preview) {
+        toast.error(preview.error);
+        return;
+      }
+      if (!preview || !("success" in preview) || !preview.success) {
+        toast.error("Failed to generate email preview.");
+        return;
+      }
+
+      setPendingPayload(payload);
+      setEmailPreview({
+        recipient_email: preview.recipient_email,
+        subject: preview.subject,
+        text: preview.text,
+      });
+      setConfirmOpen(true);
+    } catch {
+      toast.error("Failed to generate email preview.");
+    } finally {
+      setIsPreparingPreview(false);
+    }
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!pendingPayload) {
+      toast.error("No pending payment to submit.");
+      return;
+    }
+
+    await submitPayment(pendingPayload);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
@@ -364,28 +487,74 @@ export function ContributionBatchPaymentDialog({
 
             {sendReceiptEmail ? (
               <div className="space-y-3 pt-2">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Override Recipient Email (Optional)</Label>
-                    <Input value={receiptEmailOverride} onChange={(event) => setReceiptEmailOverride(event.target.value)} placeholder="name@example.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Logo URL (Optional)</Label>
-                    <Input value={receiptLogoUrl} onChange={(event) => setReceiptLogoUrl(event.target.value)} placeholder="https://..." />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Override Recipient Email (Optional)</Label>
+                  <Input
+                    value={receiptEmailOverride}
+                    onChange={(event) => setReceiptEmailOverride(event.target.value)}
+                    placeholder="name@example.com"
+                  />
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Receipt Message</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={handleDraft} disabled={isDrafting}>
-                    {isDrafting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Mail className="mr-2 h-3 w-3" />}
-                    AI Draft
-                  </Button>
+                <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                  <Label>Saved Receipt Template Source</Label>
+                  {hasMixedContributionSignatures ? (
+                    <p className="text-xs text-destructive">
+                      Selected contributions use different signatures. Select contributions that share one signature.
+                    </p>
+                  ) : hasMissingContributionSignature || !selectedContributionSignature ? (
+                    <p className="text-xs text-destructive">
+                      Set the receipt signature on the contribution page before sending this email.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Subject</p>
+                        <p className="text-sm font-medium">
+                          {hasMixedContributionSubjects
+                            ? "Mixed templates"
+                            : selectedContributionSubject || "Contribution payment receipt"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Message</p>
+                        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                          {hasMixedContributionMessages
+                            ? "Mixed templates"
+                            : selectedContributionMessage || "Default contribution receipt message will be used."}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Logo</p>
+                        {hasMixedContributionLogos ? (
+                          <p className="text-xs text-destructive">Selected contributions use different logos.</p>
+                        ) : selectedContributionLogoUrl ? (
+                          <img
+                            src={selectedContributionLogoUrl}
+                            alt="Contribution logo"
+                            className="mt-2 max-h-16 w-auto rounded border bg-white p-2"
+                          />
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No logo saved for this template.</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Signature</p>
+                        {selectedContributionSignature.startsWith("http") ? (
+                          <img
+                            src={selectedContributionSignature}
+                            alt="Contribution signature"
+                            className="mt-2 max-h-20 w-auto rounded border bg-white p-2"
+                          />
+                        ) : (
+                          <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
+                            {selectedContributionSignature}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <Input value={receiptSubject} onChange={(event) => setReceiptSubject(event.target.value)} placeholder="Receipt subject" />
-                <Textarea value={receiptMessage} onChange={(event) => setReceiptMessage(event.target.value)} rows={4} placeholder="Receipt message" />
-                <Input value={receiptSignature} onChange={(event) => setReceiptSignature(event.target.value)} placeholder="Signature" />
 
                 <div className="rounded-md bg-muted/40 p-3">
                   <p className="mb-2 text-xs font-medium text-muted-foreground">Preview Summary</p>
@@ -411,12 +580,54 @@ export function ContributionBatchPaymentDialog({
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={isSubmitting || selectedContributionIds.length === 0}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Record Batch Payment
+          <Button
+            type="button"
+            onClick={handleProceedToConfirmation}
+            disabled={isSubmitting || isPreparingPreview || selectedContributionIds.length === 0}
+          >
+            {isPreparingPreview || isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Submit Payment
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Confirm Receipt Email</DialogTitle>
+            <DialogDescription>
+              Review the exact email content before finalizing this payment.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <Label>To</Label>
+              <p className="text-sm">{emailPreview?.recipient_email || "—"}</p>
+            </div>
+            <div>
+              <Label>Subject</Label>
+              <p className="text-sm">{emailPreview?.subject || "—"}</p>
+            </div>
+            <div>
+              <Label>Email Preview (Text)</Label>
+              <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">
+                {emailPreview?.text || "No preview available."}
+              </pre>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)} disabled={isSubmitting}>
+              Back
+            </Button>
+            <Button type="button" onClick={handleConfirmSubmit} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm and Record
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

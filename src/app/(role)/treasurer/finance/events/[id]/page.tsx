@@ -6,6 +6,7 @@ import { AlertCircle, ArrowLeft, CheckCircle, ReceiptText, XCircle } from "lucid
 import { getOccupants } from "@/app/actions/occupants";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { ContributionPayableOverrideDialog } from "@/components/finance/contribution-payable-override-dialog";
+import { ContributionReceiptSignatureForm } from "@/components/finance/contribution-receipt-signature-form";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +146,26 @@ function parseContributionMetadata(entry: EntryRow) {
         ? metadata.contribution_event_title.trim()
         : null,
     deadline: parseDeadline(metadata.payable_deadline),
+    receiptSignature:
+      typeof metadata.contribution_receipt_signature === "string" &&
+      metadata.contribution_receipt_signature.trim().length > 0
+        ? metadata.contribution_receipt_signature.trim()
+        : null,
+    receiptSubject:
+      typeof metadata.contribution_receipt_subject === "string" &&
+      metadata.contribution_receipt_subject.trim().length > 0
+        ? metadata.contribution_receipt_subject.trim()
+        : null,
+    receiptMessage:
+      typeof metadata.contribution_receipt_message === "string" &&
+      metadata.contribution_receipt_message.trim().length > 0
+        ? metadata.contribution_receipt_message.trim()
+        : null,
+    receiptLogoUrl:
+      typeof metadata.contribution_receipt_logo_url === "string" &&
+      metadata.contribution_receipt_logo_url.trim().length > 0
+        ? metadata.contribution_receipt_logo_url.trim()
+        : null,
   };
 }
 
@@ -258,6 +279,27 @@ export default async function EventDetailsPage({
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
+
+  const contributionReceiptSignature =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).receiptSignature)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ??
+    "";
+  const contributionReceiptSubject =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).receiptSubject)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ??
+    "";
+  const contributionReceiptMessage =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).receiptMessage)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ??
+    "";
+  const contributionReceiptLogoUrl =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).receiptLogoUrl)
+      .find((value): value is string => Boolean(value && value.trim().length > 0)) ??
+    "";
 
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const nowIso = new Date().toISOString();
@@ -373,6 +415,17 @@ export default async function EventDetailsPage({
           <CardContent className="pt-6 text-sm text-muted-foreground">{contributionDetails}</CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardContent className="pt-6">
+          <ContributionReceiptSignatureForm
+            dormId={dormId}
+            contributionId={contributionId}
+            initialSignature={contributionReceiptSignature}
+            disabled={isReadOnlyView}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
@@ -525,6 +578,10 @@ export default async function EventDetailsPage({
                               contribution_details: contributionDetails,
                               contribution_event_title: linkedEventTitle,
                               payable_deadline: occupant.deadline,
+                              contribution_receipt_signature: contributionReceiptSignature || null,
+                              contribution_receipt_subject: contributionReceiptSubject || null,
+                              contribution_receipt_message: contributionReceiptMessage || null,
+                              contribution_receipt_logo_url: contributionReceiptLogoUrl || null,
                             }}
                             trigger={
                               <Button size="sm" variant="outline" className="w-full">
@@ -606,6 +663,10 @@ export default async function EventDetailsPage({
                               contribution_details: contributionDetails,
                               contribution_event_title: linkedEventTitle,
                               payable_deadline: occupant.deadline,
+                              contribution_receipt_signature: contributionReceiptSignature || null,
+                              contribution_receipt_subject: contributionReceiptSubject || null,
+                              contribution_receipt_message: contributionReceiptMessage || null,
+                              contribution_receipt_logo_url: contributionReceiptLogoUrl || null,
                             }}
                             trigger={
                               <Button size="sm" variant="outline">
