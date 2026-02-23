@@ -41,9 +41,8 @@ export async function submitExpense(dormId: string, formData: FormData) {
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "treasurer"]).has(r));
 
-  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser"]);
+  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser", "assistant_adviser", "student_assistant"]);
   const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
 
   if (!memberships || memberships.length === 0) {
@@ -202,10 +201,6 @@ export async function reviewExpense(
     .eq("user_id", user.id);
   const roles = memberships?.map(m => m.role) ?? [];
 
-  if (!roles.some(r => new Set(["admin", "treasurer"]).has(r))) {
-    return { error: "Only treasurer or admin can approve expenses." };
-  }
-
   const { data: expense } = await supabase
     .from("expenses")
     .select("*")
@@ -214,6 +209,17 @@ export async function reviewExpense(
     .maybeSingle();
 
   if (!expense) return { error: "Expense not found." };
+
+  const canReviewAll = roles.some((r) => new Set(["admin", "treasurer"]).has(r));
+  const canReviewMaintenance = roles.some((r) =>
+    new Set(["adviser", "assistant_adviser", "student_assistant"]).has(r)
+  );
+  const canReviewExpense = canReviewAll || (canReviewMaintenance && expense.category === "maintenance_fee");
+
+  if (!canReviewExpense) {
+    return { error: "You do not have permission to review this expense." };
+  }
+
   if (expense.status !== "pending") {
     return { error: "This expense has already been reviewed." };
   }

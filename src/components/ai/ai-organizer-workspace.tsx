@@ -4,7 +4,10 @@ import { FormEvent, useMemo, useRef, useState, useTransition } from "react";
 import { Mic, MicOff, Sparkles, Save, RefreshCcw } from "lucide-react";
 
 import {
+  getAdminOverviewInsights,
+  getCleaningFinesInsights,
   getFinanceInsights,
+  getMaintenanceInsights,
   organizeEventConcept,
   saveEventConcept,
 } from "@/app/actions/ai";
@@ -14,7 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { AiConceptRecord, EventConceptDraft, FinanceInsights } from "@/lib/types/ai";
+import type {
+  AdminOverviewInsights,
+  AiConceptRecord,
+  CleaningFinesInsights,
+  EventConceptDraft,
+  FinanceInsights,
+  MaintenanceInsights,
+  RoleInsights,
+} from "@/lib/types/ai";
 
 type RecognitionAlternative = {
   transcript: string;
@@ -52,6 +63,234 @@ function textToLines(text: string) {
     .filter(Boolean);
 }
 
+
+
+function getInsightsTabConfig(role: string): { key: string; label: string } | null {
+  switch (role) {
+    case "admin":
+      return { key: "admin_overview", label: "Dorm Overview" };
+    case "adviser":
+    case "assistant_adviser":
+      return { key: "maintenance", label: "Maintenance" };
+    case "treasurer":
+      return { key: "finance", label: "Finance Insights" };
+    case "student_assistant":
+      return { key: "cleaning_fines", label: "Operations" };
+    default:
+      return null;
+  }
+}
+
+
+
+function FinanceInsightsCards({ data }: { data: FinanceInsights }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Outstanding</p>
+          <p className="text-lg font-semibold">₱{data.total_outstanding.toFixed(2)}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Occupants with balance</p>
+          <p className="text-lg font-semibold">{data.occupants_with_balance}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Open fines</p>
+          <p className="text-lg font-semibold">{data.open_fines}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Voided fines</p>
+          <p className="text-lg font-semibold">{data.voided_fines}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">AI summary</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.ai_summary}</p>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">Top balances</p>
+        <div className="mt-2 space-y-1">
+          {data.top_balances.map((row) => (
+            <div key={row.occupant_id} className="flex items-center justify-between text-sm">
+              <span>{row.full_name}</span>
+              <span className="font-medium">₱{row.total_balance.toFixed(2)}</span>
+            </div>
+          ))}
+          {!data.top_balances.length ? (
+            <p className="text-sm text-muted-foreground">No outstanding balances.</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CleaningFinesInsightsCards({ data }: { data: CleaningFinesInsights }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Cleaning areas</p>
+          <p className="text-lg font-semibold">{data.cleaning_areas_count}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Rooms assigned</p>
+          <p className="text-lg font-semibold">
+            {data.assigned_rooms_count} / {data.total_rooms}
+          </p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Active fines</p>
+          <p className="text-lg font-semibold">{data.active_fines_count}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Pending reports</p>
+          <p className="text-lg font-semibold">{data.pending_fine_reports}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Current week</p>
+          <p className="text-lg font-semibold">{data.current_week_label ?? "—"}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Total fine amount</p>
+          <p className="text-lg font-semibold">₱{data.total_fine_amount_pesos.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">AI summary</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.ai_summary}</p>
+      </div>
+    </div>
+  );
+}
+
+function MaintenanceInsightsCards({ data }: { data: MaintenanceInsights }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Maintenance charged</p>
+          <p className="text-lg font-semibold">₱{data.maintenance_charged.toFixed(2)}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Maintenance paid</p>
+          <p className="text-lg font-semibold">₱{data.maintenance_paid.toFixed(2)}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Outstanding</p>
+          <p className="text-lg font-semibold">₱{data.maintenance_outstanding.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Cleared</p>
+          <p className="text-lg font-semibold">{data.occupants_cleared}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Not cleared</p>
+          <p className="text-lg font-semibold">{data.occupants_not_cleared}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Total occupants</p>
+          <p className="text-lg font-semibold">{data.total_occupants}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">AI summary</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.ai_summary}</p>
+      </div>
+    </div>
+  );
+}
+
+function AdminOverviewInsightsCards({ data }: { data: AdminOverviewInsights }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Occupants</p>
+          <p className="text-lg font-semibold">{data.total_occupants}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Events</p>
+          <p className="text-lg font-semibold">{data.total_events}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Cash on hand</p>
+          <p className="text-lg font-semibold">₱{data.cash_on_hand.toFixed(2)}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Collectibles</p>
+          <p className="text-lg font-semibold">₱{data.total_collectibles.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Active fines</p>
+          <p className="text-lg font-semibold">{data.active_fines}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Cleared</p>
+          <p className="text-lg font-semibold">{data.occupants_cleared}</p>
+        </div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">Not cleared</p>
+          <p className="text-lg font-semibold">{data.occupants_not_cleared}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        <p className="text-sm font-medium">AI summary</p>
+        <p className="mt-1 text-sm text-muted-foreground">{data.ai_summary}</p>
+      </div>
+    </div>
+  );
+}
+
+function InsightsCards({ insights }: { insights: RoleInsights }) {
+  if (!insights) return null;
+  switch (insights.kind) {
+    case "finance":
+      return <FinanceInsightsCards data={insights.data} />;
+    case "cleaning_fines":
+      return <CleaningFinesInsightsCards data={insights.data} />;
+    case "maintenance":
+      return <MaintenanceInsightsCards data={insights.data} />;
+    case "admin_overview":
+      return <AdminOverviewInsightsCards data={insights.data} />;
+  }
+}
+
+
+
+function getInsightsDescription(role: string): string {
+  switch (role) {
+    case "admin":
+      return "High-level dorm snapshot: occupants, events, finances, and clearance.";
+    case "adviser":
+    case "assistant_adviser":
+      return "Maintenance fees, clearance status, and adviser-relevant metrics.";
+    case "treasurer":
+      return "AI organizer view for fines and payments summary. This does not mutate records.";
+    case "student_assistant":
+      return "Cleaning schedule, fines, and fine reports overview.";
+    default:
+      return "Role insights.";
+  }
+}
+
+
+
 export function AiOrganizerWorkspace({
   role,
   suggestedPrompts = [],
@@ -63,7 +302,7 @@ export function AiOrganizerWorkspace({
   suggestedPrompts?: string[];
   events: Array<{ id: string; title: string }>;
   recentConcepts: AiConceptRecord[];
-  initialInsights: FinanceInsights | null;
+  initialInsights: RoleInsights;
 }) {
   const [rawText, setRawText] = useState("");
   const [concept, setConcept] = useState<EventConceptDraft | null>(null);
@@ -71,11 +310,13 @@ export function AiOrganizerWorkspace({
   const [saveMode, setSaveMode] = useState<"draft_event" | "attach_event">("draft_event");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({});
-  const [insights, setInsights] = useState<FinanceInsights | null>(initialInsights);
+  const [insights, setInsights] = useState<RoleInsights>(initialInsights);
   const [isListening, setIsListening] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isInsightsPending, startInsightsTransition] = useTransition();
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  const tabConfig = getInsightsTabConfig(role);
 
   const canSave = useMemo(() => {
     if (!concept) {
@@ -188,11 +429,36 @@ export function AiOrganizerWorkspace({
   const refreshInsights = () => {
     setFeedback({});
     startInsightsTransition(async () => {
-      const result = await getFinanceInsights();
-      if ("error" in result) {
-        setFeedback({ error: result.error });
-        return;
+      let result: RoleInsights = null;
+
+      switch (role) {
+        case "admin": {
+          const r = await getAdminOverviewInsights();
+          result = "error" in r ? null : { kind: "admin_overview", data: r };
+          if ("error" in r) setFeedback({ error: r.error });
+          break;
+        }
+        case "adviser":
+        case "assistant_adviser": {
+          const r = await getMaintenanceInsights();
+          result = "error" in r ? null : { kind: "maintenance", data: r };
+          if ("error" in r) setFeedback({ error: r.error });
+          break;
+        }
+        case "treasurer": {
+          const r = await getFinanceInsights();
+          result = "error" in r ? null : { kind: "finance", data: r };
+          if ("error" in r) setFeedback({ error: r.error });
+          break;
+        }
+        case "student_assistant": {
+          const r = await getCleaningFinesInsights();
+          result = "error" in r ? null : { kind: "cleaning_fines", data: r };
+          if ("error" in r) setFeedback({ error: r.error });
+          break;
+        }
       }
+
       setInsights(result);
     });
   };
@@ -201,7 +467,7 @@ export function AiOrganizerWorkspace({
     <Tabs defaultValue="event" className="space-y-5">
       <TabsList>
         <TabsTrigger value="event">Event Concept</TabsTrigger>
-        <TabsTrigger value="finance">Finance Insights</TabsTrigger>
+        {tabConfig ? <TabsTrigger value={tabConfig.key}>{tabConfig.label}</TabsTrigger> : null}
       </TabsList>
 
       <TabsContent value="event" className="space-y-5">
@@ -442,67 +708,28 @@ export function AiOrganizerWorkspace({
         </Card>
       </TabsContent>
 
-      <TabsContent value="finance" className="space-y-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Read-only Finance Insights</CardTitle>
-            <CardDescription>
-              AI organizer view for fines and payments summary. This does not mutate records.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button type="button" variant="outline" onClick={refreshInsights} disabled={isInsightsPending}>
-              <RefreshCcw className="mr-2 size-4" />
-              {isInsightsPending ? "Refreshing..." : "Refresh insights"}
-            </Button>
+      {tabConfig ? (
+        <TabsContent value={tabConfig.key} className="space-y-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{tabConfig.label}</CardTitle>
+              <CardDescription>{getInsightsDescription(role)}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button type="button" variant="outline" onClick={refreshInsights} disabled={isInsightsPending}>
+                <RefreshCcw className="mr-2 size-4" />
+                {isInsightsPending ? "Refreshing..." : "Refresh insights"}
+              </Button>
 
-            {insights ? (
-              <div className="space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Outstanding</p>
-                    <p className="text-lg font-semibold">₱{insights.total_outstanding.toFixed(2)}</p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Occupants with balance</p>
-                    <p className="text-lg font-semibold">{insights.occupants_with_balance}</p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Open fines</p>
-                    <p className="text-lg font-semibold">{insights.open_fines}</p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Voided fines</p>
-                    <p className="text-lg font-semibold">{insights.voided_fines}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border p-3">
-                  <p className="text-sm font-medium">AI summary</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{insights.ai_summary}</p>
-                </div>
-
-                <div className="rounded-lg border p-3">
-                  <p className="text-sm font-medium">Top balances</p>
-                  <div className="mt-2 space-y-1">
-                    {insights.top_balances.map((row) => (
-                      <div key={row.occupant_id} className="flex items-center justify-between text-sm">
-                        <span>{row.full_name}</span>
-                        <span className="font-medium">₱{row.total_balance.toFixed(2)}</span>
-                      </div>
-                    ))}
-                    {!insights.top_balances.length ? (
-                      <p className="text-sm text-muted-foreground">No outstanding balances.</p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No insights yet. Click refresh to compute.</p>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
+              {insights ? (
+                <InsightsCards insights={insights} />
+              ) : (
+                <p className="text-sm text-muted-foreground">No insights yet. Click refresh to compute.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      ) : null}
     </Tabs>
   );
 }

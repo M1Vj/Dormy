@@ -30,6 +30,7 @@ const ROLES: AppRole[] = [
   "student_assistant",
   "treasurer",
   "adviser",
+  "assistant_adviser",
   "officer",
   "occupant",
 ];

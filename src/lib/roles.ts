@@ -1,6 +1,7 @@
 export const roles = [
   "admin",
   "adviser",
+  "assistant_adviser",
   "student_assistant",
   "treasurer",
   "officer",
@@ -12,6 +13,7 @@ export type AppRole = (typeof roles)[number];
 const roleLabelMap: Record<AppRole, string> = {
   admin: "Admin",
   adviser: "Adviser",
+  assistant_adviser: "Assistant Adviser",
   student_assistant: "Student Assistant",
   treasurer: "Treasurer",
   officer: "Officer",
@@ -19,12 +21,13 @@ const roleLabelMap: Record<AppRole, string> = {
 };
 
 const roleSummaryMap: Record<AppRole, string> = {
-  admin: "Full dorm management permissions across accounts, operations, and ledgers.",
-  adviser: "Oversees adviser workflows, including maintenance and delegated account setup.",
-  student_assistant: "Can manage occupants and fines, including account support workflows.",
-  treasurer: "Handles event collections and finance-related recording workflows.",
-  officer: "Focuses on event planning, execution, and event records.",
-  occupant: "Can view personal ledgers, schedules, evaluations, and shared announcements.",
+  admin: "Manages dorm setup, occupant records, clearance, and semester controls.",
+  adviser: "Handles occupant operations, maintenance finance, evaluations, announcements, and reports.",
+  assistant_adviser: "Supports adviser workflows for occupants, finance, evaluations, and reports.",
+  student_assistant: "Handles occupant operations, fines review, maintenance finance, and reporting.",
+  treasurer: "Handles contribution collection and contribution-ledger workflows.",
+  officer: "Focuses on committee and event operations.",
+  occupant: "Can view dorm-level updates, schedules, committees, events, and finance totals.",
 };
 
 export function getRoleLabel(role: AppRole | null | undefined) {
@@ -38,11 +41,12 @@ export function getRoleSummary(role: AppRole | null | undefined) {
 }
 
 export const roleWeights: Record<AppRole, number> = {
-  admin: 70,
-  adviser: 60,
-  student_assistant: 50,
-  treasurer: 40,
-  officer: 30,
+  admin: 100,
+  adviser: 70,
+  assistant_adviser: 70,
+  student_assistant: 70,
+  treasurer: 50,
+  officer: 40,
   occupant: 10,
 };
 

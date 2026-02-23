@@ -64,6 +64,7 @@ type FinesLedgerProps = {
   fines: FineRow[];
   rules: FineRuleOption[];
   occupants: OccupantOption[];
+  role?: string;
   filters?: {
     search?: string;
     status?: string;
@@ -179,7 +180,14 @@ function VoidFineDialog({
   );
 }
 
-export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesLedgerProps) {
+export function FinesLedger({
+  dormId,
+  fines,
+  rules,
+  occupants,
+  role = "admin",
+  filters,
+}: FinesLedgerProps) {
   const hasFilters = Boolean(filters?.search) || Boolean(filters?.status);
 
   return (

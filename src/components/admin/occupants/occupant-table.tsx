@@ -31,6 +31,7 @@ export type OccupantRow = {
 type OccupantTableProps = {
   dormId: string;
   occupants: OccupantRow[];
+  role?: string;
   filters?: {
     search?: string;
     status?: string;
@@ -74,7 +75,8 @@ const getStatusClass = (status?: string | null) => {
   return "border-muted bg-muted text-muted-foreground";
 };
 
-export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps) {
+export function OccupantTable({ dormId, occupants, role = "admin", filters }: OccupantTableProps) {
+  const basePath = `/${role}/occupants`;
   const hasFilters =
     Boolean(filters?.search) ||
     Boolean(filters?.status) ||

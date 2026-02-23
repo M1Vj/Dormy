@@ -436,6 +436,31 @@ function asNumber(value: unknown) {
   return parsed;
 }
 
+export async function getCommitteeFinanceSummary(committeeId: string): Promise<{ data: CommitteeFinanceSummaryRow[]; error?: string }> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { data: [] };
+
+  const { data, error } = await supabase.rpc("get_committee_finance_summary", {
+    p_committee_id: committeeId,
+  });
+
+  if (error || !data) return { data: [] };
+
+  const rows: CommitteeFinanceSummaryRow[] = (data as CommitteeFinanceRpcRow[]).map((row) => {
+    const charged = asNumber(row.charged_pesos);
+    const collected = asNumber(row.collected_pesos);
+    return {
+      event_id: row.event_id,
+      event_title: row.event_title,
+      charged_pesos: charged,
+      collected_pesos: collected,
+      balance_pesos: charged - collected,
+    };
+  });
+
+  return { data: rows };
+}
+
 export async function getCommitteeDashboardData(dormId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase not configured." };
