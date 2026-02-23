@@ -16,6 +16,15 @@ const submitExpenseSchema = z.object({
   amount_pesos: z.coerce.number().positive("Amount must be positive"),
   purchased_at: z.string().min(1, "Purchase date is required"),
   category: z.enum(["maintenance_fee", "contributions"]),
+  expense_group_title: z.string().trim().max(140).optional(),
+  contribution_reference_title: z.string().trim().max(140).optional(),
+  vendor_name: z.string().trim().max(140).optional(),
+  official_receipt_no: z.string().trim().max(120).optional(),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0").optional(),
+  unit_cost_pesos: z.coerce.number().positive("Unit cost must be greater than 0").optional(),
+  payment_method: z.string().trim().max(80).optional(),
+  purchased_by: z.string().trim().max(140).optional(),
+  transparency_notes: z.string().trim().max(2000).optional(),
 });
 
 /**
@@ -99,6 +108,15 @@ export async function submitExpense(dormId: string, formData: FormData) {
     amount_pesos: formData.get("amount_pesos"),
     purchased_at: formData.get("purchased_at"),
     category: formData.get("category"),
+    expense_group_title: formData.get("expense_group_title") || undefined,
+    contribution_reference_title: formData.get("contribution_reference_title") || undefined,
+    vendor_name: formData.get("vendor_name") || undefined,
+    official_receipt_no: formData.get("official_receipt_no") || undefined,
+    quantity: formData.get("quantity") || undefined,
+    unit_cost_pesos: formData.get("unit_cost_pesos") || undefined,
+    payment_method: formData.get("payment_method") || undefined,
+    purchased_by: formData.get("purchased_by") || undefined,
+    transparency_notes: formData.get("transparency_notes") || undefined,
   });
 
   if (!parsed.success) {
@@ -143,6 +161,18 @@ export async function submitExpense(dormId: string, formData: FormData) {
       purchased_at: parsed.data.purchased_at,
       receipt_storage_path: receiptPath,
       category: parsed.data.category,
+      expense_group_title:
+        parsed.data.expense_group_title?.trim() ||
+        (parsed.data.category === "contributions" ? parsed.data.title.trim() : null),
+      contribution_reference_title:
+        parsed.data.contribution_reference_title?.trim() || null,
+      vendor_name: parsed.data.vendor_name?.trim() || null,
+      official_receipt_no: parsed.data.official_receipt_no?.trim() || null,
+      quantity: parsed.data.quantity ?? null,
+      unit_cost_pesos: parsed.data.unit_cost_pesos ?? null,
+      payment_method: parsed.data.payment_method?.trim() || null,
+      purchased_by: parsed.data.purchased_by?.trim() || null,
+      transparency_notes: parsed.data.transparency_notes?.trim() || null,
       status: "pending",
     })
     .select("id")

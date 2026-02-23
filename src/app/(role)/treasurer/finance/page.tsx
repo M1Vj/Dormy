@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Wrench, Calendar, Receipt } from "lucide-react"
+import { Wrench, Calendar, Receipt, ReceiptText } from "lucide-react"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getActiveDormId } from "@/lib/dorms"
 
@@ -63,6 +63,18 @@ export default async function FinanceDashboard() {
               <Receipt className="h-8 w-8 text-green-500 mb-2" />
               <CardTitle>Expenses</CardTitle>
               <CardDescription>View all dorm expenses and receipts</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+      )}
+
+      {canViewEvents && (
+        <Link href={`/${role}/finance/contribution-expenses`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+          <Card className="hover:bg-muted/50 transition-colors h-full">
+            <CardHeader>
+              <ReceiptText className="h-8 w-8 text-violet-500 mb-2" />
+              <CardTitle>Contribution Expenses</CardTitle>
+              <CardDescription>Group and audit itemized expenses linked to contribution titles</CardDescription>
             </CardHeader>
           </Card>
         </Link>
