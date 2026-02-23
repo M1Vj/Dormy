@@ -38,9 +38,10 @@ type FormValues = z.infer<typeof formSchema>;
 interface Props {
   dormId: string;
   cycleId: string;
+  rolePath?: string;
 }
 
-export function CreateTemplateDialog({ dormId, cycleId }: Props) {
+export function CreateTemplateDialog({ dormId, cycleId, rolePath = "admin" }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -65,7 +66,7 @@ export function CreateTemplateDialog({ dormId, cycleId }: Props) {
 
       if (result.success && result.id) {
         toast.success("Template created");
-        router.push(`/admin/evaluation/${cycleId}/templates/${result.id}`);
+        router.push(`/${rolePath}/evaluation/${cycleId}/templates/${result.id}`);
         router.refresh();
       } else {
         toast.error(result.error || "Failed to create template");
@@ -103,8 +104,7 @@ export function CreateTemplateDialog({ dormId, cycleId }: Props) {
               )}
             />
             <DialogFooter>
-              <Button type="submit" disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" isLoading={isPending}>
                 Create Template
               </Button>
             </DialogFooter>

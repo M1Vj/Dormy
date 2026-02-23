@@ -94,11 +94,11 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Record Charge</DialogTitle>
-          <DialogDescription>
-            Add a charge to the {category === 'adviser_maintenance' ? 'maintenance' : category === 'treasurer_events' ? 'events' : 'fines'} ledger.
+          <DialogTitle className="text-xl font-semibold">Record Charge</DialogTitle>
+          <DialogDescription className="text-sm">
+            Add a charge to the {category === 'maintenance_fee' ? 'maintenance' : category === 'contributions' ? 'events' : 'fines'} ledger.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -110,10 +110,10 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
                 <FormItem>
                   <FormLabel>Amount (₱)</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      {...field} 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                     />
                   </FormControl>
@@ -148,8 +148,7 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
               )}
             />
             <DialogFooter>
-              <Button type="submit" disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" isLoading={isPending}>
                 Add Charge
               </Button>
             </DialogFooter>

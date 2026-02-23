@@ -29,15 +29,14 @@ const REPORTS = new Set<ReportKey>([
 ]);
 
 const ALLOWED_ROLES: Record<ReportKey, DormRole[]> = {
-  "fines-ledger": ["admin", "student_assistant", "adviser", "assistant_adviser"],
+  "fines-ledger": ["admin", "student_assistant", "adviser"],
   "occupant-statement": [
     "admin",
     "student_assistant",
     "treasurer",
     "adviser",
-    "assistant_adviser",
   ],
-  "maintenance-ledger": ["admin", "adviser", "assistant_adviser"],
+  "maintenance-ledger": ["admin", "adviser"],
   "event-contributions": ["admin", "treasurer"],
   "evaluation-rankings": ["admin"],
 };
@@ -402,13 +401,13 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     }
 
     const amount = Number(entry.amount_pesos);
-    if (entry.ledger === "adviser_maintenance") {
+    if (entry.ledger === "maintenance_fee") {
       summary.maintenance_balance += amount;
     }
     if (entry.ledger === "sa_fines") {
       summary.fines_balance += amount;
     }
-    if (entry.ledger === "treasurer_events") {
+    if (entry.ledger === "contributions") {
       summary.events_balance += amount;
     }
     summary.total_balance += amount;
@@ -422,9 +421,9 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       "Course": row.course,
       "Maintenance Balance": formatPeso(row.maintenance_balance),
       "Fines Balance": formatPeso(row.fines_balance),
-      "Events Balance": formatPeso(row.events_balance),
+      "Contributions Balance": formatPeso(row.events_balance),
       "Total Balance": formatPeso(row.total_balance),
-      "Clearance Status": row.total_balance <= 0 ? "CLEARED" : "NOT CLEARED",
+      "Clearance Status": (row.maintenance_balance <= 0 && row.fines_balance <= 0 && row.events_balance <= 0) ? "CLEARED" : "NOT CLEARED",
     }));
 
   const transactionRows = entries.map((entry) => {
@@ -515,7 +514,7 @@ async function buildMaintenanceLedgerExport(context: ExportContext): Promise<Exp
       "occupant_id, posted_at, entry_type, amount_pesos, method, note, occupant:occupants(full_name, student_id), voided_at"
     )
     .eq("dorm_id", context.dormId)
-    .eq("ledger", "adviser_maintenance")
+    .eq("ledger", "maintenance_fee")
     .is("voided_at", null)
     .order("posted_at", { ascending: false });
 
@@ -642,7 +641,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
       "event_id, posted_at, entry_type, amount_pesos, method, note, event:events(title), occupant:occupants(full_name, student_id), voided_at"
     )
     .eq("dorm_id", context.dormId)
-    .eq("ledger", "treasurer_events")
+    .eq("ledger", "contributions")
     .is("voided_at", null)
     .order("posted_at", { ascending: false });
 

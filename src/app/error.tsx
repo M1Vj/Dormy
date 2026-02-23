@@ -26,8 +26,8 @@ export default function GlobalError({
           </p>
           <div className="flex items-center gap-2">
             <Button onClick={reset}>Try again</Button>
-            <Button asChild variant="outline">
-              <Link href="/events">Go to events</Link>
+            <Button variant="outline" asChild>
+              <Link href="/">Back to App</Link>
             </Button>
           </div>
         </div>

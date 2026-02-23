@@ -2,7 +2,7 @@
   "name": "Dormy",
   "short_name": "Dormy",
   "description": "Dorm operations platform for VSU dormitories: fines, finance, evaluations, events, and cleaning schedules.",
-  "start_url": "/dashboard",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#f97316",

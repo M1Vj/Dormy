@@ -17,6 +17,7 @@ export type Dorm = {
   id: string;
   name: string;
   slug: string;
+  treasurer_maintenance_access?: boolean | null;
 };
 
 interface DormContextValue {

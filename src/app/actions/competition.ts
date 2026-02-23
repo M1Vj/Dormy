@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
@@ -424,8 +425,9 @@ export async function createCompetitionTeam(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
   return { success: true };
 }
 
@@ -452,8 +454,9 @@ export async function deleteCompetitionTeam(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath(`/events/${eventId}/competition`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${eventId}`);
+  revalidatePath(`/${activeRole}/events/${eventId}/competition`);
   return { success: true };
 }
 
@@ -503,7 +506,8 @@ export async function addCompetitionMember(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
   return { success: true };
 }
 
@@ -531,7 +535,8 @@ export async function removeCompetitionMember(formData: FormData) {
     return { error: error.message };
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
   return { success: true };
 }
 
@@ -584,8 +589,9 @@ export async function createCompetitionCategory(formData: FormData) {
     console.error("Failed to write audit event for category creation:", auditError);
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }
 
@@ -644,8 +650,9 @@ export async function updateCompetitionCategory(formData: FormData) {
     console.error("Failed to write audit event for category update:", auditError);
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }
 
@@ -689,8 +696,9 @@ export async function deleteCompetitionCategory(formData: FormData) {
     console.error("Failed to write audit event for category delete:", auditError);
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }
 
@@ -776,8 +784,9 @@ export async function upsertCompetitionScore(formData: FormData) {
     console.error("Failed to write audit event for score upsert:", auditError);
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }
 
@@ -827,7 +836,8 @@ export async function setCompetitionManualRank(formData: FormData) {
     console.error("Failed to write audit event for manual rank update:", auditError);
   }
 
-  revalidatePath(`/events/${parsed.data.event_id}/competition`);
-  revalidatePath(`/events/${parsed.data.event_id}/competition/print`);
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition`);
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}/competition/print`);
   return { success: true };
 }

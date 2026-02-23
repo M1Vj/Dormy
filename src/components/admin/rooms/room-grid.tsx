@@ -3,6 +3,7 @@ import {
   AssignOccupantDialog,
   UnassignedOccupant,
 } from "@/components/admin/rooms/assign-occupant-dialog";
+import { EditRoomLevelDialog } from "@/components/admin/rooms/edit-room-level-dialog";
 
 type OccupantRef = {
   id: string;
@@ -16,9 +17,10 @@ type RoomAssignment = {
 
 export type RoomWithAssignments = {
   id: string;
-  code?: string | null;
-  level?: number | string | null;
-  capacity?: number | null;
+  code: string;
+  level: number;
+  level_override?: number | null;
+  capacity: number | null;
   current_assignments?: RoomAssignment[] | null;
 };
 
@@ -56,10 +58,11 @@ export function RoomGrid({
 
   const groupedRooms = rooms.reduce<Record<string, RoomWithAssignments[]>>(
     (acc, room) => {
+      const effectiveLevel = room.level_override ?? room.level;
       const key =
-        room.level === null || room.level === undefined
+        effectiveLevel === null || effectiveLevel === undefined
           ? "Unassigned"
-          : String(room.level);
+          : String(effectiveLevel);
       if (!acc[key]) acc[key] = [];
       acc[key].push(room);
       return acc;
@@ -70,12 +73,7 @@ export function RoomGrid({
   const sortedLevels = Object.keys(groupedRooms).sort((a, b) => {
     if (a === "Unassigned") return 1;
     if (b === "Unassigned") return -1;
-    const aNum = Number(a);
-    const bNum = Number(b);
-    if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
-      return aNum - bNum;
-    }
-    return a.localeCompare(b, undefined, { numeric: true });
+    return Number(a) - Number(b);
   });
 
   return (
@@ -110,11 +108,19 @@ export function RoomGrid({
 
                 return (
                   <Card key={room.id} className="flex h-full flex-col">
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="text-base">{roomLabel}</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        Capacity {capacityLabel}
-                      </p>
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                      <div className="space-y-1">
+                        <CardTitle className="text-base">{roomLabel}</CardTitle>
+                        <p className="text-xs text-muted-foreground">
+                          Capacity {capacityLabel}
+                        </p>
+                      </div>
+                      <EditRoomLevelDialog
+                        dormId={dormId}
+                        roomId={room.id}
+                        roomCode={room.code || ""}
+                        currentOverride={room.level_override ?? null}
+                      />
                     </CardHeader>
                     <CardContent className="flex flex-1 flex-col gap-4">
                       <div>

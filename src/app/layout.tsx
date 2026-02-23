@@ -1,18 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fira_Code, Fira_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const firaCode = Fira_Code({
+  variable: "--font-fira-code",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const firaSans = Fira_Sans({
+  variable: "--font-fira-sans",
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
@@ -33,9 +34,9 @@ export const metadata: Metadata = {
     title: "Dormy",
   },
   icons: {
-    icon: "/brand/dormy-house.png",
-    shortcut: "/brand/dormy-house.png",
-    apple: "/brand/dormy-house.png",
+    icon: "/brand/dormy-house-rounded-corners.png",
+    shortcut: "/brand/dormy-house-rounded-corners.png",
+    apple: "/brand/dormy-house-rounded-corners.png",
   },
 };
 
@@ -57,7 +58,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${firaSans.variable} ${firaCode.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           {isVercelDeployment ? <Analytics /> : null}

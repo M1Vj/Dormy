@@ -21,10 +21,6 @@ export function UserNav() {
   const {
     user,
     role,
-    actualRole,
-    isOccupantMode,
-    canToggleOccupantMode,
-    toggleOccupantMode,
   } = useAuth()
   const mounted = useMounted()
   const displayName =
@@ -66,11 +62,6 @@ export function UserNav() {
             {role ? (
               <p className="text-xs leading-none text-muted-foreground">
                 {getRoleLabel(role)}
-                {isOccupantMode && actualRole ? (
-                  <span className="ml-1 text-amber-600 dark:text-amber-400">
-                    (viewing as Occupant)
-                  </span>
-                ) : null}
               </p>
             ) : null}
           </div>
@@ -83,28 +74,15 @@ export function UserNav() {
             </DropdownMenuLabel>
           </>
         ) : null}
-        {canToggleOccupantMode ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={toggleOccupantMode}>
-              <ArrowLeftRight className="mr-2 h-4 w-4" />
-              <span>
-                {isOccupantMode
-                  ? `Switch to ${getRoleLabel(actualRole)} view`
-                  : "Switch to Occupant view"}
-              </span>
-            </DropdownMenuItem>
-          </>
-        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile">
+          <Link href={role ? `/${role}/profile` : "/profile"}>
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/settings">
+          <Link href={role ? `/${role}/settings` : "/settings"}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
           </Link>

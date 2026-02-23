@@ -40,8 +40,6 @@ type DormApplicationRow = {
   status: "pending" | "approved" | "rejected" | "cancelled";
   message: string | null;
   review_note: string | null;
-  student_id: string | null;
-  room_number: string | null;
   created_at: string;
   reviewed_at: string | null;
 };
@@ -96,7 +94,6 @@ export function JoinDorm({
   const [requestedRole, setRequestedRole] = useState<AppRole>("occupant");
   const [message, setMessage] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [school, setSchool] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [course, setCourse] = useState("");
   const [yearLevel, setYearLevel] = useState("");
@@ -130,7 +127,6 @@ export function JoinDorm({
     setRequestedRole("occupant");
     setMessage("");
     setStudentId("");
-    setSchool("");
     setRoomNumber("");
     setCourse("");
     setYearLevel("");
@@ -151,7 +147,6 @@ export function JoinDorm({
       formData.set("requestedRole", requestedRole);
       formData.set("message", message);
       formData.set("studentId", studentId);
-      formData.set("school", school);
       formData.set("roomNumber", roomNumber);
       formData.set("course", course);
       formData.set("yearLevel", yearLevel);
@@ -192,7 +187,7 @@ export function JoinDorm({
         return;
       }
       toast.success("Invite accepted");
-      window.location.href = "/home";
+      window.location.href = "/";
     });
   };
 
@@ -234,7 +229,7 @@ export function JoinDorm({
                   </div>
                   <Button
                     onClick={() => acceptInvite(invite.id)}
-                    disabled={isAcceptingInvite}
+                    isLoading={isAcceptingInvite}
                     className="sm:w-auto"
                   >
                     {isAcceptingInvite ? "Accepting…" : "Accept invite"}
@@ -314,8 +309,6 @@ export function JoinDorm({
                       <p className="text-xs text-muted-foreground">
                         Requested role: {getRoleLabel(app.requested_role)}
                         {app.granted_role ? ` • Granted: ${getRoleLabel(app.granted_role)}` : ""}
-                        {app.student_id ? ` • ID: ${app.student_id}` : ""}
-                        {app.room_number ? ` • Room: ${app.room_number}` : ""}
                       </p>
                     </div>
                     <StatusBadge status={app.status} />
@@ -336,7 +329,7 @@ export function JoinDorm({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={isCancelling}
+                        isLoading={isCancelling}
                         onClick={() => cancelApplication(app.id)}
                       >
                         {isCancelling ? "Cancelling…" : "Cancel request"}
@@ -515,7 +508,7 @@ export function JoinDorm({
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={submitApplication} disabled={!selectedDorm || isApplying}>
+            <Button type="button" onClick={submitApplication} disabled={!selectedDorm} isLoading={isApplying}>
               {isApplying ? "Submitting…" : "Submit request"}
             </Button>
           </DialogFooter>
@@ -524,4 +517,3 @@ export function JoinDorm({
     </div>
   );
 }
-

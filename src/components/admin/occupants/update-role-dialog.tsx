@@ -13,22 +13,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { updateMembershipRole } from "@/app/actions/memberships";
-import { AppRole, getRoleLabel } from "@/lib/roles";
+import { updateMembershipRoles } from "@/app/actions/memberships";
+import { AppRole, getRoleLabel, canManageRole } from "@/lib/roles";
+import { useAuth } from "@/components/providers/auth-provider";
 
 interface UpdateRoleDialogProps {
   dormId: string;
-  userId: string;
+  userId?: string | null;
   occupantName: string;
-  currentRole: AppRole;
+  currentRoles: AppRole[];
 }
 
 const ROLES: AppRole[] = [
@@ -45,18 +39,21 @@ export function UpdateRoleDialog({
   dormId,
   userId,
   occupantName,
-  currentRole,
+  currentRoles,
 }: UpdateRoleDialogProps) {
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<AppRole>(currentRole);
+  const [roles, setRoles] = useState<AppRole[]>(currentRoles);
   const [isLoading, setIsLoading] = useState(false);
+  const { role: currentUserRole } = useAuth();
 
   const handleUpdate = async () => {
+    if (!userId) return;
+
     setIsLoading(true);
     try {
-      const result = await updateMembershipRole(dormId, userId, role);
+      const result = await updateMembershipRoles(dormId, userId, roles);
       if (result.success) {
-        toast.success(`Updated ${occupantName}'s role to ${getRoleLabel(role)}`);
+        toast.success(`Updated ${occupantName}'s roles`);
         setOpen(false);
       } else {
         toast.error(result.error ?? "Failed to update role");
@@ -71,7 +68,7 @@ export function UpdateRoleDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Update Role">
           <ShieldCheck className="h-4 w-4" />
           <span className="sr-only">Update role</span>
         </Button>
@@ -80,29 +77,43 @@ export function UpdateRoleDialog({
         <DialogHeader>
           <DialogTitle>Update Role</DialogTitle>
           <DialogDescription>
-            Change the administrative role for <strong>{occupantName}</strong>.
-            This defines their permissions within the dorm.
+            {userId
+              ? `Change the administrative role for ${occupantName}. This defines their permissions within the dorm.`
+              : `Cannot update role for ${occupantName}.`}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Select Role</label>
-            <Select
-              value={role}
-              onValueChange={(value) => setRole(value as AppRole)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {getRoleLabel(r)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {userId ? (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Select Roles</label>
+              <div className="flex flex-wrap gap-2">
+                {ROLES.filter((r) => canManageRole(currentUserRole ?? "occupant", r)).map((r) => {
+                  const isSelected = roles.includes(r);
+                  return (
+                    <Button
+                      key={r}
+                      type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        if (isSelected) {
+                          setRoles(roles.filter((selectedRole) => selectedRole !== r));
+                        } else {
+                          setRoles([...roles, r]);
+                        }
+                      }}
+                    >
+                      {getRoleLabel(r)}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md bg-muted p-4 text-sm text-balance text-muted-foreground">
+              This occupant has not yet registered an account on the application. They must sign up and join the dorm using the dorm code before they can be assigned an administrative role.
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button
@@ -110,11 +121,13 @@ export function UpdateRoleDialog({
             onClick={() => setOpen(false)}
             disabled={isLoading}
           >
-            Cancel
+            {userId ? "Cancel" : "Close"}
           </Button>
-          <Button onClick={handleUpdate} disabled={isLoading || role === currentRole}>
-            {isLoading ? "Updating..." : "Save changes"}
-          </Button>
+          {userId && (
+            <Button onClick={handleUpdate} isLoading={isLoading} disabled={isLoading || (roles.length === currentRoles.length && roles.every(r => currentRoles.includes(r)))}>
+              Save changes
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

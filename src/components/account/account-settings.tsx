@@ -16,7 +16,7 @@ import { getRoleLabel } from "@/lib/roles";
 const MIN_PASSWORD_LENGTH = 10;
 
 export function AccountSettings() {
-  const { user, role, dormId, refresh, isLoading } = useAuth();
+  const { user, actualRoles, role, setActiveRole, dormId, refresh, isLoading } = useAuth();
   const { activeDorm } = useDorm();
   const [supabase] = useState(() => {
     try {
@@ -139,9 +139,28 @@ export function AccountSettings() {
             <p className="text-xs text-muted-foreground">Email</p>
             <p className="text-sm font-medium">{email || "Unknown"}</p>
           </div>
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Role</p>
-            <p className="text-sm font-medium">{role ? getRoleLabel(role) : "Unassigned"}</p>
+          <div className="space-y-2 sm:col-span-2 border-t pt-4 mt-2">
+            <p className="text-xs text-muted-foreground">Active Roles</p>
+            <div className="flex flex-wrap gap-2">
+              {actualRoles.length > 0 ? (
+                actualRoles.map((r) => (
+                  <Button
+                    key={r}
+                    type="button"
+                    variant={r === role ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveRole(r)}
+                  >
+                    {getRoleLabel(r)}
+                  </Button>
+                ))
+              ) : (
+                <p className="text-sm font-medium text-muted-foreground">Unassigned</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Click a role button above to switch your active view and permissions for this session.
+            </p>
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Dorm</p>

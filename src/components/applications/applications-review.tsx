@@ -30,6 +30,16 @@ export type DormApplicationRow = {
   granted_role: AppRole | null;
   status: "pending" | "approved" | "rejected" | "cancelled";
   message: string | null;
+  student_id: string | null;
+  room_number: string | null;
+  course: string | null;
+  year_level: string | null;
+  contact_number: string | null;
+  home_address: string | null;
+  birthdate: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_mobile: string | null;
+  emergency_contact_relationship: string | null;
   review_note: string | null;
   created_at: string;
   reviewed_at: string | null;
@@ -173,6 +183,49 @@ export function ApplicationsReview({
                     <p className="mt-3 text-sm text-muted-foreground">{app.message}</p>
                   ) : null}
 
+                  <div className="mt-3 grid gap-2 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground sm:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-foreground">Student ID:</span>{" "}
+                      {app.student_id || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Preferred Room:</span>{" "}
+                      {app.room_number || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Course:</span>{" "}
+                      {app.course || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Year Level:</span>{" "}
+                      {app.year_level || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Contact Number:</span>{" "}
+                      {app.contact_number || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Birthdate:</span>{" "}
+                      {app.birthdate || "-"}
+                    </p>
+                    <p className="sm:col-span-2">
+                      <span className="font-medium text-foreground">Home Address:</span>{" "}
+                      {app.home_address || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Emergency Contact:</span>{" "}
+                      {app.emergency_contact_name || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Emergency Number:</span>{" "}
+                      {app.emergency_contact_mobile || "-"}
+                    </p>
+                    <p className="sm:col-span-2">
+                      <span className="font-medium text-foreground">Relationship:</span>{" "}
+                      {app.emergency_contact_relationship || "-"}
+                    </p>
+                  </div>
+
                   {app.review_note ? (
                     <p className="mt-3 rounded-md border bg-muted/30 p-3 text-sm">
                       <span className="font-medium">Staff note:</span> {app.review_note}
@@ -185,14 +238,14 @@ export function ApplicationsReview({
                         type="button"
                         variant="outline"
                         onClick={() => openDialog(app, "rejected")}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         Reject
                       </Button>
                       <Button
                         type="button"
                         onClick={() => openDialog(app, "approved")}
-                        disabled={isPending}
+                        isLoading={isPending}
                       >
                         Approve
                       </Button>
@@ -272,8 +325,8 @@ export function ApplicationsReview({
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={submitReview} disabled={!active || isPending}>
-              {isPending ? "Saving…" : decision === "approved" ? "Approve" : "Reject"}
+            <Button type="button" onClick={submitReview} disabled={!active} isLoading={isPending}>
+              {decision === "approved" ? "Approve" : "Reject"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
@@ -339,6 +340,7 @@ export async function createUser(formData: FormData) {
     console.error("Failed to send account email:", emailError);
   }
 
-  revalidatePath("/admin/users");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
   return { success: true };
 }

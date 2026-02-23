@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -362,8 +363,9 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for announcement create:", auditError);
   }
 
-  revalidatePath("/home");
-  revalidatePath("/home/announcements");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/home`);
+  revalidatePath(`/${activeRole}/home/announcements`);
 
   return { success: true };
 }
@@ -535,8 +537,9 @@ export async function updateAnnouncement(
     console.error("Failed to write audit event for announcement update:", auditError);
   }
 
-  revalidatePath("/home");
-  revalidatePath("/home/announcements");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/home`);
+  revalidatePath(`/${activeRole}/home/announcements`);
 
   return { success: true };
 }
@@ -633,8 +636,9 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
     console.error("Failed to write audit event for announcement delete:", auditError);
   }
 
-  revalidatePath("/home");
-  revalidatePath("/home/announcements");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/home`);
+  revalidatePath(`/${activeRole}/home/announcements`);
 
   return { success: true };
 }

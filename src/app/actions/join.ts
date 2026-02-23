@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
@@ -81,6 +82,87 @@ function getUserAvatarFromMetadata(metadata: unknown) {
   return null;
 }
 
+const birthdateSchema = z.string().date();
+
+function normalizeBirthdate(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = birthdateSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function isMissingColumnError(message?: string | null) {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes("column") && normalized.includes("does not exist");
+}
+
+function mergeApplicationMessage(
+  baseMessage: string | null | undefined,
+  details: Record<string, string | null | undefined>
+) {
+  const detailsLines = [
+    details.studentId ? `Student ID: ${details.studentId}` : null,
+    details.roomNumber ? `Preferred Room: ${details.roomNumber}` : null,
+    details.course ? `Course: ${details.course}` : null,
+    details.yearLevel ? `Year Level: ${details.yearLevel}` : null,
+    details.contactNumber ? `Contact Number: ${details.contactNumber}` : null,
+    details.homeAddress ? `Home Address: ${details.homeAddress}` : null,
+    details.birthdate ? `Birthdate: ${details.birthdate}` : null,
+    details.emergencyContactName ? `Emergency Contact Name: ${details.emergencyContactName}` : null,
+    details.emergencyContactMobile ? `Emergency Contact Mobile: ${details.emergencyContactMobile}` : null,
+    details.emergencyContactRelationship
+      ? `Emergency Contact Relationship: ${details.emergencyContactRelationship}`
+      : null,
+  ].filter((line): line is string => Boolean(line));
+
+  if (!detailsLines.length) return baseMessage;
+  const detailsBlock = `Application Details\\n${detailsLines.join("\\n")}`;
+  return [baseMessage, detailsBlock].filter((value): value is string => Boolean(value)).join("\\n\\n");
+}
+
+function buildOccupantUpdateFromApplication(application: {
+  user_id: string;
+  email: string;
+  applicant_name: string | null;
+  student_id: string | null;
+  course: string | null;
+  year_level: string | null;
+  contact_number: string | null;
+  home_address: string | null;
+  birthdate: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_mobile: string | null;
+  emergency_contact_relationship: string | null;
+}) {
+  const update: Record<string, string | null> = {
+    user_id: application.user_id,
+    contact_email: application.email,
+  };
+
+  const fullName = application.applicant_name?.trim();
+  if (fullName) update.full_name = fullName;
+  if (application.student_id) update.student_id = application.student_id;
+  if (application.course) update.classification = application.course;
+  if (application.year_level) update.year_level = application.year_level;
+  if (application.contact_number) {
+    update.contact_number = application.contact_number;
+    update.contact_mobile = application.contact_number;
+  }
+  if (application.home_address) update.home_address = application.home_address;
+  if (application.birthdate) update.birthdate = application.birthdate;
+  if (application.emergency_contact_name) {
+    update.emergency_contact_name = application.emergency_contact_name;
+  }
+  if (application.emergency_contact_mobile) {
+    update.emergency_contact_mobile = application.emergency_contact_mobile;
+  }
+  if (application.emergency_contact_relationship) {
+    update.emergency_contact_relationship = application.emergency_contact_relationship;
+  }
+
+  return update;
+}
+
 export async function getDormDirectory() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
@@ -112,13 +194,43 @@ export async function getMyDormApplications() {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
+  const baseSelect =
+    "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at";
+  const detailedSelect =
+    "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, student_id, room_number, course, year_level, contact_number, home_address, birthdate, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship, review_note, created_at, reviewed_at";
+
   const { data, error } = await supabase
     .from("dorm_applications")
-    .select(
-      "id, dorm_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
-    )
+    .select(detailedSelect)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
+
+  if (error && isMissingColumnError(error.message)) {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from("dorm_applications")
+      .select(baseSelect)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (fallbackError) {
+      console.error("Failed to load applications:", fallbackError);
+      return [];
+    }
+
+    return (fallbackData ?? []).map((row) => ({
+      ...row,
+      student_id: null,
+      room_number: null,
+      course: null,
+      year_level: null,
+      contact_number: null,
+      home_address: null,
+      birthdate: null,
+      emergency_contact_name: null,
+      emergency_contact_mobile: null,
+      emergency_contact_relationship: null,
+    }));
+  }
 
   if (error) {
     console.error("Failed to load applications:", error);
@@ -193,7 +305,7 @@ export async function applyToDorm(formData: FormData) {
   const name = getUserNameFromMetadata(user.user_metadata) ?? null;
   const avatarUrl = getUserAvatarFromMetadata(user.user_metadata) ?? null;
 
-  const { error } = await supabase.from("dorm_applications").insert({
+  const detailedInsert = {
     dorm_id: parsed.data.dormId,
     user_id: user.id,
     email,
@@ -208,11 +320,42 @@ export async function applyToDorm(formData: FormData) {
     year_level: parsed.data.yearLevel,
     contact_number: parsed.data.contactNumber,
     home_address: parsed.data.homeAddress,
-    birthdate: parsed.data.birthdate || null,
+    birthdate: normalizeBirthdate(parsed.data.birthdate),
     emergency_contact_name: parsed.data.emergencyContactName,
     emergency_contact_mobile: parsed.data.emergencyContactMobile,
     emergency_contact_relationship: parsed.data.emergencyContactRelationship,
-  });
+  };
+
+  let { error } = await supabase.from("dorm_applications").insert(detailedInsert);
+
+  if (error && isMissingColumnError(error.message)) {
+    const fallbackMessage = mergeApplicationMessage(parsed.data.message, {
+      studentId: parsed.data.studentId,
+      roomNumber: parsed.data.roomNumber,
+      course: parsed.data.course,
+      yearLevel: parsed.data.yearLevel,
+      contactNumber: parsed.data.contactNumber,
+      homeAddress: parsed.data.homeAddress,
+      birthdate: parsed.data.birthdate,
+      emergencyContactName: parsed.data.emergencyContactName,
+      emergencyContactMobile: parsed.data.emergencyContactMobile,
+      emergencyContactRelationship: parsed.data.emergencyContactRelationship,
+    });
+
+    const fallbackInsert = {
+      dorm_id: parsed.data.dormId,
+      user_id: user.id,
+      email,
+      applicant_name: name,
+      applicant_avatar_url: avatarUrl,
+      requested_role: parsed.data.requestedRole,
+      status: "pending",
+      message: fallbackMessage,
+    };
+
+    const fallbackResult = await supabase.from("dorm_applications").insert(fallbackInsert);
+    error = fallbackResult.error;
+  }
 
   if (error) {
     return { error: error.message };
@@ -233,7 +376,8 @@ export async function applyToDorm(formData: FormData) {
     console.error("Failed to write audit event for application:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }
 
@@ -291,7 +435,8 @@ export async function cancelDormApplication(applicationId: string) {
     console.error("Failed to write audit event for cancellation:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }
 
@@ -385,7 +530,8 @@ export async function acceptDormInvite(inviteId: string) {
     console.error("Failed to write audit event for invite claim:", auditError);
   }
 
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   revalidatePath("/home");
   return { success: true };
 }
@@ -506,7 +652,8 @@ export async function createDormInvite(formData: FormData) {
     console.error("Failed to send invite email:", emailError);
   }
 
-  revalidatePath("/admin/users");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
   return { success: true };
 }
 
@@ -536,11 +683,14 @@ export async function getDormApplicationsForActiveDorm(dormId: string, status?: 
     return [];
   }
 
+  const baseSelect =
+    "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, created_at, reviewed_at";
+  const detailedSelect =
+    "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, student_id, room_number, course, year_level, contact_number, home_address, birthdate, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship, review_note, created_at, reviewed_at";
+
   let query = supabase
     .from("dorm_applications")
-    .select(
-      "id, dorm_id, user_id, email, applicant_name, requested_role, granted_role, status, message, review_note, student_id, room_number, created_at, reviewed_at"
-    )
+    .select(detailedSelect)
     .eq("dorm_id", parsedDormId.data)
     .order("created_at", { ascending: false });
 
@@ -549,6 +699,38 @@ export async function getDormApplicationsForActiveDorm(dormId: string, status?: 
   }
 
   const { data, error } = await query;
+  if (error && isMissingColumnError(error.message)) {
+    let fallbackQuery = supabase
+      .from("dorm_applications")
+      .select(baseSelect)
+      .eq("dorm_id", parsedDormId.data)
+      .order("created_at", { ascending: false });
+
+    if (normalizedStatus?.success) {
+      fallbackQuery = fallbackQuery.eq("status", normalizedStatus.data);
+    }
+
+    const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+    if (fallbackError) {
+      console.error("Failed to load dorm applications:", fallbackError);
+      return [];
+    }
+
+    return (fallbackData ?? []).map((row) => ({
+      ...row,
+      student_id: null,
+      room_number: null,
+      course: null,
+      year_level: null,
+      contact_number: null,
+      home_address: null,
+      birthdate: null,
+      emergency_contact_name: null,
+      emergency_contact_mobile: null,
+      emergency_contact_relationship: null,
+    }));
+  }
+
   if (error) {
     console.error("Failed to load dorm applications:", error);
     return [];
@@ -582,11 +764,39 @@ export async function reviewDormApplication(formData: FormData) {
     return { error: "You must be logged in to review applications." };
   }
 
-  const { data: application, error: applicationError } = await supabase
+  const detailedApplicationSelect =
+    "id, dorm_id, user_id, email, applicant_name, status, requested_role, student_id, course, year_level, contact_number, home_address, birthdate, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship";
+  const baseApplicationSelect = "id, dorm_id, user_id, email, applicant_name, status, requested_role";
+
+  let { data: application, error: applicationError } = await supabase
     .from("dorm_applications")
-    .select("id, dorm_id, user_id, email, status, requested_role, student_id, room_number, course, year_level, contact_number, home_address, birthdate, emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship")
+    .select(detailedApplicationSelect)
     .eq("id", parsed.data.applicationId)
     .maybeSingle();
+
+  if (applicationError && isMissingColumnError(applicationError.message)) {
+    const fallbackResult = await supabase
+      .from("dorm_applications")
+      .select(baseApplicationSelect)
+      .eq("id", parsed.data.applicationId)
+      .maybeSingle();
+
+    application = fallbackResult.data
+      ? {
+          ...fallbackResult.data,
+          student_id: null,
+          course: null,
+          year_level: null,
+          contact_number: null,
+          home_address: null,
+          birthdate: null,
+          emergency_contact_name: null,
+          emergency_contact_mobile: null,
+          emergency_contact_relationship: null,
+        }
+      : null;
+    applicationError = fallbackResult.error;
+  }
 
   if (applicationError || !application) {
     return { error: applicationError?.message ?? "Application not found." };
@@ -644,22 +854,49 @@ export async function reviewDormApplication(formData: FormData) {
       .from("occupants")
       .update({
         user_id: application.user_id,
-        student_id: application.student_id,
-        classification: application.course, // Maps course to classification
-        room_number: application.room_number,
-        year_level: application.year_level,
-        contact_number: application.contact_number,
-        contact_mobile: application.contact_number, // Also fill contact_mobile for consistency
-        home_address: application.home_address,
-        birthdate: application.birthdate,
-        emergency_contact_name: application.emergency_contact_name,
-        emergency_contact_mobile: application.emergency_contact_mobile,
-        emergency_contact_relationship: application.emergency_contact_relationship,
         updated_at: now
       })
       .eq("dorm_id", application.dorm_id)
       .is("user_id", null)
       .ilike("contact_email", application.email);
+
+    const { data: existingOccupant } = await adminClient
+      .from("occupants")
+      .select("id")
+      .eq("dorm_id", application.dorm_id)
+      .eq("user_id", application.user_id)
+      .maybeSingle();
+
+    const occupantUpdate = {
+      ...buildOccupantUpdateFromApplication(application),
+      updated_at: now,
+    };
+
+    if (existingOccupant?.id) {
+      const { error: updateOccupantError } = await adminClient
+        .from("occupants")
+        .update(occupantUpdate)
+        .eq("id", existingOccupant.id);
+
+      if (updateOccupantError) {
+        return { error: updateOccupantError.message };
+      }
+    } else {
+      const fallbackName = application.email.split("@")[0]?.trim() || "New Occupant";
+      const insertPayload = {
+        dorm_id: application.dorm_id,
+        user_id: application.user_id,
+        full_name: application.applicant_name?.trim() || fallbackName,
+        status: "active",
+        joined_at: new Date().toISOString().slice(0, 10),
+        ...occupantUpdate,
+      };
+
+      const { error: insertOccupantError } = await adminClient.from("occupants").insert(insertPayload);
+      if (insertOccupantError) {
+        return { error: insertOccupantError.message };
+      }
+    }
   }
 
   const { error: updateError } = await adminClient
@@ -698,6 +935,7 @@ export async function reviewDormApplication(formData: FormData) {
   }
 
   revalidatePath("/applications");
-  revalidatePath("/join");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/join`);
   return { success: true };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -100,6 +101,7 @@ type CleaningRoomRow = {
   id: string;
   code: string;
   level: number;
+  level_override: number | null;
   capacity: number;
   sort_order: number;
 };
@@ -477,10 +479,11 @@ function buildRoomPlans(
       room_id: room.id,
       room_code: room.code,
       room_level: room.level,
+      level_override: room.level_override,
       occupant_count: room.occupant_count,
       area_id: assignment?.area_id ?? null,
       area_name: assignment?.area_name ?? null,
-      is_rest_week: Boolean(restLevel && room.level === restLevel),
+      is_rest_week: Boolean(restLevel && (room.level_override ?? room.level) === restLevel),
     };
   });
 }
@@ -537,7 +540,7 @@ export async function getCleaningSnapshot(
       .order("name", { ascending: true }),
     supabase
       .from("rooms")
-      .select("id, code, level, capacity, sort_order")
+      .select("id, code, level, level_override, capacity, sort_order")
       .eq("dorm_id", viewer.dormId)
       .order("level", { ascending: true })
       .order("sort_order", { ascending: true }),
@@ -575,6 +578,7 @@ export async function getCleaningSnapshot(
     id: room.id,
     code: room.code,
     level: room.level,
+    level_override: room.level_override,
     capacity: room.capacity,
     sort_order: room.sort_order,
     occupant_count: roomOccupantCount.get(room.id) ?? 0,
@@ -702,7 +706,8 @@ export async function seedDefaultCleaningAreas() {
     console.error("Failed to write audit event for cleaning area seeding:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, inserted: inserts.length };
 }
 
@@ -755,7 +760,8 @@ export async function createCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area creation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -813,7 +819,8 @@ export async function updateCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area update:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -869,7 +876,8 @@ export async function deleteCleaningArea(formData: FormData) {
     console.error("Failed to write audit event for cleaning area deletion:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -934,7 +942,8 @@ export async function upsertCleaningWeek(formData: FormData) {
     console.error("Failed to write audit event for cleaning week upsert:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, week_id: ensured.week.id, week_start: ensured.week.week_start };
 }
 
@@ -1071,7 +1080,8 @@ export async function setCleaningRoomAssignment(formData: FormData) {
     console.error("Failed to write audit event for cleaning assignment mutation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -1128,7 +1138,7 @@ export async function generateCleaningAssignments(formData: FormData) {
       .order("name", { ascending: true }),
     supabase
       .from("rooms")
-      .select("id, level, sort_order")
+      .select("id, level, level_override, sort_order")
       .eq("dorm_id", viewer.dormId)
       .order("level", { ascending: true })
       .order("sort_order", { ascending: true }),
@@ -1156,8 +1166,9 @@ export async function generateCleaningAssignments(formData: FormData) {
   const activeRooms = ((roomsResult.data ?? []) as Array<{
     id: string;
     level: number;
+    level_override: number | null;
     sort_order: number;
-  }>).filter((room) => room.level !== ensuredWeek.week.rest_level);
+  }>).filter((room) => (room.level_override ?? room.level) !== ensuredWeek.week.rest_level);
 
   if (!activeRooms.length) {
     return {
@@ -1291,7 +1302,8 @@ export async function generateCleaningAssignments(formData: FormData) {
     console.error("Failed to write audit event for cleaning assignment generation:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true, generated: assignments.length };
 }
 
@@ -1364,7 +1376,8 @@ export async function createCleaningException(formData: FormData) {
     console.error("Failed to write audit event for cleaning exception upsert:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }
 
@@ -1410,6 +1423,7 @@ export async function deleteCleaningException(formData: FormData) {
     console.error("Failed to write audit event for cleaning exception deletion:", auditError);
   }
 
-  revalidatePath("/cleaning");
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/cleaning`);
   return { success: true };
 }

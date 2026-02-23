@@ -19,7 +19,21 @@ const CommitteeCard = dynamic(
   }
 );
 
-export function CommitteeCardSlot({ committee }: { committee: CommitteeSummary }) {
-  return <CommitteeCard committee={committee} />;
+export function CommitteeCardSlot({
+  committee,
+  canManage,
+  detailHrefPrefix,
+}: {
+  committee: CommitteeSummary;
+  canManage?: boolean;
+  detailHrefPrefix?: string;
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (
+    <CommitteeCard
+      committee={committee as any}
+      canManage={canManage}
+      detailHrefPrefix={detailHrefPrefix}
+    />
+  );
 }
-

@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const draftReceiptSchema = z.object({
   dorm_id: z.string().uuid(),
   occupant_id: z.string().uuid(),
-  category: z.enum(["adviser_maintenance", "sa_fines", "treasurer_events"]),
+  category: z.enum(["maintenance_fee", "sa_fines", "contributions"]),
   amount: z.number().positive(),
   method: z.string().trim().max(60).optional(),
   note: z.string().trim().max(300).optional(),
@@ -16,15 +16,15 @@ const draftReceiptSchema = z.object({
 });
 
 const allowedRolesByLedger = {
-  adviser_maintenance: ["admin", "adviser", "assistant_adviser"],
+  maintenance_fee: ["admin", "adviser", "assistant_adviser"],
   sa_fines: ["admin", "student_assistant", "adviser", "assistant_adviser"],
-  treasurer_events: ["admin", "treasurer"],
+  contributions: ["admin", "treasurer"],
 } as const;
 
 function labelForLedger(category: z.infer<typeof draftReceiptSchema>["category"]) {
-  if (category === "adviser_maintenance") return "Maintenance";
+  if (category === "maintenance_fee") return "Maintenance";
   if (category === "sa_fines") return "Fines";
-  return "Event contributions";
+  return "Contributions";
 }
 
 function escapePrompt(value: string) {
@@ -133,11 +133,11 @@ export async function draftPaymentReceiptEmail(payload: unknown) {
       .maybeSingle(),
     parsed.data.event_id
       ? supabase
-          .from("events")
-          .select("title")
-          .eq("dorm_id", parsed.data.dorm_id)
-          .eq("id", parsed.data.event_id)
-          .maybeSingle()
+        .from("events")
+        .select("title")
+        .eq("dorm_id", parsed.data.dorm_id)
+        .eq("id", parsed.data.event_id)
+        .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -159,7 +159,9 @@ export async function draftPaymentReceiptEmail(payload: unknown) {
     "Constraints:",
     "- subject: <= 140 chars",
     "- message: plain text, <= 700 chars",
-    "- do not include a greeting or signature (we add it in the template)",
+    "- strictly do NOT include a greeting (e.g. Hi, Dear)",
+    "- strictly do NOT include a sign-off or signature (e.g. Thanks, Best, Dormy Admin)",
+    "- the greeting and signature are added automatically in the email template",
     "- do not include secrets or passwords",
     "- do not repeat the full receipt table; that will be appended automatically",
     "",

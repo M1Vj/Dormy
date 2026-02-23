@@ -6,6 +6,20 @@ export function buildWorkbook() {
   return XLSX.utils.book_new();
 }
 
+export function sanitizeCell(value: string | number | boolean | null | undefined): string | number | boolean | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    // Prevent CSV/Formula Injection: Check for dangerous prefixes =, +, -, @
+    // Prepend a single quote to force the cell to be treated as text
+    if (/^[=+\-@]/.test(value)) {
+      return `'${value}`;
+    }
+  }
+  return value;
+}
+
 export function appendSheet(
   workbook: XLSX.WorkBook,
   sheetName: string,
@@ -15,7 +29,7 @@ export function appendSheet(
   const normalizedRows = rows.map((row) => {
     const normalized: Record<string, string | number | boolean | null> = {};
     for (const [key, value] of Object.entries(row)) {
-      normalized[key] = value == null ? null : value;
+      normalized[key] = value == null ? null : sanitizeCell(value);
     }
     return normalized;
   });
@@ -50,7 +64,10 @@ export function appendMetadataSheet(
   workbook: XLSX.WorkBook,
   metadata: Array<{ key: string; value: string }>
 ) {
-  const rows = metadata.map((entry) => [entry.key, entry.value]);
+  const rows = metadata.map((entry) => [
+    sanitizeCell(entry.key),
+    sanitizeCell(entry.value),
+  ]);
   const worksheet = XLSX.utils.aoa_to_sheet([
     ["Field", "Value"],
     ...rows,

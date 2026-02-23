@@ -64,6 +64,7 @@ type FinesLedgerProps = {
   fines: FineRow[];
   rules: FineRuleOption[];
   occupants: OccupantOption[];
+  role?: string;
   filters?: {
     search?: string;
     status?: string;
@@ -169,8 +170,8 @@ function VoidFineDialog({
             <p className="text-sm text-primary">Fine voided.</p>
           ) : null}
           <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Voiding..." : "Void fine"}
+            <Button type="submit" isLoading={isPending}>
+              Void fine
             </Button>
           </SheetFooter>
         </form>
@@ -179,7 +180,14 @@ function VoidFineDialog({
   );
 }
 
-export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesLedgerProps) {
+export function FinesLedger({
+  dormId,
+  fines,
+  rules,
+  occupants,
+  role = "admin",
+  filters,
+}: FinesLedgerProps) {
   const hasFilters = Boolean(filters?.search) || Boolean(filters?.status);
 
   return (
@@ -214,7 +222,7 @@ export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesL
           </Button>
           {hasFilters ? (
             <Button asChild type="button" variant="ghost" size="sm">
-              <Link href="/admin/fines">Reset</Link>
+              <Link href={`/${role}/fines`}>Reset</Link>
             </Button>
           ) : null}
         </form>
@@ -241,11 +249,10 @@ export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesL
                       </p>
                     </div>
                     <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                        isVoided
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
                           ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
                           : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                      }`}
+                        }`}
                     >
                       {isVoided ? "Voided" : "Active"}
                     </span>
@@ -357,11 +364,10 @@ export function FinesLedger({ dormId, fines, rules, occupants, filters }: FinesL
                       </td>
                       <td className="px-3 py-2">
                         <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                            isVoided
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${isVoided
                               ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
                               : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          }`}
+                            }`}
                         >
                           {isVoided ? "Voided" : "Active"}
                         </span>

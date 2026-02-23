@@ -58,13 +58,15 @@ function writeCookie(name: string, value: string, maxAgeSeconds: number) {
 
 interface AuthContextValue {
   user: User | null;
-  /** The actual role from the database */
-  actualRole: AppRole | null;
-  /** The currently active role (may be overridden to 'occupant') */
+  /** All roles the user holds in the database for the active dorm */
+  actualRoles: AppRole[];
+  /** The currently active role (from cookie or defaulted, could be occupant mode) */
   role: AppRole | null;
   dormId: string | null;
   isLoading: boolean;
-  /** Whether occupant mode is currently active */
+  /** Sets a specific actual role as active and saves to cookie */
+  setActiveRole: (role: AppRole) => void;
+  /** Whether occupant mode is currently active (only if an eligible role is active) */
   isOccupantMode: boolean;
   /** Whether this user can toggle to occupant mode */
   canToggleOccupantMode: boolean;
@@ -84,19 +86,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [user, setUser] = useState<User | null>(null);
-  const [actualRole, setActualRole] = useState<AppRole | null>(null);
+  const [actualRoles, setActualRoles] = useState<AppRole[]>([]);
   const [dormId, setDormId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeRoleCookie, setActiveRoleCookie] = useState(() => {
+    return readCookie("dormy_active_role") as AppRole | null;
+  });
   const [isOccupantMode, setIsOccupantMode] = useState(() => {
     return readCookie(OCCUPANT_MODE_COOKIE) === "1";
   });
   const refreshInProgress = useRef(false);
 
+  // We determine the active 'actual' role from the cookie, or we default to the first one available
+  const currentActualRole = useMemo(() => {
+    if (actualRoles.length === 0) return null;
+    if (activeRoleCookie && actualRoles.includes(activeRoleCookie)) {
+      return activeRoleCookie;
+    }
+    // Fallback: Give priority to certain roles if needed, otherwise just the first one
+    return actualRoles[0] ?? null;
+  }, [actualRoles, activeRoleCookie]);
+
   const canToggleOccupantMode = Boolean(
-    actualRole && OCCUPANT_ELIGIBLE_ROLES.has(actualRole)
+    currentActualRole && OCCUPANT_ELIGIBLE_ROLES.has(currentActualRole)
   );
 
-  const role = isOccupantMode && canToggleOccupantMode ? "occupant" : actualRole;
+  const role = isOccupantMode && canToggleOccupantMode ? "occupant" : currentActualRole;
+
+  const setActiveRole = useCallback((newRole: AppRole) => {
+    setActiveRoleCookie(newRole);
+    writeCookie("dormy_active_role", newRole, 60 * 60 * 24 * 30);
+    // If we switch actual roles, we might want to disable occupant mode by default
+    setIsOccupantMode(false);
+    writeCookie(OCCUPANT_MODE_COOKIE, "0", 0);
+  }, []);
 
   const router = useRouter();
   const toggleOccupantMode = useCallback(() => {
@@ -112,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!supabase) {
       setUser(null);
-      setActualRole(null);
+      setActualRoles([]);
       setDormId(null);
       return;
     }
@@ -131,18 +154,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(authUser ?? null);
 
       if (authUser) {
-        const { data: membership } = await supabase
+        const { data: memberships } = await supabase
           .from("dorm_memberships")
           .select("role, dorm_id")
           .eq("user_id", authUser.id)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .order("created_at", { ascending: true });
 
-        setActualRole((membership?.role as AppRole) ?? null);
-        setDormId(membership?.dorm_id ?? null);
+        const roles = (memberships?.map((m) => m.role as AppRole) || []);
+        setActualRoles(roles);
+        // Assuming user is only in 1 dorm for now in this app instance
+        setDormId(memberships?.[0]?.dorm_id ?? null);
       } else {
-        setActualRole(null);
+        setActualRoles([]);
         setDormId(null);
       }
     } catch (error) {
@@ -179,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, supabase]);
 
   useEffect(() => {
-    if (!user || actualRole) {
+    if (!user || actualRoles.length > 0) {
       return;
     }
 
@@ -188,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 8000);
 
     return () => window.clearInterval(interval);
-  }, [refresh, actualRole, user]);
+  }, [refresh, actualRoles.length, user]);
 
   useEffect(() => {
     if (isOccupantMode && !canToggleOccupantMode) {
@@ -200,24 +223,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       user,
-      actualRole,
+      actualRoles,
       role,
       dormId,
       isLoading,
       isOccupantMode,
       canToggleOccupantMode,
       toggleOccupantMode,
+      setActiveRole,
       refresh,
     }),
     [
       user,
-      actualRole,
+      actualRoles,
       role,
       dormId,
       isLoading,
       isOccupantMode,
       canToggleOccupantMode,
       toggleOccupantMode,
+      setActiveRole,
       refresh,
     ]
   );

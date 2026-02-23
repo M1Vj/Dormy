@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { ensureActiveSemesterId } from "@/lib/semesters";
@@ -45,17 +46,16 @@ export async function createFineRule(dormId: string, formData: FormData) {
 
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to manage fine rules." };
   }
 
@@ -94,7 +94,9 @@ export async function createFineRule(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for fine rule creation:", auditError);
   }
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -113,17 +115,16 @@ export async function updateFineRule(
 
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to manage fine rules." };
   }
 
@@ -186,7 +187,9 @@ export async function updateFineRule(
     console.error("Failed to write audit event for fine rule update:", auditError);
   }
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
   return { success: true };
 }
 
@@ -288,17 +291,16 @@ export async function issueFine(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to issue fines." };
   }
 
@@ -325,6 +327,7 @@ export async function issueFine(dormId: string, formData: FormData) {
   // Sync to Ledger (Charge)
   const { error: ledgerError } = await supabase.from("ledger_entries").insert({
     dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
     ledger: "sa_fines",
     entry_type: "charge",
     occupant_id: parsed.data.occupant_id,
@@ -360,8 +363,10 @@ export async function issueFine(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for fine issuance:", auditError);
   }
 
-  revalidatePath("/admin/fines");
-  revalidatePath(`/admin/occupants/${parsed.data.occupant_id}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
+  revalidatePath(`/${activeRole}/occupants/${parsed.data.occupant_id}`);
   return { success: true };
 }
 
@@ -373,17 +378,16 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r));
 
-  if (
-    !membership ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  if (!hasAccess) {
     return { error: "You do not have permission to void fines." };
   }
 
@@ -399,7 +403,9 @@ export async function voidFine(dormId: string, fineId: string, reason: string) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/fines");
+  const activeRole = (await getActiveRole()) || "occupant";
+
+  revalidatePath(`/${activeRole}/fines`);
 
   // Sync to Ledger (Void)
   const { error: ledgerError } = await supabase

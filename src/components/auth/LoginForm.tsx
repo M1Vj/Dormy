@@ -30,7 +30,7 @@ export function LoginForm() {
     setOauthLoading(true);
     try {
       const currentUrl = new URL(window.location.href);
-      const nextPath = currentUrl.searchParams.get("next") || "/home";
+      const nextPath = currentUrl.searchParams.get("next") || "/";
       const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -62,7 +62,7 @@ export function LoginForm() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       toast.success("Signed in");
-      router.push("/home");
+      router.push("/");
       router.refresh();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to sign in";
@@ -92,20 +92,20 @@ export function LoginForm() {
       </div>
 
       <form action={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required autoComplete="current-password" />
-      </div>
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Signing in…" : "Sign in"}
-      </Button>
-      <p className="text-xs text-muted-foreground">
-        Admin tip: provision accounts in Admin → Users, then assign a dorm role.
-      </p>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required autoComplete="email" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required autoComplete="current-password" />
+        </div>
+        <Button type="submit" className="w-full" isLoading={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Admin tip: provision accounts in Admin → Users, then assign a dorm role.
+        </p>
       </form>
     </div>
   );

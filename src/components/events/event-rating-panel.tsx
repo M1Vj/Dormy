@@ -8,6 +8,7 @@ import { deleteEventRating, upsertEventRating } from "@/app/actions/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { EventRating } from "@/lib/types/events";
 
 type RatingFormState = {
@@ -20,7 +21,68 @@ const initialRatingFormState: RatingFormState = {
   success: false,
 };
 
+export function LikertScale({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  const getButtonStyles = (scale: number) => {
+    const isSelected = value === scale;
+    const isHovered = hovered === scale;
+
+    if (isSelected) {
+      if (scale <= 3) return "bg-red-500 text-white border-red-600 hover:bg-red-600";
+      if (scale <= 7) return "bg-yellow-500 text-yellow-950 border-yellow-600 hover:bg-yellow-600";
+      return "bg-green-500 text-white border-green-600 hover:bg-green-600";
+    }
+
+    if (isHovered) {
+      if (scale <= 3) return "bg-red-100 border-red-300 text-red-900";
+      if (scale <= 7) return "bg-yellow-100 border-yellow-300 text-yellow-900";
+      return "bg-green-100 border-green-300 text-green-900";
+    }
+
+    return "bg-background border-input hover:border-accent-foreground/30";
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center sm:gap-2">
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((scale) => (
+          <button
+            key={scale}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(scale)}
+            onMouseEnter={() => setHovered(scale)}
+            onMouseLeave={() => setHovered(null)}
+            className={cn(
+              "flex h-9 w-full items-center justify-center rounded-md border text-sm font-medium transition-colors sm:size-9",
+              getButtonStyles(scale),
+              disabled && "cursor-not-allowed opacity-50"
+            )}
+          >
+            {scale}
+          </button>
+        ))}
+      </div>
+      <div className="flex justify-between px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:text-xs">
+        <span>Poor</span>
+        <span className="hidden sm:inline">Satisfactory</span>
+        <span>Excellent</span>
+      </div>
+    </div>
+  );
+}
+
 export function EventRatingPanel({
+
   eventId,
   ratings,
   viewerRating,
@@ -38,8 +100,14 @@ export function EventRatingPanel({
   const [deletingRatingId, setDeletingRatingId] = useState<string | null>(null);
   const [isDeleting, startDeleteTransition] = useTransition();
 
+  const [selectedRating, setSelectedRating] = useState(viewerRating?.rating ?? 0);
+
   const [formState, formAction, isSubmitting] = useActionState(
     async (_previousState: RatingFormState, formData: FormData) => {
+      if (selectedRating < 1) {
+        return { error: "Please select a rating.", success: false };
+      }
+      formData.set("rating", String(selectedRating));
       const result = await upsertEventRating(formData);
       if (result?.error) {
         return {
@@ -87,27 +155,13 @@ export function EventRatingPanel({
       {canRate ? (
         <form action={formAction} className="rounded-lg border p-3">
           <input type="hidden" name="event_id" value={eventId} />
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Your rating</p>
-            <div className="flex flex-wrap gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
-                <label
-                  key={value}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-sm"
-                >
-                  <input
-                    type="radio"
-                    name="rating"
-                    value={String(value)}
-                    defaultChecked={viewerRating?.rating === value}
-                    className="size-3.5"
-                    required
-                  />
-                  <Star className="size-3.5 text-amber-500" />
-                  {value}
-                </label>
-              ))}
-            </div>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Your rating (1-10)</p>
+            <LikertScale
+              value={selectedRating}
+              onChange={setSelectedRating}
+              disabled={isSubmitting}
+            />
           </div>
           <div className="mt-3 space-y-2">
             <p className="text-sm font-medium">Comment</p>

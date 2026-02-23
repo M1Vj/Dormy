@@ -1,33 +1,33 @@
 export const roles = [
   "admin",
-  "student_assistant",
-  "treasurer",
   "adviser",
   "assistant_adviser",
-  "occupant",
+  "student_assistant",
+  "treasurer",
   "officer",
+  "occupant",
 ] as const;
 
 export type AppRole = (typeof roles)[number];
 
 const roleLabelMap: Record<AppRole, string> = {
   admin: "Admin",
-  student_assistant: "Student Assistant",
-  treasurer: "Treasurer",
   adviser: "Adviser",
   assistant_adviser: "Assistant Adviser",
-  occupant: "Occupant",
+  student_assistant: "Student Assistant",
+  treasurer: "Treasurer",
   officer: "Officer",
+  occupant: "Occupant",
 };
 
 const roleSummaryMap: Record<AppRole, string> = {
-  admin: "Full dorm management permissions across accounts, operations, and ledgers.",
-  student_assistant: "Can manage occupants and fines, including account support workflows.",
-  treasurer: "Handles event collections and finance-related recording workflows.",
-  adviser: "Oversees adviser workflows, including maintenance and delegated account setup.",
-  assistant_adviser: "Supports maintenance and adviser-assigned dorm operations.",
-  occupant: "Can view personal ledgers, schedules, evaluations, and shared announcements.",
-  officer: "Focuses on event planning, execution, and event records.",
+  admin: "Manages dorm setup, occupant records, clearance, and semester controls.",
+  adviser: "Handles occupant operations, maintenance finance, evaluations, announcements, and reports.",
+  assistant_adviser: "Supports adviser workflows for occupants, finance, evaluations, and reports.",
+  student_assistant: "Handles occupant operations, fines review, maintenance finance, and reporting.",
+  treasurer: "Handles contribution collection and contribution-ledger workflows.",
+  officer: "Focuses on committee and event operations.",
+  occupant: "Can view dorm-level updates, schedules, committees, events, and finance totals.",
 };
 
 export function getRoleLabel(role: AppRole | null | undefined) {
@@ -38,4 +38,23 @@ export function getRoleLabel(role: AppRole | null | undefined) {
 export function getRoleSummary(role: AppRole | null | undefined) {
   if (!role) return "Role permissions are not available yet.";
   return roleSummaryMap[role] ?? "Role permissions are configured by dorm administrators.";
+}
+
+export const roleWeights: Record<AppRole, number> = {
+  admin: 100,
+  adviser: 70,
+  assistant_adviser: 70,
+  student_assistant: 70,
+  treasurer: 50,
+  officer: 40,
+  occupant: 10,
+};
+
+export function getRoleWeight(role: AppRole | string | null | undefined): number {
+  if (!role || !(role in roleWeights)) return 0;
+  return roleWeights[role as AppRole];
+}
+
+export function canManageRole(managerRole: AppRole | string, targetRole: AppRole | string): boolean {
+  return getRoleWeight(managerRole) >= getRoleWeight(targetRole);
 }

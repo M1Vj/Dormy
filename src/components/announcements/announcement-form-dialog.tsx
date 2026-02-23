@@ -200,8 +200,8 @@ export function AnnouncementFormDialog({
           {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
 
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : mode === "create" ? "Create" : "Save changes"}
+            <Button type="submit" isLoading={isPending}>
+              {mode === "create" ? "Create" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>

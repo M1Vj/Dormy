@@ -6,7 +6,19 @@ const DORM_COOKIE = "dorm_id";
 
 export async function getActiveDormId() {
   const cookieStore = await cookies();
-  return cookieStore.get(DORM_COOKIE)?.value ?? null;
+  const rawId = cookieStore.get(DORM_COOKIE)?.value;
+
+  const dorms = await getUserDorms();
+  if (dorms.length === 0) return null;
+
+  if (rawId) {
+    const isValid = dorms.some((d) => d.id === rawId);
+    if (isValid) return rawId;
+  }
+
+  // Fallback to the first available dorm if the cookie is missing or invalid.
+  // This prevents redirect loops in Safari which sometimes drops cookies.
+  return dorms[0]?.id ?? null;
 }
 
 export async function setActiveDormId(dormId: string) {
@@ -35,7 +47,7 @@ export const getUserDorms = cache(async () => {
 
   const { data } = await supabase
     .from("dorm_memberships")
-    .select("dorms(id, name, slug)")
+    .select("dorms(id, name, slug, treasurer_maintenance_access)")
     .eq("user_id", user.id);
 
   return (data ?? [])
@@ -48,4 +60,5 @@ export type DormSummary = {
   id: string;
   name: string;
   slug: string;
+  treasurer_maintenance_access?: boolean | null;
 };

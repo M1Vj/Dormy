@@ -1,10 +1,8 @@
 import Link from "next/link";
 
-import { createOccupant } from "@/app/actions/occupants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { CreateOccupantForm } from "./create-occupant-form";
 import { UpdateRoleDialog } from "./update-role-dialog";
 import { AppRole, getRoleLabel } from "@/lib/roles";
 
@@ -25,7 +23,7 @@ export type OccupantRow = {
   course?: string | null;
   student_id?: string | null;
   status?: string | null;
-  role: AppRole;
+  roles: AppRole[];
   joined_at?: string | null;
   current_room_assignment?: OccupantAssignment | null;
 };
@@ -33,6 +31,7 @@ export type OccupantRow = {
 type OccupantTableProps = {
   dormId: string;
   occupants: OccupantRow[];
+  role?: string;
   filters?: {
     search?: string;
     status?: string;
@@ -76,8 +75,8 @@ const getStatusClass = (status?: string | null) => {
   return "border-muted bg-muted text-muted-foreground";
 };
 
-export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps) {
-  const createOccupantAction = createOccupant.bind(null, dormId);
+export function OccupantTable({ dormId, occupants, role = "admin", filters }: OccupantTableProps) {
+  const basePath = `/${role}/occupants`;
   const hasFilters =
     Boolean(filters?.search) ||
     Boolean(filters?.status) ||
@@ -91,10 +90,9 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
           <div>
             <CardTitle className="text-base">Occupant roster</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Add occupants, search by name or student ID, and filter by status, room, or level.
+              Search by name or student ID, and filter by status, room, or level.
             </p>
           </div>
-          <CreateOccupantForm action={createOccupantAction} />
         </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div />
@@ -135,7 +133,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
             </Button>
             {hasFilters ? (
               <Button asChild type="button" size="sm" variant="ghost" className="w-full sm:w-auto">
-                <Link href="/admin/occupants">Reset</Link>
+                <Link href={basePath}>Reset</Link>
               </Button>
             ) : null}
           </form>
@@ -185,22 +183,30 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                     </div>
                     <div>
                       <p className="text-muted-foreground">Role</p>
-                      <p>{getRoleLabel(occupant.role)}</p>
+                      <p>{occupant.roles.map(getRoleLabel).join(", ")}</p>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
-                      <Link href={`/admin/occupants/${occupant.id}`}>
+                      <Link href={`${basePath}/${occupant.id}`}>
                         View
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="ghost" className="w-full">
                       <Link
-                        href={`/admin/occupants/${occupant.id}?mode=edit`}
+                        href={`${basePath}/${occupant.id}?mode=edit`}
                       >
                         Edit
                       </Link>
                     </Button>
+                    <div className="flex justify-center">
+                      <UpdateRoleDialog
+                        dormId={dormId}
+                        userId={occupant.user_id}
+                        occupantName={occupant.full_name ?? "User"}
+                        currentRoles={occupant.roles}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -273,7 +279,7 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       </td>
                       <td className="px-3 py-2">
                         <span className="text-xs font-medium text-muted-foreground">
-                          {getRoleLabel(occupant.role)}
+                          {occupant.roles.map(getRoleLabel).join(", ")}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -282,25 +288,23 @@ export function OccupantTable({ dormId, occupants, filters }: OccupantTableProps
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Button asChild size="sm" variant="ghost">
-                            <Link href={`/admin/occupants/${occupant.id}`}>
+                            <Link href={`${basePath}/${occupant.id}`}>
                               View
                             </Link>
                           </Button>
                           <Button asChild size="sm" variant="ghost">
                             <Link
-                              href={`/admin/occupants/${occupant.id}?mode=edit`}
+                              href={`${basePath}/${occupant.id}?mode=edit`}
                             >
                               Edit
                             </Link>
                           </Button>
-                          {occupant.user_id ? (
-                            <UpdateRoleDialog
-                              dormId={dormId}
-                              userId={occupant.user_id}
-                              occupantName={occupant.full_name ?? "User"}
-                              currentRole={occupant.role}
-                            />
-                          ) : null}
+                          <UpdateRoleDialog
+                            dormId={dormId}
+                            userId={occupant.user_id}
+                            occupantName={occupant.full_name ?? "User"}
+                            currentRoles={occupant.roles}
+                          />
                         </div>
                       </td>
                     </tr>

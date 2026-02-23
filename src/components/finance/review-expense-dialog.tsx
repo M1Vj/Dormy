@@ -91,13 +91,13 @@ export function ReviewExpenseDialog({
           Review
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Review Expense</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Review Expense</DialogTitle>
+          <DialogDescription className="text-sm">
             Approve or reject this expense request.
             <br />
-            <strong>{expense.title}</strong> — ₱
+            <strong className="text-foreground">{expense.title}</strong> — ₱
             {Number(expense.amount_pesos).toFixed(2)}
           </DialogDescription>
         </DialogHeader>
@@ -138,7 +138,7 @@ export function ReviewExpenseDialog({
           <div className="flex justify-end gap-2">
             <Button
               variant="destructive"
-              disabled={isPending}
+              isLoading={isPending}
               onClick={() => handleAction("reject")}
             >
               Reject
@@ -146,7 +146,7 @@ export function ReviewExpenseDialog({
             <Button
               variant="default"
               className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={isPending}
+              isLoading={isPending}
               onClick={() => handleAction("approve")}
             >
               Approve

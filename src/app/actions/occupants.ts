@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -13,6 +14,20 @@ const occupantSchema = z.object({
   student_id: z.string().optional(),
   course: z.string().optional(),
   joined_at: z.string().optional(), // Date string
+});
+
+const systemAccessSchema = z.object({
+  role: z.enum([
+    "admin",
+    "student_assistant",
+    "treasurer",
+    "adviser",
+    "assistant_adviser",
+    "occupant",
+    "officer",
+  ]).optional(),
+  committee_id: z.string().uuid().optional().or(z.literal("")),
+  committee_role: z.enum(["head", "co-head", "member"]).optional().or(z.literal("")),
 });
 
 type RoomRef = {
@@ -88,8 +103,7 @@ export async function getOccupants(
         start_date,
         end_date,
         room:rooms(id, code, level)
-      ),
-      memberships:dorm_memberships(role)
+      )
     `)
     .eq("dorm_id", dormId);
 
@@ -110,6 +124,25 @@ export async function getOccupants(
     return [];
   }
 
+  const userIds = data.map((occ) => occ.user_id).filter(Boolean) as string[];
+  const membershipsMap = new Map<string, AppRole[]>();
+
+  if (userIds.length > 0) {
+    const { data: memData, error: memError } = await supabase
+      .from("dorm_memberships")
+      .select("user_id, role")
+      .eq("dorm_id", dormId)
+      .in("user_id", userIds);
+
+    if (!memError && memData) {
+      memData.forEach((m) => {
+        const roles = membershipsMap.get(m.user_id) || [];
+        roles.push(m.role as AppRole);
+        membershipsMap.set(m.user_id, roles);
+      });
+    }
+  }
+
   let mapped = data.map((occ) => {
     // Find the active assignment (no end_date)
     // If multiple (shouldn't happen with DB constraint), take the first one
@@ -122,7 +155,7 @@ export async function getOccupants(
       ...occ,
       current_room_assignment: activeAssignment || null,
       room_assignments: undefined,
-      role: (occ.memberships as { role: AppRole }[])?.[0]?.role ?? "occupant",
+      roles: (occ.user_id && membershipsMap.get(occ.user_id)) || ["occupant"],
     };
   });
 
@@ -162,7 +195,7 @@ export async function getOccupant(dormId: string, occupantId: string) {
   const { data, error } = await supabase
     .from("occupants")
     .select(`
-      id, full_name, student_id, course:classification, joined_at, status,
+      id, full_name, student_id, user_id, course:classification, joined_at, status,
       home_address, birthdate, contact_mobile, contact_email, 
       emergency_contact_name, emergency_contact_mobile, emergency_contact_relationship,
       room_assignments(
@@ -181,6 +214,50 @@ export async function getOccupant(dormId: string, occupantId: string) {
     return null;
   }
 
+  // Fetch the role and committee info if user_id exists
+  let memRoles: AppRole[] = ["occupant"];
+  let committeeMemberships: { committee_id: string; role: string; committee_name: string }[] = [];
+
+  if (data.user_id) {
+    const { data: memData } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", data.user_id);
+
+    if (memData && memData.length > 0) {
+      memRoles = memData.map((m) => m.role as AppRole);
+    }
+
+    const { data: commData } = await supabase
+      .from("committee_members")
+      .select("role, committee_id, committees(name)")
+      .eq("user_id", data.user_id);
+
+    // filter to only committees in this dorm
+    const { data: dormCommittees } = await supabase
+      .from("committees")
+      .select("id")
+      .eq("dorm_id", dormId);
+    const dormCommitteeIds = new Set((dormCommittees ?? []).map((c) => c.id));
+
+    if (commData) {
+      committeeMemberships = commData
+        .filter((c) => dormCommitteeIds.has(c.committee_id))
+        .map((c) => {
+          const commName = Array.isArray(c.committees)
+            ? c.committees[0]?.name
+            : (c.committees as unknown as { name: string } | null)?.name;
+
+          return {
+            committee_id: c.committee_id,
+            role: c.role,
+            committee_name: commName ?? "Unknown Committee",
+          };
+        });
+    }
+  }
+
   // Sort assignments: Active first, then by end_date desc (most recent history)
   const assignments = (data.room_assignments || []) as unknown as RoomAssignment[];
   const sortedAssignments = assignments.sort((a, b) => {
@@ -192,6 +269,8 @@ export async function getOccupant(dormId: string, occupantId: string) {
 
   return {
     ...data,
+    roles: memRoles,
+    committee_memberships: committeeMemberships,
     room_assignments: sortedAssignments,
     current_room_assignment: sortedAssignments.find((a) => !a.end_date) || null,
   };
@@ -211,18 +290,14 @@ export async function createOccupant(dormId: string, formData: FormData) {
     return { error: "You must be logged in to add occupants." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to add occupants." };
   }
 
@@ -297,8 +372,8 @@ export async function createOccupant(dormId: string, formData: FormData) {
     console.error("Failed to write audit event for occupant creation:", auditError);
   }
 
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
   return { success: true };
 }
 
@@ -320,18 +395,14 @@ export async function updateOccupant(
     return { error: "You must be logged in to update occupants." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
+  const { data: memberships, error: membershipError } = await supabase.from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    membershipError ||
-    !membership ||
-    !new Set(["admin", "student_assistant", "adviser"]).has(membership.role)
-  ) {
+    ;
+  const roles = memberships?.map(m => m.role) ?? [];
+  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  if (membershipError || !hasAccess) {
     return { error: "You do not have permission to update occupants." };
   }
 
@@ -362,6 +433,16 @@ export async function updateOccupant(
     emergency_contact_mobile: formData.get("emergency_contact_mobile"),
     emergency_contact_relationship: formData.get("emergency_contact_relationship"),
   };
+
+  const parsedSystemAccess = systemAccessSchema.safeParse({
+    role: formData.get("role"),
+    committee_id: formData.get("committee_id"),
+    committee_role: formData.get("committee_role"),
+  });
+
+  if (!parsedSystemAccess.success) {
+    return { error: "Invalid system access data. " + JSON.stringify(parsedSystemAccess.error.issues) };
+  }
 
   // Allow partial updates, but validate stricter if needed. 
   // For simpliciy, reusing logic but manually creating object
@@ -431,10 +512,109 @@ export async function updateOccupant(
     }
   }
 
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${occupantId}`);
-  revalidatePath(`/occupants/${occupantId}`);
+  // Update System Access if user_id exists
+  const { data: currentOccupant } = await supabase
+    .from("occupants")
+    .select("user_id")
+    .eq("id", occupantId)
+    .single();
+
+  if (currentOccupant?.user_id) {
+    const sysAccess = parsedSystemAccess.data;
+
+    // Update Dorm Role
+    if (sysAccess.role) {
+      const { data: previousMembership } = await supabase
+        .from("dorm_memberships")
+        .select("role")
+        .eq("dorm_id", dormId)
+        .eq("user_id", currentOccupant.user_id)
+        .maybeSingle();
+
+      if (previousMembership?.role !== sysAccess.role) {
+        await supabase
+          .from("dorm_memberships")
+          .upsert(
+            { dorm_id: dormId, user_id: currentOccupant.user_id, role: sysAccess.role as AppRole },
+            { onConflict: "dorm_id,user_id" }
+          );
+
+        await logAuditEvent({
+          dormId,
+          actorUserId: user.id,
+          action: "membership.role_updated",
+          entityType: "membership",
+          entityId: currentOccupant.user_id, // Using userId as entityId for membership
+          metadata: {
+            target_user_id: currentOccupant.user_id,
+            previous_role: previousMembership?.role ?? "none",
+            new_role: sysAccess.role,
+          },
+        });
+      }
+    }
+
+    // Update Committee Assignment - Overwrite previous assignments for simplicity given UI limitations.
+    if (sysAccess.committee_id && sysAccess.committee_role) {
+      // If we are assigning to a new committee, or updating role in current committee.
+      // First, get committees in this dorm
+      const { data: dormCommittees } = await supabase
+        .from("committees")
+        .select("id")
+        .eq("dorm_id", dormId);
+      const dormCommitteeIds = (dormCommittees ?? []).map((c) => c.id);
+
+      // Ensure a single head/co-head by demoting existing members first in target committee
+      if (sysAccess.committee_role === "head" || sysAccess.committee_role === "co-head") {
+        await supabase
+          .from("committee_members")
+          .update({ role: "member" })
+          .eq("committee_id", sysAccess.committee_id)
+          .eq("role", sysAccess.committee_role);
+      }
+
+      // We clear out other committee memberships in this dorm to match the dropdown replacing the full role.
+      if (dormCommitteeIds.length > 0) {
+        await supabase
+          .from("committee_members")
+          .delete()
+          .eq("user_id", currentOccupant.user_id)
+          .in("committee_id", dormCommitteeIds)
+          .neq("committee_id", sysAccess.committee_id);
+      }
+
+      // Upsert the new committee member assignment
+      await supabase
+        .from("committee_members")
+        .upsert(
+          {
+            committee_id: sysAccess.committee_id,
+            user_id: currentOccupant.user_id,
+            role: sysAccess.committee_role
+          },
+          { onConflict: "committee_id,user_id" }
+        );
+    } else if (sysAccess.committee_id === "" || sysAccess.committee_role === "") {
+      // Clear committee roles in this dorm, as they deselected it.
+      const { data: dormCommittees } = await supabase
+        .from("committees")
+        .select("id")
+        .eq("dorm_id", dormId);
+      const dormCommitteeIds = (dormCommittees ?? []).map((c) => c.id);
+
+      if (dormCommitteeIds.length > 0) {
+        await supabase
+          .from("committee_members")
+          .delete()
+          .eq("user_id", currentOccupant.user_id)
+          .in("committee_id", dormCommitteeIds);
+      }
+    }
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${occupantId}`);
   return { success: true };
 }
 
@@ -536,7 +716,7 @@ export async function updatePersonalOccupant(formData: FormData) {
     return { error: error.message };
   }
 
-  const changedFields = getChangedOccupantFields(occupant as any, updates);
+  const changedFields = getChangedOccupantFields(occupant as Record<string, unknown>, updates);
 
   if (changedFields.length > 0) {
     try {
@@ -556,10 +736,9 @@ export async function updatePersonalOccupant(formData: FormData) {
   }
 
   revalidatePath("/profile");
-  revalidatePath("/occupants");
-  revalidatePath("/admin/occupants");
-  revalidatePath(`/admin/occupants/${occupant.id}`);
-  revalidatePath(`/occupants/${occupant.id}`);
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/occupants`);
+  revalidatePath(`/${activeRole}/occupants/${occupant.id}`);
 
   return { success: true };
 }

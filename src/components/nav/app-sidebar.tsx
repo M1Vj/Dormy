@@ -1,20 +1,21 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { useMemo } from "react";
+import { usePathname } from "next/navigation";
 import {
-  BarChart3,
+  Bell,
+  Building2,
   Calendar,
+  ClipboardCheck,
+  DoorOpen,
   FileText,
   Home,
-  Sparkles,
-  Settings,
+  Receipt,
   Shield,
   Users,
   Wallet,
-  UserPlus,
-  Building2,
-} from "lucide-react"
+} from "lucide-react";
 
 import {
   Sidebar,
@@ -26,90 +27,116 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-import { useAuth } from "@/components/providers/auth-provider"
-import { DormSwitcher } from "@/components/nav/dorm-switcher"
+} from "@/components/ui/sidebar";
+import { DormSwitcher } from "@/components/nav/dorm-switcher";
+import { useAuth } from "@/components/providers/auth-provider";
+import { useDorm } from "@/components/providers/dorm-provider";
 
-// Menu items.
-const items = [
-  { title: "Home", url: "/home", icon: Home, color: "text-sky-500" },
-  { title: "Join", url: "/join", icon: Building2, color: "text-slate-500" },
-  { title: "Applications", url: "/applications", icon: UserPlus, color: "text-indigo-500" },
-  { title: "Occupants", url: "/occupants", icon: Users, color: "text-emerald-500" },
-  { title: "Committees", url: "/committees", icon: Users, color: "text-violet-500" },
-  { title: "Fines", url: "/fines", icon: FileText, color: "text-rose-500" },
-  { title: "Payments", url: "/payments", icon: Wallet, color: "text-amber-500" },
-  { title: "Cleaning", url: "/cleaning", icon: Calendar, color: "text-lime-500" },
-  { title: "Evaluation", url: "/evaluation", icon: Shield, color: "text-cyan-500" },
-  { title: "Events", url: "/events", icon: Calendar, color: "text-orange-500" },
-  { title: "Reporting", url: "/admin/reporting", icon: BarChart3, color: "text-pink-500" },
-  { title: "AI", url: "/ai", icon: Sparkles, color: "text-purple-500" },
-  { title: "Admin", url: "/admin", icon: Settings, color: "text-zinc-500" },
-]
+type MenuItem = {
+  title: string;
+  url: string;
+  icon: typeof Home;
+  color: string;
+};
+
+function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): MenuItem[] {
+  if (!role) {
+    return [{ title: "Join", url: "/join", icon: Building2, color: "text-slate-500" }];
+  }
+
+  if (role === "admin") {
+    return [
+      { title: "Home", url: "/admin/home", icon: Home, color: "text-sky-500" },
+      { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Dorms", url: "/admin/dorms", icon: Building2, color: "text-blue-500" },
+      { title: "Clearance", url: "/admin/clearance", icon: ClipboardCheck, color: "text-green-600" },
+      { title: "Semesters", url: "/admin/terms", icon: Calendar, color: "text-indigo-500" },
+      { title: "Announcements", url: "/admin/home/announcements", icon: Bell, color: "text-orange-500" },
+      { title: "Settings", url: "/admin/settings", icon: Shield, color: "text-zinc-500" },
+    ];
+  }
+
+  if (role === "occupant") {
+    return [
+      { title: "Home", url: "/occupant/home", icon: Home, color: "text-sky-500" },
+      { title: "Finance Totals", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
+      { title: "Fine Reports", url: "/occupant/fines/reports", icon: FileText, color: "text-rose-500" },
+      { title: "My Committee", url: "/occupant/committees", icon: Users, color: "text-violet-500" },
+      { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
+      { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Announcements", url: "/occupant/home/announcements", icon: Bell, color: "text-blue-500" },
+    ];
+  }
+
+  if (role === "adviser" || role === "assistant_adviser") {
+    return [
+      { title: "Home", url: "/adviser/home", icon: Home, color: "text-sky-500" },
+      { title: "Occupants", url: "/adviser/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-violet-500" },
+      { title: "Finance", url: "/adviser/finance", icon: Wallet, color: "text-amber-500" },
+      { title: "Cleaning", url: "/adviser/cleaning", icon: Calendar, color: "text-lime-500" },
+      { title: "Evaluation", url: "/adviser/evaluation", icon: Shield, color: "text-cyan-500" },
+      { title: "Events", url: "/adviser/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Reporting", url: "/adviser/reporting", icon: ClipboardCheck, color: "text-pink-500" },
+      { title: "Announcements", url: "/adviser/home/announcements", icon: Bell, color: "text-blue-500" },
+    ];
+  }
+
+  if (role === "student_assistant") {
+    return [
+      { title: "Home", url: "/student_assistant/home", icon: Home, color: "text-sky-500" },
+      { title: "Occupants", url: "/student_assistant/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-violet-500" },
+      { title: "Fines", url: "/student_assistant/fines", icon: FileText, color: "text-rose-500" },
+      { title: "Finance", url: "/student_assistant/finance", icon: Wallet, color: "text-amber-500" },
+      { title: "Cleaning", url: "/student_assistant/cleaning", icon: Calendar, color: "text-lime-500" },
+      { title: "Evaluation", url: "/student_assistant/evaluation", icon: Shield, color: "text-cyan-500" },
+      { title: "Events", url: "/student_assistant/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Reporting", url: "/student_assistant/reporting", icon: ClipboardCheck, color: "text-pink-500" },
+      { title: "Announcements", url: "/student_assistant/home/announcements", icon: Bell, color: "text-blue-500" },
+    ];
+  }
+
+  if (role === "treasurer") {
+    const treasurerItems: MenuItem[] = [
+      { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
+      { title: "Contributions", url: "/treasurer/finance/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-violet-500" },
+      { title: "Reporting", url: "/treasurer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
+      { title: "Events", url: "/treasurer/events", icon: Calendar, color: "text-orange-500" },
+    ];
+
+    if (showTreasurerMaintenance) {
+      treasurerItems.splice(2, 0, { title: "Maintenance", url: "/treasurer/finance/maintenance", icon: Wallet, color: "text-cyan-500" });
+      treasurerItems.splice(3, 0, { title: "Maintenance Expenses", url: "/treasurer/finance/expenses?category=maintenance_fee", icon: FileText, color: "text-emerald-500" });
+    }
+
+    return treasurerItems;
+  }
+
+  if (role === "officer") {
+    return [
+      { title: "Home", url: "/officer/home", icon: Home, color: "text-sky-500" },
+      { title: "Events", url: "/officer/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Expenses", url: "/officer/finance/expenses", icon: Wallet, color: "text-amber-500" },
+      { title: "Reporting", url: "/officer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
+    ];
+  }
+
+  return [
+    { title: "Home", url: `/${role}/home`, icon: Home, color: "text-sky-500" },
+    { title: "Rooms", url: `/${role}/rooms`, icon: DoorOpen, color: "text-teal-500" },
+  ];
+}
 
 export function AppSidebar() {
-  const pathname = usePathname()
-  const { role } = useAuth()
-  const { isMobile, setOpenMobile } = useSidebar()
+  const pathname = usePathname();
+  const { role } = useAuth();
+  const { activeDorm } = useDorm();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const showTreasurerMaintenance = activeDorm?.treasurer_maintenance_access === true;
 
-  const directAdminOccupants =
-    role === "admin" || role === "student_assistant"
-  const directAdminFines =
-    role === "admin" || role === "student_assistant"
-
-  const occupantRoutes = new Set([
-    "/home",
-    "/events",
-    "/payments",
-    "/fines",
-    "/evaluation",
-    "/cleaning",
-    "/committees",
-  ])
-  const staffApplicationRoles = new Set([
-    "admin",
-    "adviser",
-    "student_assistant",
-  ])
-  const aiRoles = new Set([
-    "admin",
-    "officer",
-    "student_assistant",
-    "treasurer",
-    "adviser",
-    "assistant_adviser",
-  ])
-  const visibleItems = items.filter((item) => {
-    if (!role) {
-      return item.url === "/join"
-    }
-
-    if (role === "occupant") {
-      return occupantRoutes.has(item.url)
-    }
-
-    if (item.url === "/applications") {
-      return staffApplicationRoles.has(role)
-    }
-
-    if (item.url === "/admin") {
-      return role === "admin" || role === "adviser"
-    }
-
-    if (item.url === "/ai") {
-      return role ? aiRoles.has(role) : false
-    }
-
-    if (item.url === "/admin/reporting") {
-      return new Set(["admin", "treasurer", "student_assistant", "adviser"]).has(role)
-    }
-
-    if (item.url === "/join") {
-      return false
-    }
-
-    return true
-  })
+  const menuItems = useMemo(() => getMenuItems(role, showTreasurerMaintenance), [role, showTreasurerMaintenance]);
 
   return (
     <Sidebar>
@@ -120,23 +147,18 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleItems.map((item) => {
-                const resolvedUrl =
-                  item.url === "/occupants" && directAdminOccupants
-                    ? "/admin/occupants"
-                    : item.url === "/fines" && directAdminFines
-                      ? "/admin/fines"
-                      : item.url
+              {menuItems.map((item) => {
+                const resolvedUrl = item.url;
+                const resolvedPath = resolvedUrl.split("?")[0];
+                const isActive = pathname === resolvedPath || (resolvedPath !== "/" && pathname.startsWith(`${resolvedPath}/`));
 
-                const isActive = pathname === resolvedUrl ||
-                  (resolvedUrl !== "/" && pathname.startsWith(resolvedUrl))
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link
                         href={resolvedUrl}
                         onClick={() => {
-                          if (isMobile) setOpenMobile(false)
+                          if (isMobile) setOpenMobile(false);
                         }}
                       >
                         <item.icon className={isActive ? "text-primary" : item.color} />
@@ -144,12 +166,12 @@ export function AppSidebar() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                )
+                );
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  )
+  );
 }
