@@ -275,12 +275,16 @@ export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: 
     return { error: "You do not have permission to update dorm settings." };
   }
 
-  const { error } = await supabase
+  const adminClient = createAdminClient();
+  const { data: updatedDorm, error } = await adminClient
     .from("dorms")
     .update({ treasurer_maintenance_access: enabled })
-    .eq("id", dormId);
+    .eq("id", dormId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { error: error.message };
+  if (!updatedDorm) return { error: "Failed to update dorm settings." };
 
   try {
     await logAuditEvent({
