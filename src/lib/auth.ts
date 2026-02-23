@@ -33,5 +33,5 @@ export async function getMyProfile() {
 
 export function requireRole(role: AppRole | AppRole[], myRole?: string | null) {
   const roles = Array.isArray(role) ? role : [role];
-  if (!myRole || !roles.includes(myRole as AppRole)) redirect("/dashboard");
+  if (!myRole || !roles.includes(myRole as AppRole)) redirect("/login");
 }

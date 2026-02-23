@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getDashboardStats } from "@/app/actions/dashboard";
+import { getDashboardStats } from "@/app/actions/stats";
 import { getCommittee, getCommitteeFinanceSummary, type CommitteeDetail, type CommitteeFinanceSummaryRow } from "@/app/actions/committees";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
