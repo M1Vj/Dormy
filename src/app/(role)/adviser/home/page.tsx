@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
-import { CalendarDays, ClipboardList, FileText, Shield, Wallet } from "lucide-react";
+import { CalendarDays, FileText } from "lucide-react";
 
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import { getCleaningSnapshot } from "@/app/actions/cleaning";
@@ -11,11 +11,11 @@ import { getExpenses } from "@/app/actions/expenses";
 import { StaffStatsGrid } from "@/components/dashboard/staff-stats-grid";
 import { TreasurerDashboard } from "@/components/dashboard/treasurer-dashboard";
 import { OccupantStanding } from "@/components/dashboard/occupant-standing";
-import { Badge } from "@/components/ui/badge";
+
 import { Activity, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
 import { getActiveDormId } from "@/lib/dorms";
 import { getActiveSemester } from "@/lib/semesters";
-import { getRoleLabel, getRoleSummary } from "@/lib/roles";
+import { getRoleLabel } from "@/lib/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getFineRules } from "@/app/actions/fines";
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
@@ -43,21 +43,7 @@ type OccupantSelf = {
 
 const asFirst = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] : value);
 
-function formatPesos(value: number) {
-  return `₱${value.toFixed(2)}`;
-}
 
-function normalizeMetadata(value: unknown) {
-  if (!value || typeof value !== "object") return {};
-  return value as Record<string, unknown>;
-}
-
-function parseDeadline(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
@@ -124,13 +110,8 @@ export default async function HomePage() {
         : [])?.filter((assignment) => !assignment.end_date)
   );
   const currentRoom = asFirst(asFirst(currentAssignment?.room ?? null));
-  const roomLabel = currentRoom?.code ? `Room ${currentRoom.code}` : "Room unassigned";
-  const levelLabel =
-    currentRoom?.level === null || currentRoom?.level === undefined
-      ? null
-      : `Level ${currentRoom.level}`;
 
-  const [fineRules, events, cleaningSnapshot, balance, entries, stats, expensesResult] = await Promise.all([
+  const [fineRules, events, cleaningSnapshot, balance, , stats, expensesResult] = await Promise.all([
     getFineRules(dormId),
     getEventsOverview(dormId),
     getCleaningSnapshot(),
@@ -152,10 +133,6 @@ export default async function HomePage() {
     .filter((event) => (event.starts_at ? new Date(event.starts_at) >= now : false))
     .slice(0, 4);
 
-  const evaluationAlerts = (() => {
-    // Logic to show pending evaluations if any
-    return 0;
-  })();
 
   const cleaningPlanForRoom = (() => {
     if (!currentRoom?.id) return null;
@@ -170,68 +147,6 @@ export default async function HomePage() {
     };
   })();
 
-  const eventPayables = (() => {
-    const byEvent = new Map<
-      string,
-      {
-        eventTitle: string;
-        charged: number;
-        paid: number;
-        deadline: Date | null;
-        label: string | null;
-      }
-    >();
-
-    for (const entry of entries ?? []) {
-      if (entry.voided_at) continue;
-      if (!entry.event_id) continue;
-      if (entry.ledger !== "contributions") continue;
-
-      const key = String(entry.event_id);
-      const current =
-        byEvent.get(key) ?? {
-          eventTitle: entry.event?.title ?? "Contribution",
-          charged: 0,
-          paid: 0,
-          deadline: null,
-          label: null,
-        };
-
-      const amount = Number(entry.amount_pesos ?? 0);
-      if (amount >= 0) {
-        current.charged += amount;
-      } else {
-        current.paid += Math.abs(amount);
-      }
-
-      const metadata = normalizeMetadata(entry.metadata);
-      const deadline = parseDeadline(metadata.payable_deadline);
-      if (deadline && (!current.deadline || deadline < current.deadline)) {
-        current.deadline = deadline;
-      }
-
-      if (!current.label && typeof metadata.payable_label === "string" && metadata.payable_label.trim()) {
-        current.label = metadata.payable_label.trim();
-      }
-
-      byEvent.set(key, current);
-    }
-
-    const rows = [...byEvent.entries()].map(([eventId, value]) => ({
-      eventId,
-      ...value,
-      balance: Math.max(0, value.charged - value.paid),
-    }));
-
-    return rows
-      .filter((row) => row.balance > 0)
-      .sort((a, b) => {
-        const aTime = a.deadline ? a.deadline.getTime() : Number.POSITIVE_INFINITY;
-        const bTime = b.deadline ? b.deadline.getTime() : Number.POSITIVE_INFINITY;
-        return aTime - bTime;
-      })
-      .slice(0, 4);
-  })();
 
   const rulesSummary = (() => {
     const active = (fineRules ?? []).filter((rule) => rule.active !== false);
@@ -278,7 +193,7 @@ export default async function HomePage() {
             <ShieldCheck className="h-4 w-4" />
             Clearance & Oversight
           </div>
-          <TreasurerDashboard 
+          <TreasurerDashboard
             totalCharged={stats.totalCharged}
             totalPaid={stats.totalPaid}
             pendingExpenses={pendingExpensesCount}
@@ -293,7 +208,7 @@ export default async function HomePage() {
               <UserCheck className="h-4 w-4" />
               Personal Standing
             </div>
-            <OccupantStanding 
+            <OccupantStanding
               balance={balance}
               isCleared={balance.total <= 0}
               nextCleaning={cleaningPlanForRoom ? {

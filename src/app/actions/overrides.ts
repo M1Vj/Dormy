@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 
 import { logAuditEvent } from "@/lib/audit/log";
