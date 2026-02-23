@@ -100,10 +100,10 @@ export function PublicShareDialog({
           Share Summary
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Share Contribution Summary</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Share Contribution Summary</DialogTitle>
+          <DialogDescription className="text-sm">
             Generate a secure, public link to share collection progress for <strong>{title}</strong>.
             Dormers&apos; names are hidden for privacy.
           </DialogDescription>

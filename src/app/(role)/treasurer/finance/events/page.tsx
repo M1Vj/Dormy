@@ -115,22 +115,22 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
       : null;
   const receiptSignature =
     typeof metadata.contribution_receipt_signature === "string" &&
-    metadata.contribution_receipt_signature.trim().length > 0
+      metadata.contribution_receipt_signature.trim().length > 0
       ? metadata.contribution_receipt_signature.trim()
       : null;
   const receiptSubject =
     typeof metadata.contribution_receipt_subject === "string" &&
-    metadata.contribution_receipt_subject.trim().length > 0
+      metadata.contribution_receipt_subject.trim().length > 0
       ? metadata.contribution_receipt_subject.trim()
       : null;
   const receiptMessage =
     typeof metadata.contribution_receipt_message === "string" &&
-    metadata.contribution_receipt_message.trim().length > 0
+      metadata.contribution_receipt_message.trim().length > 0
       ? metadata.contribution_receipt_message.trim()
       : null;
   const receiptLogoUrl =
     typeof metadata.contribution_receipt_logo_url === "string" &&
-    metadata.contribution_receipt_logo_url.trim().length > 0
+      metadata.contribution_receipt_logo_url.trim().length > 0
       ? metadata.contribution_receipt_logo_url.trim()
       : null;
 
@@ -483,7 +483,7 @@ export default async function EventsFinancePage({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Visible Contributions</CardTitle>
           </CardHeader>
@@ -491,7 +491,7 @@ export default async function EventsFinancePage({
             <div className="text-2xl font-semibold">{contributionGroups.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Charged</CardTitle>
           </CardHeader>
@@ -499,7 +499,7 @@ export default async function EventsFinancePage({
             <div className="text-2xl font-semibold">₱{totalCharged.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Collected</CardTitle>
           </CardHeader>
@@ -507,7 +507,7 @@ export default async function EventsFinancePage({
             <div className="text-2xl font-semibold text-emerald-600">₱{totalCollected.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Pending Collection</CardTitle>
           </CardHeader>
@@ -519,19 +519,19 @@ export default async function EventsFinancePage({
 
       <div className="space-y-3 md:hidden">
         {contributionGroups.length === 0 ? (
-          <Card>
+          <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm border-muted">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
               No contribution records found.
             </CardContent>
           </Card>
         ) : (
           contributionGroups.map((contribution) => (
-            <Card key={contribution.id}>
+            <Card key={contribution.id} className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm hover:shadow-md transition-shadow duration-200 border-muted">
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{contribution.title}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {contribution.eventTitle ? `Linked event: ${contribution.eventTitle}` : "No linked event"}
                     </p>
                   </div>
@@ -574,26 +574,26 @@ export default async function EventsFinancePage({
         )}
       </div>
 
-      <div className="hidden rounded-md border md:block">
+      <div className="hidden rounded-lg border border-muted bg-white/90 dark:bg-card/90 backdrop-blur-md md:block shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Contribution</TableHead>
-              <TableHead>Linked Event</TableHead>
-              <TableHead className="text-right">Charged</TableHead>
-              <TableHead className="text-right">Collected</TableHead>
-              <TableHead className="text-right">Remaining</TableHead>
-              <TableHead className="text-right">Participants</TableHead>
-              <TableHead>Semesters</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+            <TableRow className="hover:bg-transparent border-border/50">
+              <TableHead className="font-semibold text-foreground">Contribution</TableHead>
+              <TableHead className="font-semibold text-foreground">Linked Event</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Charged</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Collected</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Remaining</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Participants</TableHead>
+              <TableHead className="font-semibold text-foreground">Semesters</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contributionGroups.map((contribution) => (
-              <TableRow key={contribution.id}>
+              <TableRow key={contribution.id} className="border-border/50 hover:bg-muted/30 transition-colors">
                 <TableCell>
                   <div className="font-medium">{contribution.title}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground mt-1">
                     {contribution.deadline
                       ? `Deadline: ${format(new Date(contribution.deadline), "MMM d, yyyy h:mm a")}`
                       : "No deadline"}

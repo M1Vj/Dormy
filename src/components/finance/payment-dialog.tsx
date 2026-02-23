@@ -75,14 +75,14 @@ type TransactionPayload = {
   metadata?: Record<string, unknown>;
   event_id?: string;
   receipt_email?:
-    | {
-      enabled: boolean;
-      subject?: string;
-      message?: string;
-      signature?: string;
-      logo_url?: string;
-    }
-    | undefined;
+  | {
+    enabled: boolean;
+    subject?: string;
+    message?: string;
+    signature?: string;
+    logo_url?: string;
+  }
+  | undefined;
 };
 
 export function PaymentDialog({
@@ -108,26 +108,26 @@ export function PaymentDialog({
   const isContribution = category === "contributions";
   const contributionSignature =
     isContribution &&
-    typeof metadata?.contribution_receipt_signature === "string" &&
-    metadata.contribution_receipt_signature.trim().length > 0
+      typeof metadata?.contribution_receipt_signature === "string" &&
+      metadata.contribution_receipt_signature.trim().length > 0
       ? metadata.contribution_receipt_signature.trim()
       : "";
   const contributionReceiptSubject =
     isContribution &&
-    typeof metadata?.contribution_receipt_subject === "string" &&
-    metadata.contribution_receipt_subject.trim().length > 0
+      typeof metadata?.contribution_receipt_subject === "string" &&
+      metadata.contribution_receipt_subject.trim().length > 0
       ? metadata.contribution_receipt_subject.trim()
       : "";
   const contributionReceiptMessage =
     isContribution &&
-    typeof metadata?.contribution_receipt_message === "string" &&
-    metadata.contribution_receipt_message.trim().length > 0
+      typeof metadata?.contribution_receipt_message === "string" &&
+      metadata.contribution_receipt_message.trim().length > 0
       ? metadata.contribution_receipt_message.trim()
       : "";
   const contributionReceiptLogoUrl =
     isContribution &&
-    typeof metadata?.contribution_receipt_logo_url === "string" &&
-    metadata.contribution_receipt_logo_url.trim().length > 0
+      typeof metadata?.contribution_receipt_logo_url === "string" &&
+      metadata.contribution_receipt_logo_url.trim().length > 0
       ? metadata.contribution_receipt_logo_url.trim()
       : "";
 
@@ -203,18 +203,18 @@ export function PaymentDialog({
       metadata,
       receipt_email: values.sendReceiptEmail
         ? {
-            enabled: true,
-            subject: isContribution
-              ? contributionReceiptSubject || undefined
-              : values.receiptSubject?.trim() || undefined,
-            message: isContribution
-              ? contributionReceiptMessage || undefined
-              : values.receiptMessage?.trim() || undefined,
-            signature: isContribution
-              ? contributionSignature || undefined
-              : values.receiptSignature?.trim() || undefined,
-            logo_url: isContribution ? contributionReceiptLogoUrl || undefined : undefined,
-          }
+          enabled: true,
+          subject: isContribution
+            ? contributionReceiptSubject || undefined
+            : values.receiptSubject?.trim() || undefined,
+          message: isContribution
+            ? contributionReceiptMessage || undefined
+            : values.receiptMessage?.trim() || undefined,
+          signature: isContribution
+            ? contributionSignature || undefined
+            : values.receiptSignature?.trim() || undefined,
+          logo_url: isContribution ? contributionReceiptLogoUrl || undefined : undefined,
+        }
         : { enabled: false },
     };
   }
@@ -296,10 +296,10 @@ export function PaymentDialog({
             </Button>
           )}
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[560px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl font-semibold">Record Payment</DialogTitle>
+            <DialogDescription className="text-sm">
               Record a payment for {category === "maintenance_fee" ? "maintenance fee" : category === "contributions" ? "event contribution" : "fines"}.
             </DialogDescription>
           </DialogHeader>
@@ -507,10 +507,10 @@ export function PaymentDialog({
       </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Confirm Receipt Email</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl font-semibold">Confirm Receipt Email</DialogTitle>
+            <DialogDescription className="text-sm">
               Review the exact email that will be sent before finalizing this payment.
             </DialogDescription>
           </DialogHeader>

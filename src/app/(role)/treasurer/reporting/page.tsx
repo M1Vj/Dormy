@@ -329,7 +329,7 @@ export default async function TreasurerReportingPage() {
       {/* Collection Rates + Pending Expenses */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Collection Rate Breakdown */}
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-emerald-500" />
@@ -346,7 +346,7 @@ export default async function TreasurerReportingPage() {
                   <span>{collectionRate.toFixed(0)}%</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${collectionRate}%` }} />
+                  <div className="h-full bg-emerald-500 transition-all duration-500 ease-out" style={{ width: `${collectionRate}%` }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-muted-foreground">
                   <span>₱{stats.eventsPaid.toFixed(2)} collected</span>
@@ -355,23 +355,23 @@ export default async function TreasurerReportingPage() {
               </div>
               {showTreasurerMaintenance
                 ? (() => {
-                    const maintRate = stats.maintenanceCharged > 0 ? (stats.maintenancePaid / stats.maintenanceCharged) * 100 : 0;
-                    return (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-medium">
-                          <span>Maintenance Fees</span>
-                          <span>{maintRate.toFixed(0)}%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                          <div className="h-full bg-sky-500 transition-all" style={{ width: `${maintRate}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>₱{stats.maintenancePaid.toFixed(2)} collected</span>
-                          <span>₱{stats.maintenanceCharged.toFixed(2)} charged</span>
-                        </div>
+                  const maintRate = stats.maintenanceCharged > 0 ? (stats.maintenancePaid / stats.maintenanceCharged) * 100 : 0;
+                  return (
+                    <div className="space-y-1.5 mt-4">
+                      <div className="flex justify-between text-xs font-medium">
+                        <span>Maintenance Fees</span>
+                        <span>{maintRate.toFixed(0)}%</span>
                       </div>
-                    );
-                  })()
+                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-sky-500 transition-all duration-500 ease-out" style={{ width: `${maintRate}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>₱{stats.maintenancePaid.toFixed(2)} collected</span>
+                        <span>₱{stats.maintenanceCharged.toFixed(2)} charged</span>
+                      </div>
+                    </div>
+                  );
+                })()
                 : null}
             </div>
           </CardContent>
@@ -427,7 +427,7 @@ export default async function TreasurerReportingPage() {
       </div>
 
       {/* Committee Fund Health */}
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200">
         <CardHeader>
           <CardTitle>Committee Fund Health</CardTitle>
           <CardDescription>Collection rates and balances across active committees</CardDescription>
@@ -479,7 +479,7 @@ export default async function TreasurerReportingPage() {
       </Card>
 
       {/* Contribution-Expense Group Report */}
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200">
         <CardHeader>
           <CardTitle>Contribution-Expense Group Report</CardTitle>
           <CardDescription>
@@ -531,7 +531,7 @@ export default async function TreasurerReportingPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200">
         <CardHeader>
           <CardTitle>Contribution Collection Bars</CardTitle>
           <CardDescription>
@@ -567,7 +567,7 @@ export default async function TreasurerReportingPage() {
       </Card>
 
       {/* Ledger Summary Table */}
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200">
         <CardHeader>
           <CardTitle>Ledger Summary</CardTitle>
           <CardDescription>Charges and payments by category for the active semester</CardDescription>

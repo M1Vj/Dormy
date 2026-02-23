@@ -363,236 +363,236 @@ export function ContributionBatchPaymentDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button>
-            <CalendarCheck2 className="mr-2 h-4 w-4" />
-            Pay Contributions
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Record Contribution Payment</DialogTitle>
-          <DialogDescription>
-            One payment can cover multiple contributions and optionally send one combined receipt email.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button>
+              <CalendarCheck2 className="mr-2 h-4 w-4" />
+              Pay Contributions
+            </Button>
+          )}
+        </DialogTrigger>
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">Record Contribution Payment</DialogTitle>
+            <DialogDescription className="text-sm">
+              One payment can cover multiple contributions and optionally send one combined receipt email.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Occupant</Label>
-              <Select value={occupantId} onValueChange={setOccupantId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select occupant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {occupants.map((occupant) => (
-                    <SelectItem key={occupant.id} value={occupant.id}>
-                      {occupant.fullName}
-                      {occupant.studentId ? ` (${occupant.studentId})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Payment Method</Label>
-              <Select value={method} onValueChange={(value) => setMethod(value as "cash" | "gcash")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="gcash">GCash</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Contribution Selection</Label>
-            <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
-              {contributions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No payable contributions available.</p>
-              ) : (
-                contributions.map((contribution) => {
-                  const checked = selectedContributionIds.includes(contribution.id);
-                  return (
-                    <label key={contribution.id} className="flex items-start gap-3 rounded-md border p-2">
-                      <Checkbox checked={checked} onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{contribution.title}</p>
-                        <p className="text-xs text-muted-foreground">Remaining: ₱{contribution.remaining.toFixed(2)}</p>
-                      </div>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="secondary">Selected: {selectedContributionIds.length}</Badge>
-              <Badge variant="secondary">Exact Total: ₱{computedTotal.toFixed(2)}</Badge>
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Amount Paid (₱)</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={amount}
-                onChange={(event) => setAmount(parseFloat(event.target.value) || 0)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Date & Time</Label>
-              <Input type="datetime-local" value={paidAtLocal} onChange={(event) => setPaidAtLocal(event.target.value)} />
-            </div>
-          </div>
-
-          {Math.abs(amountDifference) >= 0.01 ? (
-            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-medium text-amber-700">
-                Amount difference: {amountDifference > 0 ? "+" : ""}₱{amountDifference.toFixed(2)}
-              </p>
-              <Label>Apply difference to</Label>
-              <Select value={allocationTargetId} onValueChange={setAllocationTargetId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select contribution" />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectedContributions.map((contribution) => (
-                    <SelectItem key={contribution.id} value={contribution.id}>
-                      {contribution.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          <div className="space-y-2 rounded-md border p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Label className="text-sm">Receipt Email</Label>
-                <p className="text-xs text-muted-foreground">Send one receipt containing all selected contributions.</p>
-              </div>
-              <Checkbox checked={sendReceiptEmail} onCheckedChange={(value) => setSendReceiptEmail(Boolean(value))} />
-            </div>
-
-            {sendReceiptEmail ? (
-              <div className="space-y-3 pt-2">
-                <div className="space-y-2">
-                  <Label>Override Recipient Email (Optional)</Label>
-                  <Input
-                    value={receiptEmailOverride}
-                    onChange={(event) => setReceiptEmailOverride(event.target.value)}
-                    placeholder="name@example.com"
-                  />
-                </div>
-
-                <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-                  <Label>Saved Receipt Template Source</Label>
-                  {hasMixedContributionSignatures ? (
-                    <p className="text-xs text-destructive">
-                      Selected contributions use different signatures. Select contributions that share one signature.
-                    </p>
-                  ) : hasMissingContributionSignature || !selectedContributionSignature ? (
-                    <p className="text-xs text-destructive">
-                      Set the receipt signature on the contribution page before sending this email.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Subject</p>
-                        <p className="text-sm font-medium">
-                          {hasMixedContributionSubjects
-                            ? "Mixed templates"
-                            : selectedContributionSubject || "Contribution payment receipt"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Message</p>
-                        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                          {hasMixedContributionMessages
-                            ? "Mixed templates"
-                            : selectedContributionMessage || "Default contribution receipt message will be used."}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Logo</p>
-                        {hasMixedContributionLogos ? (
-                          <p className="text-xs text-destructive">Selected contributions use different logos.</p>
-                        ) : selectedContributionLogoUrl ? (
-                          <img
-                            src={selectedContributionLogoUrl}
-                            alt="Contribution logo"
-                            className="mt-2 max-h-16 w-auto rounded border bg-white p-2"
-                          />
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No logo saved for this template.</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Signature</p>
-                        {selectedContributionSignature.startsWith("http") ? (
-                          <img
-                            src={selectedContributionSignature}
-                            alt="Contribution signature"
-                            className="mt-2 max-h-20 w-auto rounded border bg-white p-2"
-                          />
-                        ) : (
-                          <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
-                            {selectedContributionSignature}
-                          </pre>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-md bg-muted/40 p-3">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Preview Summary</p>
-                  <div className="space-y-1 text-xs">
-                    {previewRows.map((row, index) => (
-                      <div key={`${row.title}-${index}`} className="flex justify-between gap-4">
-                        <span className="truncate">{row.title}</span>
-                        <span>₱{Math.max(0, row.amount).toFixed(2)}</span>
-                      </div>
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Occupant</Label>
+                <Select value={occupantId} onValueChange={setOccupantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select occupant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {occupants.map((occupant) => (
+                      <SelectItem key={occupant.id} value={occupant.id}>
+                        {occupant.fullName}
+                        {occupant.studentId ? ` (${occupant.studentId})` : ""}
+                      </SelectItem>
                     ))}
-                    <div className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold">
-                      <span>Total</span>
-                      <span>₱{amount.toFixed(2)}</span>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Select value={method} onValueChange={(value) => setMethod(value as "cash" | "gcash")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="gcash">GCash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Contribution Selection</Label>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                {contributions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No payable contributions available.</p>
+                ) : (
+                  contributions.map((contribution) => {
+                    const checked = selectedContributionIds.includes(contribution.id);
+                    return (
+                      <label key={contribution.id} className="flex items-start gap-3 rounded-md border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                        <Checkbox checked={checked} onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))} className="mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium leading-none">{contribution.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1.5">Remaining: <span className="font-semibold text-foreground">₱{contribution.remaining.toFixed(2)}</span></p>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1 font-medium">
+                <Badge variant="secondary" className="bg-secondary/50">Selected: {selectedContributionIds.length}</Badge>
+                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Exact Total: ₱{computedTotal.toFixed(2)}</Badge>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Amount Paid (₱)</Label>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={amount}
+                  onChange={(event) => setAmount(parseFloat(event.target.value) || 0)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Date & Time</Label>
+                <Input type="datetime-local" value={paidAtLocal} onChange={(event) => setPaidAtLocal(event.target.value)} />
+              </div>
+            </div>
+
+            {Math.abs(amountDifference) >= 0.01 ? (
+              <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-medium text-amber-700">
+                  Amount difference: {amountDifference > 0 ? "+" : ""}₱{amountDifference.toFixed(2)}
+                </p>
+                <Label>Apply difference to</Label>
+                <Select value={allocationTargetId} onValueChange={setAllocationTargetId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select contribution" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedContributions.map((contribution) => (
+                      <SelectItem key={contribution.id} value={contribution.id}>
+                        {contribution.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Receipt Email</Label>
+                  <p className="text-xs text-muted-foreground">Send one receipt containing all selected contributions.</p>
+                </div>
+                <Checkbox checked={sendReceiptEmail} onCheckedChange={(value) => setSendReceiptEmail(Boolean(value))} />
+              </div>
+
+              {sendReceiptEmail ? (
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-2">
+                    <Label>Override Recipient Email (Optional)</Label>
+                    <Input
+                      value={receiptEmailOverride}
+                      onChange={(event) => setReceiptEmailOverride(event.target.value)}
+                      placeholder="name@example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                    <Label>Saved Receipt Template Source</Label>
+                    {hasMixedContributionSignatures ? (
+                      <p className="text-xs text-destructive">
+                        Selected contributions use different signatures. Select contributions that share one signature.
+                      </p>
+                    ) : hasMissingContributionSignature || !selectedContributionSignature ? (
+                      <p className="text-xs text-destructive">
+                        Set the receipt signature on the contribution page before sending this email.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Subject</p>
+                          <p className="text-sm font-medium">
+                            {hasMixedContributionSubjects
+                              ? "Mixed templates"
+                              : selectedContributionSubject || "Contribution payment receipt"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Message</p>
+                          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                            {hasMixedContributionMessages
+                              ? "Mixed templates"
+                              : selectedContributionMessage || "Default contribution receipt message will be used."}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Logo</p>
+                          {hasMixedContributionLogos ? (
+                            <p className="text-xs text-destructive">Selected contributions use different logos.</p>
+                          ) : selectedContributionLogoUrl ? (
+                            <img
+                              src={selectedContributionLogoUrl}
+                              alt="Contribution logo"
+                              className="mt-2 max-h-16 w-auto rounded border bg-white p-2"
+                            />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No logo saved for this template.</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Signature</p>
+                          {selectedContributionSignature.startsWith("http") ? (
+                            <img
+                              src={selectedContributionSignature}
+                              alt="Contribution signature"
+                              className="mt-2 max-h-20 w-auto rounded border bg-white p-2"
+                            />
+                          ) : (
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
+                              {selectedContributionSignature}
+                            </pre>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-md bg-muted/40 p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Preview Summary</p>
+                    <div className="space-y-1 text-xs">
+                      {previewRows.map((row, index) => (
+                        <div key={`${row.title}-${index}`} className="flex justify-between gap-4">
+                          <span className="truncate">{row.title}</span>
+                          <span>₱{Math.max(0, row.amount).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      <div className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold">
+                        <span>Total</span>
+                        <span>₱{amount.toFixed(2)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleProceedToConfirmation}
-            disabled={isSubmitting || isPreparingPreview || selectedContributionIds.length === 0}
-          >
-            {isPreparingPreview || isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Submit Payment
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleProceedToConfirmation}
+              disabled={isSubmitting || isPreparingPreview || selectedContributionIds.length === 0}
+            >
+              {isPreparingPreview || isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Submit Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>
             <DialogTitle>Confirm Receipt Email</DialogTitle>
             <DialogDescription>

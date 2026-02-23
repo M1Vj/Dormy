@@ -85,10 +85,10 @@ export function ContributionPayableOverrideDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Change Payable</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Change Payable</DialogTitle>
+          <DialogDescription className="text-sm">
             Set a custom payable amount for this occupant in the selected contribution.
           </DialogDescription>
         </DialogHeader>

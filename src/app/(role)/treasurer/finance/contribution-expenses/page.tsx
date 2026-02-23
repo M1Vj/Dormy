@@ -148,7 +148,7 @@ export default async function TreasurerContributionExpensesPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Expense Groups</CardTitle>
           </CardHeader>
@@ -156,7 +156,7 @@ export default async function TreasurerContributionExpensesPage() {
             <div className="text-2xl font-semibold">{groups.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
           </CardHeader>
@@ -164,7 +164,7 @@ export default async function TreasurerContributionExpensesPage() {
             <div className="text-2xl font-semibold">₱{grandTotal.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Approved</CardTitle>
           </CardHeader>
@@ -172,7 +172,7 @@ export default async function TreasurerContributionExpensesPage() {
             <div className="text-2xl font-semibold text-emerald-600">₱{approvedTotal.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
           </CardHeader>
@@ -184,12 +184,12 @@ export default async function TreasurerContributionExpensesPage() {
 
       <div className="space-y-3 md:hidden">
         {groups.length === 0 ? (
-          <Card>
+          <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm border-muted">
             <CardContent className="p-6 text-center text-sm text-muted-foreground">No grouped contribution expenses yet.</CardContent>
           </Card>
         ) : (
           groups.map((group) => (
-            <Card key={group.name}>
+            <Card key={group.name} className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm hover:shadow-md transition-shadow duration-200 border-muted">
               <CardContent className="space-y-2 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -218,23 +218,23 @@ export default async function TreasurerContributionExpensesPage() {
         )}
       </div>
 
-      <div className="hidden rounded-md border md:block">
+      <div className="hidden rounded-lg border border-muted bg-white/90 dark:bg-card/90 backdrop-blur-md md:block shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Group</TableHead>
-              <TableHead>Linked Contribution</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Approved</TableHead>
-              <TableHead className="text-right">Pending</TableHead>
-              <TableHead>Last Purchase</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+            <TableRow className="hover:bg-transparent border-border/50">
+              <TableHead className="font-semibold text-foreground">Group</TableHead>
+              <TableHead className="font-semibold text-foreground">Linked Contribution</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Items</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Approved</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Pending</TableHead>
+              <TableHead className="font-semibold text-foreground">Last Purchase</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {groups.map((group) => (
-              <TableRow key={group.name}>
+              <TableRow key={group.name} className="border-border/50 hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">{group.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {group.linkedContributionTitles.length > 0 ? group.linkedContributionTitles.join(", ") : "—"}

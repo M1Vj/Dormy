@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, PenSquare } from "lucide-react";
+import { PenSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import { overwriteLedgerEntry } from "@/app/actions/finance";
@@ -113,10 +113,10 @@ export function LedgerOverwriteDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Overwrite ledger entry</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Overwrite ledger entry</DialogTitle>
+          <DialogDescription className="text-sm">
             Voids the original transaction and creates a corrected replacement entry.
           </DialogDescription>
         </DialogHeader>

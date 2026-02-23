@@ -148,22 +148,22 @@ function parseContributionMetadata(entry: EntryRow) {
     deadline: parseDeadline(metadata.payable_deadline),
     receiptSignature:
       typeof metadata.contribution_receipt_signature === "string" &&
-      metadata.contribution_receipt_signature.trim().length > 0
+        metadata.contribution_receipt_signature.trim().length > 0
         ? metadata.contribution_receipt_signature.trim()
         : null,
     receiptSubject:
       typeof metadata.contribution_receipt_subject === "string" &&
-      metadata.contribution_receipt_subject.trim().length > 0
+        metadata.contribution_receipt_subject.trim().length > 0
         ? metadata.contribution_receipt_subject.trim()
         : null,
     receiptMessage:
       typeof metadata.contribution_receipt_message === "string" &&
-      metadata.contribution_receipt_message.trim().length > 0
+        metadata.contribution_receipt_message.trim().length > 0
         ? metadata.contribution_receipt_message.trim()
         : null,
     receiptLogoUrl:
       typeof metadata.contribution_receipt_logo_url === "string" &&
-      metadata.contribution_receipt_logo_url.trim().length > 0
+        metadata.contribution_receipt_logo_url.trim().length > 0
         ? metadata.contribution_receipt_logo_url.trim()
         : null,
   };
@@ -411,12 +411,12 @@ export default async function EventDetailsPage({
       </div>
 
       {contributionDetails ? (
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm border-muted">
           <CardContent className="pt-6 text-sm text-muted-foreground">{contributionDetails}</CardContent>
         </Card>
       ) : null}
 
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm border-muted">
         <CardContent className="pt-6">
           <ContributionReceiptSignatureForm
             dormId={dormId}
@@ -428,7 +428,7 @@ export default async function EventDetailsPage({
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Payable</CardTitle>
           </CardHeader>
@@ -436,7 +436,7 @@ export default async function EventDetailsPage({
             <div className="text-2xl font-semibold">₱{totalPayable.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Collected</CardTitle>
           </CardHeader>
@@ -444,7 +444,7 @@ export default async function EventDetailsPage({
             <div className="text-2xl font-semibold text-emerald-600">₱{totalCollected.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Remaining</CardTitle>
           </CardHeader>
@@ -452,7 +452,7 @@ export default async function EventDetailsPage({
             <div className="text-2xl font-semibold text-rose-600">₱{totalRemaining.toFixed(2)}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Occupants</CardTitle>
           </CardHeader>
@@ -460,7 +460,7 @@ export default async function EventDetailsPage({
             <div className="text-2xl font-semibold">{occupantRows.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Payable Deadline</CardTitle>
           </CardHeader>
@@ -475,7 +475,7 @@ export default async function EventDetailsPage({
         </Card>
       </div>
 
-      <Card>
+      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md border-muted">
         <CardHeader className="space-y-4">
           <CardTitle>Occupant payments</CardTitle>
           <form className="grid gap-2 sm:grid-cols-[1fr_180px_auto]" method="GET">
@@ -518,7 +518,7 @@ export default async function EventDetailsPage({
                 const roomCode = getRoomCode(occupant);
 
                 return (
-                  <div key={occupant.id} className="space-y-3 rounded-lg border p-3">
+                  <div key={occupant.id} className="space-y-3 rounded-lg border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-medium">{occupant.full_name ?? "Unnamed"}</p>
@@ -598,23 +598,23 @@ export default async function EventDetailsPage({
             )}
           </div>
 
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden overflow-x-auto rounded-lg border border-muted bg-white/90 dark:bg-card/90 backdrop-blur-md md:block shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Occupant</TableHead>
-                  <TableHead>Room</TableHead>
-                  <TableHead className="text-right">Payable</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
-                  <TableHead className="text-right">Deadline</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                <TableRow className="hover:bg-transparent border-border/50">
+                  <TableHead className="font-semibold text-foreground">Occupant</TableHead>
+                  <TableHead className="font-semibold text-foreground">Room</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Payable</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Paid</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Remaining</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Deadline</TableHead>
+                  <TableHead className="text-center font-semibold text-foreground">Status</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredOccupants.map((occupant) => (
-                  <TableRow key={occupant.id}>
+                  <TableRow key={occupant.id} className="border-border/50 hover:bg-muted/30 transition-colors">
                     <TableCell>
                       <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>

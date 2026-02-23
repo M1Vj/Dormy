@@ -74,10 +74,10 @@ export function SubmitExpenseDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[88vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[88vh] overflow-y-auto bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>{triggerLabel}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">{triggerLabel}</DialogTitle>
+          <DialogDescription className="text-sm">
             {committeeId
               ? "Submit a committee expense request with optional receipt photo."
               : "Record a dorm purchase or operating expense with optional receipt photo."}
@@ -134,8 +134,8 @@ export function SubmitExpenseDialog({
           </div>
 
           {category === "contributions" ? (
-            <div className="space-y-4 rounded-md border p-3">
-              <p className="text-sm font-medium">Contribution Expense Transparency</p>
+            <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-4">
+              <p className="text-sm font-medium text-foreground">Contribution Expense Transparency</p>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">

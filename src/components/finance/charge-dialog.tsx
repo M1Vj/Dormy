@@ -94,10 +94,10 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Record Charge</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Record Charge</DialogTitle>
+          <DialogDescription className="text-sm">
             Add a charge to the {category === 'maintenance_fee' ? 'maintenance' : category === 'contributions' ? 'events' : 'fines'} ledger.
           </DialogDescription>
         </DialogHeader>

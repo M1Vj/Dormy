@@ -137,10 +137,10 @@ export function ContributionBatchDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[460px]">
+      <DialogContent className="sm:max-w-[460px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Create contribution record</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-semibold">Create contribution record</DialogTitle>
+          <DialogDescription className="text-sm">
             Create a contribution for all active occupants with optional event linkage and deadline.
           </DialogDescription>
         </DialogHeader>
