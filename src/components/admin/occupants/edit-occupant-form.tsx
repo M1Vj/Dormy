@@ -35,11 +35,13 @@ export function EditOccupantForm({
   occupant,
   committees,
   showSystemAccess = true,
+  role = "admin",
 }: {
   dormId: string;
   occupant: Occupant;
   committees?: CommitteeRef[];
   showSystemAccess?: boolean;
+  role?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -55,7 +57,7 @@ export function EditOccupantForm({
       if (result.error) {
         alert(result.error); // Fallback
       } else {
-        router.push(`/admin/occupants/${occupant.id}`); // Exit edit mode
+        router.push(`/${role || "admin"}/occupants/${occupant.id}`); // Exit edit mode
         router.refresh();
       }
     });
@@ -289,7 +291,7 @@ export function EditOccupantForm({
           type="button"
           variant="outline"
           isLoading={isPending}
-          onClick={() => router.push(`/admin/occupants/${occupant.id}`)}
+          onClick={() => router.push(`/${role || "admin"}/occupants/${occupant.id}`)}
         >
           Cancel
         </Button>

@@ -202,6 +202,7 @@ export default async function AdminOccupantProfilePage(props: {
               dormId={activeDormId!}
               occupant={occupant}
               committees={committeesRaw}
+              role={myRole}
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
