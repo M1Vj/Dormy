@@ -187,39 +187,43 @@ export async function getSemesterWorkspace(dormId: string | null): Promise<Semes
 
   const [activeSemester, semesters, archives] = await Promise.all(baseFetches);
 
-  // Occupants and ledger entries only make sense for a specific dorm
   let activeOccupants: SemesterWorkspace["activeOccupants"] = [];
   let outstandingMoney: SemesterWorkspace["outstandingMoney"] = { total: 0, byLedger: { maintenance_fee: 0, sa_fines: 0, contributions: 0 } };
 
+  let occupantsQuery = supabase
+    .from("occupants")
+    .select("id, full_name, student_id, course:classification")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  let entriesQuery = supabase
+    .from("ledger_entries")
+    .select("ledger, amount_pesos")
+    .is("voided_at", null);
+
   if (dormId) {
-    const [occupantsResult, entriesResult] = await Promise.all([
-      supabase
-        .from("occupants")
-        .select("id, full_name, student_id, course:classification")
-        .eq("dorm_id", dormId)
-        .eq("status", "active")
-        .order("full_name", { ascending: true }),
-      supabase
-        .from("ledger_entries")
-        .select("ledger, amount_pesos")
-        .eq("dorm_id", dormId)
-        .is("voided_at", null),
-    ]);
+    occupantsQuery = occupantsQuery.eq("dorm_id", dormId);
+    entriesQuery = entriesQuery.eq("dorm_id", dormId);
+  }
 
-    if (!occupantsResult.error) {
-      activeOccupants = occupantsResult.data?.map((occupant) => ({
-        id: occupant.id,
-        full_name: occupant.full_name,
-        student_id: occupant.student_id,
-        course: occupant.course,
-      })) ?? [];
-    }
+  const [occupantsResult, entriesResult] = await Promise.all([
+    occupantsQuery,
+    entriesQuery,
+  ]);
 
-    if (!entriesResult.error) {
-      outstandingMoney = summarizeOutstandingLedger(
-        (entriesResult.data ?? []) as Array<{ ledger: string; amount_pesos: number | string | null }>
-      );
-    }
+  if (!occupantsResult.error) {
+    activeOccupants = occupantsResult.data?.map((occupant) => ({
+      id: occupant.id,
+      full_name: occupant.full_name,
+      student_id: occupant.student_id,
+      course: occupant.course,
+    })) ?? [];
+  }
+
+  if (!entriesResult.error) {
+    outstandingMoney = summarizeOutstandingLedger(
+      (entriesResult.data ?? []) as Array<{ ledger: string; amount_pesos: number | string | null }>
+    );
   }
 
   return {

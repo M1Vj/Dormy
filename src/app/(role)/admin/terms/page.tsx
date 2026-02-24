@@ -22,23 +22,20 @@ export default async function AdminTermsPage() {
     redirect("/login");
   }
 
-  // Get the admin's first managed dorm for semester scoping
+  // Verify the user is an admin
   const { data: adminMemberships } = await supabase
     .from("dorm_memberships")
-    .select("dorm_id, dorms(name)")
+    .select("dorm_id")
     .eq("user_id", user.id)
     .eq("role", "admin")
     .limit(1);
 
-  const firstMembership = adminMemberships?.[0];
-  if (!firstMembership?.dorm_id) {
-    return <div className="p-6 text-sm text-muted-foreground">No managed dormitory found.</div>;
+  if (!adminMemberships?.length) {
+    return <div className="p-6 text-sm text-muted-foreground">You do not have permission to manage global semesters.</div>;
   }
 
-  const dormId = firstMembership.dorm_id;
-  const dormName = (firstMembership.dorms as any)?.name ?? "Dormitory";
-
-  const workspace = await getSemesterWorkspace(dormId);
+  // Pass null for global semester management
+  const workspace = await getSemesterWorkspace(null);
   if ("error" in workspace) {
     return <div className="p-6 text-sm text-muted-foreground">{workspace.error}</div>;
   }
@@ -46,14 +43,14 @@ export default async function AdminTermsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Semester management</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">System-wide Semesters</h1>
         <p className="text-sm text-muted-foreground">
-          Manage semesters for <span className="font-medium">{dormName}</span>. Semesters activate automatically based on their dates.
+          Manage global semesters applicable to all dormitories. Semesters activate automatically based on their dates.
         </p>
       </div>
 
       <SemesterManagement
-        dormId={dormId}
+        dormId={null}
         activeSemester={workspace.activeSemester}
         semesters={workspace.semesters}
         activeOccupants={workspace.activeOccupants}
