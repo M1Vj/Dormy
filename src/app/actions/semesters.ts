@@ -10,6 +10,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Null-safe dorm_id filter: `.eq()` doesn't match SQL NULL, use `.is()` instead. */
+function filterDormId<T extends { eq: (col: string, val: string) => T; is: (col: string, val: null) => T }>(query: T, dormId: string | null): T {
+  return dormId ? query.eq("dorm_id", dormId) : query.is("dorm_id", null);
+}
+
 
 
 const semesterPlanSchema = z.object({
@@ -98,7 +103,7 @@ function assertDateRange(startsOn: string, endsOn: string) {
   return { start, end } as const;
 }
 
-async function requireSemesterManager(dormId: string): Promise<ManagerContext | { error: string }> {
+async function requireSemesterManager(dormId: string | null): Promise<ManagerContext | { error: string }> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
@@ -112,29 +117,56 @@ async function requireSemesterManager(dormId: string): Promise<ManagerContext | 
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  let role: string | null = null;
 
-  if (error || !membership?.role) {
-    return { error: error?.message ?? "Dorm membership not found." };
+  if (dormId) {
+    const { data: membership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    role = membership?.role ?? null;
+
+    // Fallback: admin in ANY dorm can manage semesters for any dorm
+    if (!role || !new Set(["admin", "adviser"]).has(role)) {
+      const { data: adminMembership } = await supabase
+        .from("dorm_memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .limit(1);
+      if (adminMembership?.[0]?.role === "admin") {
+        role = "admin";
+      }
+    }
+  } else {
+    // Global management: check if admin in any dorm
+    const { data: adminMembership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1);
+    role = adminMembership?.[0]?.role ?? null;
   }
 
-  if (!new Set(["admin", "adviser"]).has(membership.role)) {
+  if (!role) {
+    return { error: "Dorm membership or permission not found." };
+  }
+
+  if (!new Set(["admin", "adviser"]).has(role)) {
     return { error: "You do not have permission to manage semesters." };
   }
 
   return {
     supabase,
     userId: user.id,
-    role: membership.role,
+    role,
   };
 }
 
-export async function getSemesterWorkspace(dormId: string): Promise<SemesterWorkspace | { error: string }> {
+export async function getSemesterWorkspace(dormId: string | null): Promise<SemesterWorkspace | { error: string }> {
   const manager = await requireSemesterManager(dormId);
   if ("error" in manager) {
     return manager;
@@ -147,49 +179,59 @@ export async function getSemesterWorkspace(dormId: string): Promise<SemesterWork
     return { error: ensureResult.error ?? "Failed to resolve active semester." };
   }
 
-  const [activeSemester, semesters, archives, occupantsResult, entriesResult] = await Promise.all([
+  const baseFetches: [Promise<any>, Promise<any>, Promise<any>] = [
     getActiveSemester(dormId, supabase),
     listDormSemesters(dormId, supabase),
-    listDormSemesterArchives(dormId, supabase),
-    supabase
-      .from("occupants")
-      .select("id, full_name, student_id, course:classification")
-      .eq("dorm_id", dormId)
-      .eq("status", "active")
-      .order("full_name", { ascending: true }),
-    supabase
-      .from("ledger_entries")
-      .select("ledger, amount_pesos")
-      .eq("dorm_id", dormId)
-      .is("voided_at", null),
-  ]);
+    dormId ? listDormSemesterArchives(dormId, supabase) : Promise.resolve([]),
+  ];
 
-  if (occupantsResult.error) {
-    return { error: occupantsResult.error.message };
-  }
+  const [activeSemester, semesters, archives] = await Promise.all(baseFetches);
 
-  if (entriesResult.error) {
-    return { error: entriesResult.error.message };
+  // Occupants and ledger entries only make sense for a specific dorm
+  let activeOccupants: SemesterWorkspace["activeOccupants"] = [];
+  let outstandingMoney: SemesterWorkspace["outstandingMoney"] = { total: 0, byLedger: { maintenance_fee: 0, sa_fines: 0, contributions: 0 } };
+
+  if (dormId) {
+    const [occupantsResult, entriesResult] = await Promise.all([
+      supabase
+        .from("occupants")
+        .select("id, full_name, student_id, course:classification")
+        .eq("dorm_id", dormId)
+        .eq("status", "active")
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("ledger_entries")
+        .select("ledger, amount_pesos")
+        .eq("dorm_id", dormId)
+        .is("voided_at", null),
+    ]);
+
+    if (!occupantsResult.error) {
+      activeOccupants = occupantsResult.data?.map((occupant) => ({
+        id: occupant.id,
+        full_name: occupant.full_name,
+        student_id: occupant.student_id,
+        course: occupant.course,
+      })) ?? [];
+    }
+
+    if (!entriesResult.error) {
+      outstandingMoney = summarizeOutstandingLedger(
+        (entriesResult.data ?? []) as Array<{ ledger: string; amount_pesos: number | string | null }>
+      );
+    }
   }
 
   return {
     activeSemester,
     semesters,
     archives,
-    activeOccupants:
-      occupantsResult.data?.map((occupant) => ({
-        id: occupant.id,
-        full_name: occupant.full_name,
-        student_id: occupant.student_id,
-        course: occupant.course,
-      })) ?? [],
-    outstandingMoney: summarizeOutstandingLedger(
-      (entriesResult.data ?? []) as Array<{ ledger: string; amount_pesos: number | string | null }>
-    ),
+    activeOccupants,
+    outstandingMoney,
   };
 }
 
-export async function createSemester(dormId: string, formData: FormData) {
+export async function createSemester(dormId: string | null, formData: FormData) {
   const manager = await requireSemesterManager(dormId);
   if ("error" in manager) {
     return { error: manager.error ?? "Failed to resolve permissions." };
@@ -215,13 +257,13 @@ export async function createSemester(dormId: string, formData: FormData) {
   const { supabase, userId } = manager;
 
   // Overlap validation
-  const { data: overlapping } = await supabase
+  let overlapQuery = supabase
     .from("dorm_semesters")
     .select("id")
-    .eq("dorm_id", dormId)
     .or(`and(starts_on.lte.${parsed.data.ends_on},ends_on.gte.${parsed.data.starts_on})`)
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  overlapQuery = filterDormId(overlapQuery, dormId);
+  const { data: overlapping } = await overlapQuery.maybeSingle();
 
   if (overlapping) {
     return { error: "The selected dates overlap with an existing semester." };
@@ -236,7 +278,7 @@ export async function createSemester(dormId: string, formData: FormData) {
       label: parsed.data.label,
       starts_on: parsed.data.starts_on,
       ends_on: parsed.data.ends_on,
-      status: "active", // Default status, though mostly ignored for date checks
+      status: "planned", // Status is "planned" on creation; the system activates based on date range
     })
     .select("id")
     .single();
@@ -247,7 +289,7 @@ export async function createSemester(dormId: string, formData: FormData) {
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId ?? "global",
       actorUserId: userId,
       action: "semester.created",
       entityType: "semester",
@@ -269,7 +311,7 @@ export async function createSemester(dormId: string, formData: FormData) {
   return { success: true };
 }
 
-export async function updateSemester(dormId: string, formData: FormData) {
+export async function updateSemester(dormId: string | null, formData: FormData) {
   const manager = await requireSemesterManager(dormId);
   if ("error" in manager) {
     return { error: manager.error ?? "Failed to resolve permissions." };
@@ -300,20 +342,20 @@ export async function updateSemester(dormId: string, formData: FormData) {
   const { supabase, userId } = manager;
 
   // Overlap validation excluding itself
-  const { data: overlapping } = await supabase
+  let overlapQuery2 = supabase
     .from("dorm_semesters")
     .select("id")
-    .eq("dorm_id", dormId)
     .neq("id", semesterId)
     .or(`and(starts_on.lte.${parsed.data.ends_on},ends_on.gte.${parsed.data.starts_on})`)
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  overlapQuery2 = filterDormId(overlapQuery2, dormId);
+  const { data: overlapping } = await overlapQuery2.maybeSingle();
 
   if (overlapping) {
     return { error: "The selected dates overlap with another existing semester." };
   }
 
-  const { error } = await supabase
+  let updateQuery = supabase
     .from("dorm_semesters")
     .update({
       school_year: parsed.data.school_year,
@@ -323,8 +365,9 @@ export async function updateSemester(dormId: string, formData: FormData) {
       ends_on: parsed.data.ends_on,
       updated_at: new Date().toISOString(),
     })
-    .eq("dorm_id", dormId)
     .eq("id", semesterId);
+  updateQuery = filterDormId(updateQuery, dormId);
+  const { error } = await updateQuery;
 
   if (error) {
     return { error: error.message ?? "Failed to update semester." };
@@ -332,7 +375,7 @@ export async function updateSemester(dormId: string, formData: FormData) {
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId ?? "global",
       actorUserId: userId,
       action: "semester.updated",
       entityType: "semester",
@@ -354,7 +397,7 @@ export async function updateSemester(dormId: string, formData: FormData) {
   return { success: true };
 }
 
-export async function deleteSemester(dormId: string, formData: FormData) {
+export async function deleteSemester(dormId: string | null, formData: FormData) {
   const manager = await requireSemesterManager(dormId);
   if ("error" in manager) {
     return { error: manager.error ?? "Failed to resolve permissions." };
@@ -368,11 +411,12 @@ export async function deleteSemester(dormId: string, formData: FormData) {
   const { supabase, userId } = manager;
 
   // Attempt to delete. This will fail if there are foreign key constraints currently restricting it.
-  const { error } = await supabase
+  let deleteQuery = supabase
     .from("dorm_semesters")
     .delete()
-    .eq("dorm_id", dormId)
     .eq("id", semesterId);
+  deleteQuery = filterDormId(deleteQuery, dormId);
+  const { error } = await deleteQuery;
 
   if (error) {
     if (error.code === "23503") {
@@ -383,7 +427,7 @@ export async function deleteSemester(dormId: string, formData: FormData) {
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId ?? "global",
       actorUserId: userId,
       action: "semester.deleted",
       entityType: "semester",
