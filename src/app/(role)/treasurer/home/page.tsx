@@ -166,8 +166,11 @@ export default async function TreasurerHomePage() {
           <CardContent className="space-y-3">
             {announcements.length ? (
               announcements.map((announcement) => (
-                <div key={announcement.id} className="rounded-md border p-3">
-                  <p className="text-sm font-medium">{announcement.title}</p>
+                <div key={announcement.id} className={`rounded-md border p-3 ${!announcement.dorm_id ? "border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
+                    <p className="text-sm font-medium">{announcement.title}</p>
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{announcement.body}</p>
                 </div>
               ))
