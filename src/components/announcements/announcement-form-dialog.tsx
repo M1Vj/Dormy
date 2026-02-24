@@ -49,7 +49,7 @@ export function AnnouncementFormDialog({
   trigger,
   committeeId,
 }: {
-  dormId: string;
+  dormId: string | null;
   mode: "create" | "edit";
   announcement?: DormAnnouncement;
   trigger?: React.ReactNode;

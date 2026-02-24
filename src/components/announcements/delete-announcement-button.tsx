@@ -11,7 +11,7 @@ export function DeleteAnnouncementButton({
   dormId,
   announcementId,
 }: {
-  dormId: string;
+  dormId: string | null;
   announcementId: string;
 }) {
   const router = useRouter();
