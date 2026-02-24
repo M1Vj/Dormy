@@ -38,9 +38,9 @@ const systemAccessSchema = z.object({
     "assistant_adviser",
     "occupant",
     "officer",
-  ]).optional(),
-  committee_id: z.string().uuid().optional().or(z.literal("")),
-  committee_role: z.enum(["head", "co-head", "member"]).optional().or(z.literal("")),
+  ]).optional().nullable(),
+  committee_id: z.string().uuid().optional().nullable().or(z.literal("")),
+  committee_role: z.enum(["head", "co-head", "member"]).optional().nullable().or(z.literal("")),
 });
 
 type RoomRef = {

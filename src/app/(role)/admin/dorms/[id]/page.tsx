@@ -18,6 +18,7 @@ type SearchParams = {
   status?: string | string[];
   room?: string | string[];
   level?: string | string[];
+  tab?: string | string[];
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -54,6 +55,7 @@ export default async function DormDetailPage({
   const trimmedStatus = status?.trim() || undefined;
   const trimmedRoom = room?.trim() || undefined;
   const trimmedLevel = level?.trim() || undefined;
+  const tab = normalizeParam(searchParamsValue?.tab) || "management";
 
   const [personnel, occupants] = await Promise.all([
     getDormPersonnel(id),
@@ -104,7 +106,7 @@ export default async function DormDetailPage({
         </div>
       </div>
 
-      <Tabs defaultValue="management" className="w-full">
+      <Tabs defaultValue={tab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
           <TabsTrigger value="management">Management</TabsTrigger>
           <TabsTrigger value="occupants">Occupants</TabsTrigger>

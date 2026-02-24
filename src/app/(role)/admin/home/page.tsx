@@ -53,7 +53,7 @@ export default async function AdminHomePage() {
         </p>
       </div>
 
-      <Card className="border-l-4 border-l-teal-600 bg-teal-50/30 dark:bg-teal-950/10">
+      <Card className="border-l-4 border-l-emerald-600 bg-emerald-50/30 dark:bg-emerald-950/10">
         <CardHeader>
           <CardTitle className="text-base">Global Statistics</CardTitle>
           <CardDescription>
@@ -79,7 +79,7 @@ export default async function AdminHomePage() {
           </div>
           <div className="rounded-md border bg-card p-3 shadow-sm transition-all hover:shadow-md">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Managed Dorms</p>
-            <p className="mt-1 text-2xl font-bold text-teal-600">{totalDorms}</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-600">{totalDorms}</p>
           </div>
         </CardContent>
       </Card>
