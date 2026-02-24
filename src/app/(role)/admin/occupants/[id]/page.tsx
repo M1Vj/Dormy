@@ -133,9 +133,11 @@ export default async function AdminOccupantProfilePage(props: {
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Occupant not found.</p>
-        <BackButton variant="secondary" fallbackHref="/admin/dorms">
-          Back to occupants
-        </BackButton>
+        <Button asChild variant="secondary">
+          <Link href={`/admin/dorms/${occupantDormId}?tab=occupants`}>
+            Back to occupants
+          </Link>
+        </Button>
       </div>
     );
   }
@@ -210,9 +212,11 @@ export default async function AdminOccupantProfilePage(props: {
               triggerLabel="Export statement"
             />
           )}
-          <BackButton variant="secondary" fallbackHref="/admin/dorms">
-            Back to occupants
-          </BackButton>
+          <Button asChild variant="secondary">
+            <Link href={`/admin/dorms/${occupantDormId}?tab=occupants`}>
+              Back to occupants
+            </Link>
+          </Button>
         </div>
       </div>
 
