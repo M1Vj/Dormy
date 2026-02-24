@@ -209,18 +209,17 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  const allowed = allowedRolesByLedger[tx.category].includes(membership.role);
+  const allowed = memberships.some(m => allowedRolesByLedger[tx.category].includes(m.role));
   if (!allowed) {
     return { error: "You do not have permission to record this transaction." };
   }
@@ -440,18 +439,17 @@ export async function previewTransactionReceiptEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  const allowed = allowedRolesByLedger[tx.category].includes(membership.role);
+  const allowed = memberships.some(m => allowedRolesByLedger[tx.category].includes(m.role));
   if (!allowed) {
     return { error: "You do not have permission to preview this receipt email." };
   }
@@ -583,14 +581,13 @@ export async function overwriteLedgerEntry(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
@@ -612,7 +609,7 @@ export async function overwriteLedgerEntry(
   }
 
   const ledger = originalEntry.ledger as LedgerCategory;
-  if (!allowedRolesByLedger[ledger]?.includes(membership.role)) {
+  if (!memberships.some(m => allowedRolesByLedger[ledger]?.includes(m.role))) {
     return { error: "You do not have permission to overwrite this ledger entry." };
   }
 
@@ -758,18 +755,17 @@ export async function createContributionBatch(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only treasurer and admin can create payable events." };
   }
 
@@ -1025,18 +1021,17 @@ export async function recordContributionBatchPayment(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can record contribution payments." };
   }
 
@@ -1365,18 +1360,17 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can preview contribution payment emails." };
   }
 
@@ -1616,18 +1610,17 @@ export async function uploadContributionReceiptAsset(dormId: string, formData: F
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can upload contribution receipt assets." };
   }
 
@@ -1736,18 +1729,17 @@ export async function updateContributionReceiptTemplate(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update contribution receipt templates." };
   }
 
@@ -1863,18 +1855,17 @@ export async function previewContributionReceiptTemplateEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can preview contribution receipt templates." };
   }
 
@@ -2011,18 +2002,17 @@ export async function updateContributionReceiptSignature(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update contribution receipt signatures." };
   }
 
@@ -2130,18 +2120,17 @@ export async function overrideContributionPayable(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update payable amounts." };
   }
 
@@ -2293,19 +2282,18 @@ export async function createMaintenanceBatch(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
   // Allowed roles for maintenance fee bulk charge
-  if (!new Set(["admin", "adviser"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "adviser"]).has(m.role))) {
     return { error: "Only admins and advisers can create maintenance charges." };
   }
 
@@ -2498,14 +2486,14 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
     return { error: "Unauthorized" };
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("id")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    .limit(1);
 
-  if (!membership?.id) {
+  if (!memberships?.length) {
     return { error: "Forbidden" };
   }
 
@@ -2629,14 +2617,13 @@ export async function createPublicViewToken(
   if (!user) return { error: "Unauthorized" };
 
   // Permission check
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership || !['admin', 'treasurer', 'adviser', 'assistant_adviser'].includes(membership.role)) {
+  if (!memberships?.length || !memberships.some(m => ['admin', 'treasurer', 'adviser', 'assistant_adviser'].includes(m.role))) {
     return { error: "Forbidden" };
   }
 
