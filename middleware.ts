@@ -153,6 +153,7 @@ export async function middleware(req: NextRequest) {
         "/admin/dorms",
         "/admin/clearance",
         "/admin/terms",
+        "/admin/announcements",
         "/admin/profile",
         "/admin/settings",
       ];
