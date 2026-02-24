@@ -98,7 +98,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
   if (role === "treasurer") {
     const treasurerItems: MenuItem[] = [
       { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
-      { title: "Contributions", url: "/treasurer/finance/events", icon: Calendar, color: "text-orange-500" },
+      { title: "Contributions", url: "/treasurer/finance/contributions", icon: Calendar, color: "text-orange-500" },
       { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-emerald-500" },
       { title: "Reporting", url: "/treasurer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Events", url: "/treasurer/events", icon: Calendar, color: "text-orange-500" },

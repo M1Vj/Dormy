@@ -194,7 +194,7 @@ export default async function TreasurerHomePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/finance/events">
+            <Link href="/treasurer/finance/contributions">
               <CalendarDays className="mr-2 h-4 w-4" />
               Contributions
             </Link>

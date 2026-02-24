@@ -149,7 +149,7 @@ export default async function ContributionReceiptBuilderPage({
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/treasurer/finance/events/${contributionId}`}>
+          <Link href={`/treasurer/finance/contributions/${contributionId}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

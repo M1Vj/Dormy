@@ -11,11 +11,11 @@ interface TreasurerDashboardProps {
   role: string;
 }
 
-export function TreasurerDashboard({ 
-  totalCharged, 
-  totalPaid, 
+export function TreasurerDashboard({
+  totalCharged,
+  totalPaid,
   pendingExpenses,
-  role 
+  role
 }: TreasurerDashboardProps) {
   const collectionRate = totalCharged > 0 ? (totalPaid / totalCharged) * 100 : 0;
   const formatPesos = (val: number) => `₱${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -38,7 +38,7 @@ export function TreasurerDashboard({
           <Progress value={collectionRate} className="h-2 bg-muted [&>div]:bg-emerald-500" />
           <div className="flex gap-2">
             <Button asChild size="sm" className="w-full">
-              <Link href={`/${role}/finance/events`}>
+              <Link href={`/${role}/finance/contributions`}>
                 <Receipt className="mr-2 h-4 w-4" />
                 Contributions
               </Link>

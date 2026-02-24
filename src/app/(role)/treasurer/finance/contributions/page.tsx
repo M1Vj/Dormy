@@ -407,29 +407,65 @@ export default async function EventsFinancePage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Contributions</h1>
-          <p className="text-sm text-muted-foreground">
-            Track contribution records, totals, and collection status across selected semesters.
-          </p>
-          {activeSemester ? (
-            <p className="text-xs text-muted-foreground">Active semester: {activeSemester.label}</p>
-          ) : null}
+            <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Contributions</h1>
+            <p className="text-sm text-muted-foreground">
+              Track contribution records, totals, and collection status.
+            </p>
+            {activeSemester ? (
+              <p className="text-xs text-muted-foreground mt-1">Active semester: {activeSemester.label}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isReadOnlyView ? (
+              <>
+                <ContributionBatchDialog
+                  dormId={activeDormId}
+                  events={Array.from(eventById.entries()).map(([id, title]) => ({ id, title }))}
+                  trigger={<Button size="sm">Add Contribution</Button>}
+                />
+                <ContributionBatchPaymentDialog
+                  dormId={activeDormId}
+                  contributions={payableContributionOptions}
+                  occupants={(occupants ?? []).map((occupant) => ({
+                    id: occupant.id,
+                    fullName: occupant.full_name ?? "Unnamed",
+                    studentId: occupant.student_id ?? null,
+                  }))}
+                />
+                <LedgerOverwriteDialog dormId={activeDormId} />
+              </>
+            ) : (
+              <Badge variant="outline">Selected semesters are view-only</Badge>
+            )}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/treasurer/finance/contribution-expenses">Expenses</Link>
+            </Button>
+            <ExportXlsxDialog
+              report="event-contributions"
+              title="Export Event Contributions"
+              description="Download contribution summary and detailed ledger entries."
+              defaultDormId={activeDormId}
+              dormOptions={dormOptions}
+              includeDormSelector={canFilterDorm}
+            />
+          </div>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-          <form className="flex w-full flex-col gap-2 sm:flex-row" method="GET">
+
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-muted bg-muted/20 p-3 sm:flex-row sm:items-center">
+          <form className="flex w-full flex-col gap-2 sm:flex-row sm:items-center" method="GET">
             <Input
               name="search"
-              placeholder="Search contribution"
+              placeholder="Search contribution..."
               defaultValue={search}
-              className="w-full sm:w-48"
+              className="h-9 w-full bg-background sm:w-60"
             />
             <select
               name="semester"
-              multiple
-              defaultValue={selectedSemesterIds}
-              className="h-24 w-full rounded-md border border-input bg-background px-2 py-1 text-sm sm:w-60"
+              defaultValue={selectedSemesterIds[0]}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm md:w-60"
             >
               {semesters.map((semester) => (
                 <option key={semester.id} value={semester.id}>
@@ -437,48 +473,17 @@ export default async function EventsFinancePage({
                 </option>
               ))}
             </select>
-            <Button type="submit" variant="secondary" size="sm">
-              Apply
-            </Button>
-            {search || semesterIdsFromParams.length > 0 ? (
-              <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/treasurer/finance/events">Reset</Link>
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" size="sm" className="h-9">
+                Apply
               </Button>
-            ) : null}
+              {search || semesterIdsFromParams.length > 0 ? (
+                <Button asChild type="button" variant="ghost" size="sm" className="h-9">
+                  <Link href="/treasurer/finance/contributions">Reset</Link>
+                </Button>
+              ) : null}
+            </div>
           </form>
-
-          <ExportXlsxDialog
-            report="event-contributions"
-            title="Export Event Contributions"
-            description="Download contribution summary and detailed ledger entries."
-            defaultDormId={activeDormId}
-            dormOptions={dormOptions}
-            includeDormSelector={canFilterDorm}
-          />
-          <Button asChild variant="outline">
-            <Link href="/treasurer/finance/contribution-expenses">Contribution Expenses</Link>
-          </Button>
-          {!isReadOnlyView ? (
-            <>
-              <LedgerOverwriteDialog dormId={activeDormId} />
-              <ContributionBatchDialog
-                dormId={activeDormId}
-                events={Array.from(eventById.entries()).map(([id, title]) => ({ id, title }))}
-                trigger={<Button>Add Contribution</Button>}
-              />
-              <ContributionBatchPaymentDialog
-                dormId={activeDormId}
-                contributions={payableContributionOptions}
-                occupants={(occupants ?? []).map((occupant) => ({
-                  id: occupant.id,
-                  fullName: occupant.full_name ?? "Unnamed",
-                  studentId: occupant.student_id ?? null,
-                }))}
-              />
-            </>
-          ) : (
-            <Badge variant="outline">Selected semesters are view-only</Badge>
-          )}
         </div>
       </div>
 
@@ -566,7 +571,7 @@ export default async function EventsFinancePage({
                 </p>
 
                 <Button asChild size="sm" className="w-full">
-                  <Link href={`/treasurer/finance/events/${contribution.id}`}>Manage</Link>
+                  <Link href={`/treasurer/finance/contributions/${contribution.id}`}>Manage</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -619,7 +624,7 @@ export default async function EventsFinancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <Button asChild size="sm" variant="outline">
-                    <Link href={`/treasurer/finance/events/${contribution.id}`}>Manage</Link>
+                    <Link href={`/treasurer/finance/contributions/${contribution.id}`}>Manage</Link>
                   </Button>
                 </TableCell>
               </TableRow>

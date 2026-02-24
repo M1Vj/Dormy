@@ -375,7 +375,7 @@ export default async function EventDetailsPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/treasurer/finance/events">
+            <Link href="/treasurer/finance/contributions">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -402,7 +402,7 @@ export default async function EventDetailsPage({
             <Badge variant="outline">View-only semester</Badge>
           )}
           <Button asChild variant="secondary">
-            <Link href={`/treasurer/finance/events/${contributionId}/receipt`}>
+            <Link href={`/treasurer/finance/contributions/${contributionId}/receipt`}>
               <ReceiptText className="mr-2 h-4 w-4" />
               Receipt Builder
             </Link>
@@ -501,7 +501,7 @@ export default async function EventDetailsPage({
               </Button>
               {search || statusFilter ? (
                 <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/treasurer/finance/events/${contributionId}`}>Reset</Link>
+                  <Link href={`/treasurer/finance/contributions/${contributionId}`}>Reset</Link>
                 </Button>
               ) : null}
             </div>

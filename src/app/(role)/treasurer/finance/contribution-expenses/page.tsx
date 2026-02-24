@@ -137,7 +137,7 @@ export default async function TreasurerContributionExpensesPage() {
 
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/treasurer/finance/events">Back to Contributions</Link>
+            <Link href="/treasurer/finance/contributions">Back to Contributions</Link>
           </Button>
           <SubmitExpenseDialog
             dormId={dormId}
