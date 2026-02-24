@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getUserRolesAllDorms } from "@/lib/access";
+import { getUserRolesForDorm } from "@/lib/access";
+import { getActiveDormId } from "@/lib/dorms";
 
 export default async function OccupantLayout({
   children,
@@ -18,10 +19,16 @@ export default async function OccupantLayout({
     redirect("/login");
   }
 
-  // Any dorm membership grants access to occupant pages
-  const memberships = await getUserRolesAllDorms(supabase, user.id);
-  if (memberships.length === 0) {
+  const activeDormId = await getActiveDormId();
+  if (!activeDormId) {
     redirect("/join");
+  }
+
+  const roles = await getUserRolesForDorm(supabase, user.id, activeDormId);
+  const hasAccess = roles.includes("occupant");
+
+  if (!hasAccess) {
+    redirect("/"); // Middleware will handle redirecting to their actual home
   }
 
   return <>{children}</>;

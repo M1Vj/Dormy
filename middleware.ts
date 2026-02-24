@@ -177,6 +177,20 @@ export async function middleware(req: NextRequest) {
       return redirect(redirectUrl, "Occupant reporting route redirected to dorm finance totals.");
     }
 
+    // Role scoping: ensure users can only access their actual role prefix
+    const rolePrefixes = ["admin", "adviser", "student_assistant", "treasurer", "officer", "occupant"];
+    const matchedPrefix = rolePrefixes.find(p => pathname.startsWith(`/${p}`));
+
+    if (matchedPrefix) {
+      const activeRole = req.cookies.get("dormy_active_role")?.value;
+      if (activeRole && matchedPrefix !== activeRole) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = `/${activeRole}/home`;
+        redirectUrl.search = "";
+        return redirect(redirectUrl, `Role mismatch: tried ${matchedPrefix}, but active is ${activeRole}.`);
+      }
+    }
+
     if (!req.cookies.has("dorm_id")) {
       console.log(`[Middleware] User has no dorm_id cookie on app route ${pathname}. Attempting to set it...`);
       const { data } = await supabase
