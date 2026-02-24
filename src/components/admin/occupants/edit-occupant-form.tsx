@@ -34,10 +34,12 @@ export function EditOccupantForm({
   dormId,
   occupant,
   committees,
+  showSystemAccess = true,
 }: {
   dormId: string;
   occupant: Occupant;
   committees?: CommitteeRef[];
+  showSystemAccess?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -219,66 +221,68 @@ export function EditOccupantForm({
           </select>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:col-span-2">
-          <h3 className="text-lg font-medium leading-none">System Access</h3>
-          {!occupant.user_id ? (
-            <div className="rounded-md border p-4 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-500/10">
-              System access cannot be provisioned until this occupant registers their account.
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 rounded-md border p-4 bg-muted/30">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium leading-none">App Role</label>
-                <select
-                  name="role"
-                  defaultValue={occupant.role ?? "occupant"}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="student_assistant">Student Assistant</option>
-                  <option value="treasurer">Treasurer</option>
-                  <option value="adviser">Adviser</option>
-                  <option value="assistant_adviser">Assistant Adviser</option>
-                  <option value="officer">Officer</option>
-                  <option value="occupant">Occupant</option>
-                </select>
+        {showSystemAccess && (
+          <div className="mt-4 grid gap-4 sm:col-span-2">
+            <h3 className="text-lg font-medium leading-none">System Access</h3>
+            {!occupant.user_id ? (
+              <div className="rounded-md border p-4 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-500/10">
+                System access cannot be provisioned until this occupant registers their account.
               </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 rounded-md border p-4 bg-muted/30">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium leading-none">App Role</label>
+                  <select
+                    name="role"
+                    defaultValue={occupant.role ?? "occupant"}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="student_assistant">Student Assistant</option>
+                    <option value="treasurer">Treasurer</option>
+                    <option value="adviser">Adviser</option>
+                    <option value="assistant_adviser">Assistant Adviser</option>
+                    <option value="officer">Officer</option>
+                    <option value="occupant">Occupant</option>
+                  </select>
+                </div>
 
-              {committees && committees.length > 0 && (
-                <>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium leading-none">Committee Assignment</label>
-                    <select
-                      name="committee_id"
-                      defaultValue={primaryCommittee?.committee_id ?? ""}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <option value="">None</option>
-                      {committees.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium leading-none">Committee Role</label>
-                    <select
-                      name="committee_role"
-                      defaultValue={primaryCommittee?.role ?? ""}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    >
-                      <option value="">-</option>
-                      <option value="head">Head</option>
-                      <option value="co-head">Co-Head</option>
-                      <option value="member">Member</option>
-                    </select>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+                {committees && committees.length > 0 && (
+                  <>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium leading-none">Committee Assignment</label>
+                      <select
+                        name="committee_id"
+                        defaultValue={primaryCommittee?.committee_id ?? ""}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        <option value="">None</option>
+                        {committees.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium leading-none">Committee Role</label>
+                      <select
+                        name="committee_role"
+                        defaultValue={primaryCommittee?.role ?? ""}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        <option value="">-</option>
+                        <option value="head">Head</option>
+                        <option value="co-head">Co-Head</option>
+                        <option value="member">Member</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Button

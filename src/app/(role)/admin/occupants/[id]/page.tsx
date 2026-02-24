@@ -7,10 +7,12 @@ import { getCommittees } from "@/app/actions/committees";
 import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EditOccupantForm } from "@/components/admin/occupants/edit-occupant-form";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
 type RoomRef = {
   code?: string | null;
@@ -92,8 +94,10 @@ export default async function AdminOccupantProfilePage(props: {
     .select("role, dorm_id")
     .eq("user_id", user.id);
 
+  // Admin can view occupants from any dorm, so check admin role across *all* memberships.
+  const isAdmin = memberships?.some(m => m.role === "admin") ?? false;
   const activeMemberships = memberships?.filter(m => m.dorm_id === activeDormId!) ?? [];
-  const hasAccess = activeMemberships.some(m => new Set(["admin", "student_assistant", "adviser"]).has(m.role));
+  const hasAccess = isAdmin || activeMemberships.some(m => new Set(["student_assistant", "adviser"]).has(m.role));
   if (!hasAccess) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
@@ -102,22 +106,41 @@ export default async function AdminOccupantProfilePage(props: {
     );
   }
 
-  const myRole = activeMemberships[0]?.role || "occupant";
+  const myRole = isAdmin ? "admin" : (activeMemberships[0]?.role || "occupant");
 
-  const occupant = await getOccupant(activeDormId!, params.id);
+  // Resolve the occupant's actual dorm_id so we aren't constrained by the cookie.
+  // Use admin client to bypass RLS — the regular user client can't read cross-dorm occupants.
+  let occupantDormId = activeDormId!;
+  if (isAdmin) {
+    const adminClient = createSupabaseAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+    const { data: occupantRow } = await adminClient
+      .from("occupants")
+      .select("dorm_id")
+      .eq("id", params.id)
+      .maybeSingle();
+    if (occupantRow?.dorm_id) {
+      occupantDormId = occupantRow.dorm_id;
+    }
+  }
+
+  const occupant = await getOccupant(occupantDormId, params.id);
 
   if (!occupant) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Occupant not found.</p>
-        <Button asChild variant="secondary">
-          <Link href={`/${myRole}/occupants`}>Back to occupants</Link>
-        </Button>
+        <BackButton variant="secondary" fallbackHref="/admin/dorms">
+          Back to occupants
+        </BackButton>
       </div>
     );
   }
 
-  const fineRules = await getFineRules(activeDormId!);
+  const fineRules = await getFineRules(occupantDormId);
   const occupantOptions = [
     {
       id: occupant.id,
@@ -143,7 +166,7 @@ export default async function AdminOccupantProfilePage(props: {
 
   let committeesRaw: { id: string; dorm_id: string; name: string; description: string | null; created_at: string; members: { role: "member" | "head" | "co-head"; user_id: string; display_name: string | null; }[] }[] = [];
   if (isEditMode) {
-    const commRes = await getCommittees(activeDormId!);
+    const commRes = await getCommittees(occupantDormId);
     if (!commRes.error) {
       committeesRaw = commRes.data ?? [];
     }
@@ -161,9 +184,9 @@ export default async function AdminOccupantProfilePage(props: {
           </p>
         </div>
         <div className="flex gap-2">
-          {!isEditMode && (
+          {!isEditMode && myRole !== "admin" && (
             <IssueFineDialog
-              dormId={activeDormId!}
+              dormId={occupantDormId}
               occupants={occupantOptions}
               rules={fineRules}
               defaultOccupantId={occupant.id}
@@ -180,16 +203,16 @@ export default async function AdminOccupantProfilePage(props: {
               report="occupant-statement"
               title="Export Occupant Statement"
               description="Download balances and transaction history for this occupant."
-              defaultDormId={activeDormId!}
+              defaultDormId={occupantDormId}
               dormOptions={dormOptions}
               includeDormSelector
               defaultParams={{ occupant_id: occupant.id }}
               triggerLabel="Export statement"
             />
           )}
-          <Button asChild variant="secondary">
-            <Link href={`/${myRole}/occupants`}>Back to occupants</Link>
-          </Button>
+          <BackButton variant="secondary" fallbackHref="/admin/dorms">
+            Back to occupants
+          </BackButton>
         </div>
       </div>
 
@@ -200,9 +223,10 @@ export default async function AdminOccupantProfilePage(props: {
         <CardContent>
           {isEditMode ? (
             <EditOccupantForm
-              dormId={activeDormId!}
+              dormId={occupantDormId}
               occupant={occupant}
               committees={committeesRaw}
+              showSystemAccess={false}
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

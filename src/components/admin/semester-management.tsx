@@ -20,7 +20,7 @@ type ActiveOccupant = {
 };
 
 type SemesterManagementProps = {
-  dormId: string;
+  dormId: string | null;
   activeSemester: DormSemester | null;
   semesters: DormSemester[];
   activeOccupants: ActiveOccupant[];
@@ -32,6 +32,7 @@ type SemesterManagementProps = {
       contributions: number;
     };
   };
+  hideFinance?: boolean;
 };
 
 function generateSchoolYears(aroundYear: number = new Date().getFullYear(), range: number = 2) {
@@ -49,6 +50,7 @@ export function SemesterManagement({
   semesters,
   activeOccupants,
   outstandingMoney,
+  hideFinance,
 }: SemesterManagementProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -128,7 +130,7 @@ export function SemesterManagement({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className={`grid gap-4 ${hideFinance ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Active semester</CardTitle>
@@ -153,15 +155,17 @@ export function SemesterManagement({
             <p className="text-xs text-muted-foreground">Persistent roster</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Outstanding money</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">₱{outstandingMoney.total.toFixed(2)}</p>
-            <p className="text-xs text-muted-foreground">Persists across semesters</p>
-          </CardContent>
-        </Card>
+        {!hideFinance && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Outstanding money</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-semibold">₱{outstandingMoney.total.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground">Persists across semesters</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
@@ -298,7 +302,7 @@ export function SemesterManagement({
       <Dialog open={!!editingSemester} onOpenChange={(open) => !open && setEditingSemester(null)}>
         <DialogContent>
           <form onSubmit={handleUpdate}>
-            <input type="hidden" name="id" value={editingSemester?.id} />
+            <input type="hidden" name="id" value={editingSemester?.id ?? ""} />
             <DialogHeader>
               <DialogTitle>Edit Semester</DialogTitle>
               <DialogDescription>Update details for {editingSemester?.label}</DialogDescription>
@@ -355,7 +359,7 @@ export function SemesterManagement({
       <Dialog open={!!deletingSemester} onOpenChange={(open) => !open && setDeletingSemester(null)}>
         <DialogContent>
           <form onSubmit={handleDelete}>
-            <input type="hidden" name="id" value={deletingSemester?.id} />
+            <input type="hidden" name="id" value={deletingSemester?.id ?? ""} />
             <DialogHeader>
               <DialogTitle>Delete Semester</DialogTitle>
               <DialogDescription>

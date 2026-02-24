@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
-import { ArrowLeft, Pin, ShieldAlert } from "lucide-react";
+import { Pin, ShieldAlert } from "lucide-react";
 
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import type { DormAnnouncement } from "@/app/actions/announcements";
@@ -9,17 +8,7 @@ import { AnnouncementFormSlot } from "@/components/announcements/announcement-fo
 import { DeleteAnnouncementButton } from "@/components/announcements/delete-announcement-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-const STAFF_ROLES = new Set([
-  "admin",
-  "adviser",
-  "assistant_adviser",
-  "student_assistant",
-  "treasurer",
-  "officer",
-]);
 
 function getAnnouncementStatus(announcement: DormAnnouncement, now: Date) {
   const startsAt = announcement.starts_at ? new Date(announcement.starts_at) : null;
@@ -36,12 +25,7 @@ function getAnnouncementStatus(announcement: DormAnnouncement, now: Date) {
   return { label: "Live", className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" };
 }
 
-export default async function AnnouncementsPage() {
-  const dormId = await getActiveDormId();
-  if (!dormId) {
-    return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
-  }
-
+export default async function AdminAnnouncementsPage() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -59,38 +43,21 @@ export default async function AnnouncementsPage() {
     redirect("/login");
   }
 
-  const { data: membership } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = membership?.role ?? null;
-  const canManage = role ? STAFF_ROLES.has(role) : false;
-
-  const { announcements, error } = await getDormAnnouncements(dormId);
+  // Global admin announcements — pass null dormId to show all
+  const { announcements, error } = await getDormAnnouncements(null);
   const now = new Date();
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm" className="-ml-2">
-              <Link href={`/${role}/home`}>
-                <ArrowLeft className="mr-2 size-4" />
-                Back
-              </Link>
-            </Button>
-          </div>
           <h1 className="text-2xl font-semibold tracking-tight">Announcements</h1>
           <p className="text-sm text-muted-foreground">
-            Member-visible updates appear here and on the Home page. Staff-only notices are hidden from occupants.
+            Manage global announcements across all dormitories. These announcements are visible to all occupants.
           </p>
         </div>
 
-        {canManage ? <AnnouncementFormSlot dormId={dormId} mode="create" /> : null}
+        <AnnouncementFormSlot dormId={null} mode="create" />
       </div>
 
       {error ? (
@@ -112,14 +79,11 @@ export default async function AnnouncementsPage() {
           const expiresAt = announcement.expires_at ? new Date(announcement.expires_at) : null;
 
           return (
-            <Card key={announcement.id} className={!announcement.dorm_id ? "border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10" : ""}>
+            <Card key={announcement.id}>
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
-                      <CardTitle className="text-base">{announcement.title}</CardTitle>
-                    </div>
+                    <CardTitle className="text-base">{announcement.title}</CardTitle>
                     <CardDescription>
                       {startsAt ? `Published ${format(startsAt, "MMM d, yyyy h:mm a")}` : "Published"}
                       {expiresAt ? ` • Expires ${format(expiresAt, "MMM d, yyyy h:mm a")}` : ""}
@@ -154,21 +118,19 @@ export default async function AnnouncementsPage() {
               <CardContent className="space-y-4">
                 <div className="whitespace-pre-line text-sm">{announcement.body}</div>
 
-                {canManage ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <AnnouncementFormSlot
-                      dormId={dormId}
-                      mode="edit"
-                      announcement={announcement}
-                      trigger={
-                        <Button variant="outline" size="sm">
-                          Edit
-                        </Button>
-                      }
-                    />
-                    <DeleteAnnouncementButton dormId={dormId} announcementId={announcement.id} />
-                  </div>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <AnnouncementFormSlot
+                    dormId={null}
+                    mode="edit"
+                    announcement={announcement}
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        Edit
+                      </Button>
+                    }
+                  />
+                  <DeleteAnnouncementButton dormId={null} announcementId={announcement.id} />
+                </div>
               </CardContent>
             </Card>
           );
@@ -177,7 +139,7 @@ export default async function AnnouncementsPage() {
         {!announcements.length ? (
           <Card>
             <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              No announcements posted yet.
+              No announcements posted yet. Use the button above to create a global announcement.
             </CardContent>
           </Card>
         ) : null}

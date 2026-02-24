@@ -21,7 +21,7 @@ const AnnouncementFormDialog = dynamic(
 );
 
 export function AnnouncementFormSlot(props: {
-  dormId: string;
+  dormId: string | null;
   mode: "create" | "edit";
   announcement?: DormAnnouncement;
   trigger?: React.ReactNode;

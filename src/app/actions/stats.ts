@@ -279,3 +279,53 @@ export async function getOccupantReportingData(dormId: string, occupantId: strin
     clearanceHistory: [] // TODO: Implement if tracking semester-end clearance
   };
 }
+export async function getGlobalAdminStats(): Promise<{
+  totalOccupants: number;
+  totalApplications: number;
+  totalCleared: number;
+  totalCapacity: number;
+  totalDorms: number;
+} | { error: string }> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  // Check if user is actually an admin (at least in one dorm)
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .limit(1);
+
+  if (!membership?.length) return { error: "Forbidden" };
+
+  // Use service role client to bypass RLS for system-wide stats
+  const { createClient: createSupabaseAdminClient } = await import("@supabase/supabase-js");
+  const adminClient = createSupabaseAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  const [occupants, applications, dorms] = await Promise.all([
+    adminClient.from("occupants").select("id, dorm_id, status").eq("status", "active"),
+    adminClient.from("dorm_applications").select("id").eq("status", "pending"),
+    adminClient.from("dorms").select("capacity"),
+  ]);
+
+  const totalOccupants = occupants.data?.length ?? 0;
+  const totalApplications = applications.data?.length ?? 0;
+  const totalCapacity = dorms.data?.reduce((sum, d) => sum + (Number(d.capacity) || 0), 0) ?? 0;
+  const totalDorms = dorms.data?.length ?? 0;
+
+  return {
+    totalOccupants,
+    totalApplications,
+    totalCleared: 0,
+    totalCapacity,
+    totalDorms,
+  };
+}

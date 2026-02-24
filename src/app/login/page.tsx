@@ -6,8 +6,8 @@ const accountTypes = ["Student Assistant", "Treasurer", "Adviser", "Occupant", "
 
 export default function LoginPage() {
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(15,118,110,0.14),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(234,179,8,0.12),transparent_45%)]">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.75),rgba(255,255,255,0.95))] dark:bg-[linear-gradient(to_bottom,rgba(2,6,23,0.55),rgba(2,6,23,0.85))]" />
+    <div className="relative min-h-dvh overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.18),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.14),transparent_45%)]">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(248,250,252,0.75),rgba(248,250,252,0.95))] dark:bg-[linear-gradient(to_bottom,rgba(15,23,42,0.55),rgba(15,23,42,0.85))]" />
       <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl items-start px-4 py-8 sm:py-12 lg:items-center">
         <div className="grid w-full gap-8 lg:grid-cols-[1.05fr_430px] lg:items-center">
           <section className="hidden lg:block">

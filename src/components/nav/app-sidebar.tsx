@@ -47,11 +47,9 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
   if (role === "admin") {
     return [
       { title: "Home", url: "/admin/home", icon: Home, color: "text-sky-500" },
-      { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
       { title: "Dorms", url: "/admin/dorms", icon: Building2, color: "text-blue-500" },
-      { title: "Clearance", url: "/admin/clearance", icon: ClipboardCheck, color: "text-green-600" },
       { title: "Semesters", url: "/admin/terms", icon: Calendar, color: "text-indigo-500" },
-      { title: "Announcements", url: "/admin/home/announcements", icon: Bell, color: "text-orange-500" },
+      { title: "Announcements", url: "/admin/announcements", icon: Bell, color: "text-orange-500" },
       { title: "Settings", url: "/admin/settings", icon: Shield, color: "text-zinc-500" },
     ];
   }
