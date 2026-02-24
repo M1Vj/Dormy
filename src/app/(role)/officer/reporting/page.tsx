@@ -129,7 +129,7 @@ export default async function ReportingDashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight">Events Report</h1>
           <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
             {currentDate}
-            <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-700 dark:text-violet-400 text-xs uppercase tracking-wider font-semibold">
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs uppercase tracking-wider font-semibold">
               Officer
             </span>
           </p>
@@ -231,11 +231,10 @@ export default async function ReportingDashboardPage() {
                       </td>
                       <td className="px-3 py-3 text-muted-foreground whitespace-nowrap">{eventDate}</td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                          event.is_competition
-                            ? "border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-400"
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${event.is_competition
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                             : "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        }`}>
+                          }`}>
                           {event.is_competition ? "Competition" : "Event"}
                         </span>
                       </td>

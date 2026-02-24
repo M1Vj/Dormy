@@ -59,7 +59,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
       { title: "Home", url: "/occupant/home", icon: Home, color: "text-sky-500" },
       { title: "Finance Totals", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
       { title: "Fine Reports", url: "/occupant/fines/reports", icon: FileText, color: "text-rose-500" },
-      { title: "My Committee", url: "/occupant/committees", icon: Users, color: "text-violet-500" },
+      { title: "My Committee", url: "/occupant/committees", icon: Users, color: "text-emerald-500" },
       { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
       { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
       { title: "Announcements", url: "/occupant/home/announcements", icon: Bell, color: "text-blue-500" },
@@ -70,7 +70,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/adviser/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/adviser/occupants", icon: Users, color: "text-emerald-500" },
-      { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-violet-500" },
+      { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-emerald-500" },
       { title: "Finance", url: "/adviser/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Cleaning", url: "/adviser/cleaning", icon: Calendar, color: "text-lime-500" },
       { title: "Evaluation", url: "/adviser/evaluation", icon: Shield, color: "text-cyan-500" },
@@ -84,7 +84,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/student_assistant/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/student_assistant/occupants", icon: Users, color: "text-emerald-500" },
-      { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-violet-500" },
+      { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-emerald-500" },
       { title: "Fines", url: "/student_assistant/fines", icon: FileText, color: "text-rose-500" },
       { title: "Finance", url: "/student_assistant/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Cleaning", url: "/student_assistant/cleaning", icon: Calendar, color: "text-lime-500" },
@@ -99,7 +99,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     const treasurerItems: MenuItem[] = [
       { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
       { title: "Contributions", url: "/treasurer/finance/events", icon: Calendar, color: "text-orange-500" },
-      { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-violet-500" },
+      { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-emerald-500" },
       { title: "Reporting", url: "/treasurer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Events", url: "/treasurer/events", icon: Calendar, color: "text-orange-500" },
     ];

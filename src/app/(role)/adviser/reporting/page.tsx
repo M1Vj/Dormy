@@ -251,7 +251,7 @@ export default async function AdviserReportingPage() {
                       <span>{maintRate.toFixed(0)}%</span>
                     </div>
                     <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div className="h-full bg-violet-500 transition-all" style={{ width: `${maintRate}%` }} />
+                      <div className="h-full bg-emerald-500 transition-all" style={{ width: `${maintRate}%` }} />
                     </div>
                   </div>
                 );
