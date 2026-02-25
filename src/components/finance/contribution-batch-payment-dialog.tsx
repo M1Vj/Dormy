@@ -73,12 +73,14 @@ export function ContributionBatchPaymentDialog({
   dormId,
   contributions,
   occupants,
-  trigger,
+  triggerClassName,
+  triggerVariant = "default",
 }: {
   dormId: string;
   contributions: ContributionOption[];
   occupants: OccupantOption[];
-  trigger?: React.ReactNode;
+  triggerClassName?: string;
+  triggerVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -101,7 +103,10 @@ export function ContributionBatchPaymentDialog({
   } | null>(null);
 
   const selectedContributions = useMemo(
-    () => contributions.filter((contribution) => selectedContributionIds.includes(contribution.id)),
+    () => {
+      console.log("RERENDERING ContributionBatchPaymentDialog", { open });
+      return contributions.filter((contribution) => selectedContributionIds.includes(contribution.id));
+    },
     [contributions, selectedContributionIds]
   );
 
@@ -365,12 +370,10 @@ export function ContributionBatchPaymentDialog({
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>
-          {trigger || (
-            <Button>
-              <CalendarCheck2 className="mr-2 h-4 w-4" />
-              Pay Contributions
-            </Button>
-          )}
+          <Button variant={triggerVariant} className={triggerClassName}>
+            <CalendarCheck2 className="mr-2 h-4 w-4" />
+            Pay Contributions
+          </Button>
         </DialogTrigger>
         <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>
