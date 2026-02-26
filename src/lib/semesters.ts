@@ -59,22 +59,23 @@ export async function getActiveSemester(
 
   const today = new Date().toISOString().split("T")[0];
 
-  let query = supabase
-    .from("dorm_semesters")
-    .select("id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at")
-    .eq("status", "active")
-    .lte("starts_on", today)
-    .gte("ends_on", today)
-    .order("starts_on", { ascending: false });
+  const baseQuery = () =>
+    supabase
+      .from("dorm_semesters")
+      .select("id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at")
+      .eq("status", "active")
+      .lte("starts_on", today)
+      .gte("ends_on", today)
+      .order("starts_on", { ascending: false });
 
   if (dormId) {
-    // Try dorm-specific first, then global
-    const { data } = await query.eq("dorm_id", dormId).maybeSingle();
+    // Try dorm-specific first
+    const { data } = await baseQuery().eq("dorm_id", dormId).maybeSingle();
     if (data) return data as DormSemester;
   }
 
-  // Try global
-  const { data: globalData } = await query.is("dorm_id", null).maybeSingle();
+  // Fallback to global
+  const { data: globalData } = await baseQuery().is("dorm_id", null).maybeSingle();
   return (globalData as DormSemester) ?? null;
 }
 
@@ -96,8 +97,34 @@ export async function listDormSemesters(
   }
 
   const { data, error } = await query.order("starts_on", { ascending: false });
-  if (error) return [];
-  return (data as DormSemester[]) ?? [];
+  if (error || !data) return [];
+
+  const rawSemesters = data as DormSemester[];
+  const uniqueLabels = new Set<string>();
+  const mergedSemesters: DormSemester[] = [];
+
+  // Because the query orders by starts_on, we just need to ensure dorm-specific 
+  // variants are prioritized over global ones when they have the exact same label.
+  // We can do this by splitting them, then iterating through the local ones first.
+  const localSems = rawSemesters.filter((s) => s.dorm_id !== null);
+  const globalSems = rawSemesters.filter((s) => s.dorm_id === null);
+
+  for (const s of localSems) {
+    if (!uniqueLabels.has(s.label)) {
+      uniqueLabels.add(s.label);
+      mergedSemesters.push(s);
+    }
+  }
+
+  for (const s of globalSems) {
+    if (!uniqueLabels.has(s.label)) {
+      uniqueLabels.add(s.label);
+      mergedSemesters.push(s);
+    }
+  }
+
+  // Restore the original date-based descending sorting
+  return mergedSemesters.sort((a, b) => (a.starts_on < b.starts_on ? 1 : -1));
 }
 
 export async function listDormSemesterArchives(

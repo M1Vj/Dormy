@@ -11,6 +11,7 @@ import {
   updateContributionReceiptTemplate,
   uploadContributionReceiptAsset,
 } from "@/app/actions/finance";
+import { ContributionReceiptSignatureForm } from "@/components/finance/contribution-receipt-signature-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +74,7 @@ export function ContributionReceiptBuilder({
   const [message, setMessage] = useState(initialMessage);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [signatureValue, setSignatureValue] = useState(initialSignature.trim());
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
@@ -83,7 +85,6 @@ export function ContributionReceiptBuilder({
     [occupantId, occupants]
   );
 
-  const signatureValue = initialSignature.trim();
   const signatureIsImage = isImageValue(signatureValue);
 
   const refreshPreview = async (showSuccessToast: boolean) => {
@@ -314,23 +315,13 @@ export function ContributionReceiptBuilder({
             </div>
           </div>
 
-          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-            <div>
-              <Label>Signature Source</Label>
-              <p className="text-xs text-muted-foreground">Managed on the contribution details page.</p>
-            </div>
-            {signatureValue ? (
-              signatureIsImage ? (
-                <img src={signatureValue} alt="Contribution signature" className="max-h-24 w-auto rounded border bg-white p-2" />
-              ) : (
-                <pre className="whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
-                  {signatureValue}
-                </pre>
-              )
-            ) : (
-              <p className="text-xs text-destructive">No signature set yet.</p>
-            )}
-          </div>
+          <ContributionReceiptSignatureForm
+            dormId={dormId}
+            contributionId={contributionId}
+            initialSignature={initialSignature}
+            disabled={isSaving || isUploadingLogo}
+            onChange={setSignatureValue}
+          />
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={saveTemplate} disabled={isSaving || isUploadingLogo}>

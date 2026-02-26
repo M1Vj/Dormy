@@ -185,11 +185,34 @@ function renderSignatureHtml(signatureValue: string | null | undefined) {
     return "";
   }
 
+  const namePlaceholder = "[Treasurer Name]";
+  const title = "Dormitory Treasurer";
+
   if (isImageSource(signature)) {
-    return `<div style="margin:24px 0 0 0;"><img src="${escapeHtml(signature)}" alt="Signature" style="max-height:72px; width:auto;"/></div>`;
+    return `
+      <div style="margin:32px 0 0 0;">
+        <img src="${escapeHtml(signature)}" alt="Signature" style="max-height:72px; width:auto; display:block; margin-bottom:4px;"/>
+        <div style="display:inline-block; border-bottom:1px solid #0f172a; padding-bottom:2px; font-weight:600; color:#0f172a; font-size:14px;">
+          ${namePlaceholder}
+        </div>
+        <div style="font-size:12px; color:#64748b; margin-top:2px;">
+          ${title}
+        </div>
+      </div>
+    `.trim();
   }
 
-  return `<p style="margin:24px 0 0 0; color:#475569;">—<br/><strong>${escapeHtml(signature)}</strong></p>`;
+  return `
+    <div style="margin:32px 0 0 0;">
+      <p style="margin:0 0 8px 0; color:#475569;">—<br/><strong>${escapeHtml(signature)}</strong></p>
+      <div style="display:inline-block; border-bottom:1px solid #0f172a; padding-bottom:2px; font-weight:600; color:#0f172a; font-size:14px;">
+        ${namePlaceholder}
+      </div>
+      <div style="font-size:12px; color:#64748b; margin-top:2px;">
+        ${title}
+      </div>
+    </div>
+  `.trim();
 }
 
 function renderSignatureText(signatureValue: string | null | undefined) {
@@ -197,10 +220,14 @@ function renderSignatureText(signatureValue: string | null | undefined) {
   if (!signature) {
     return "";
   }
+
+  const namePlaceholder = "[Treasurer Name]";
+  const title = "Dormitory Treasurer";
+
   if (isImageSource(signature)) {
-    return "\n—\n[Signature image attached]";
+    return `\n—\n[Signature image attached]\n${namePlaceholder}\n${title}`;
   }
-  return `\n—\n${signature}`;
+  return `\n—\n${signature}\n${namePlaceholder}\n${title}`;
 }
 
 export function renderPaymentReceiptEmail(input: {
@@ -342,15 +369,15 @@ export function renderContributionBatchReceiptEmail(input: {
       </thead>
       <tbody>
         ${safeRows
-          .map(
-            (item) => `
+      .map(
+        (item) => `
               <tr>
                 <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">${escapeHtml(item.title)}</td>
                 <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
               </tr>
             `.trim()
-          )
-          .join("")}
+      )
+      .join("")}
       </tbody>
       <tfoot>
         <tr>
@@ -369,13 +396,13 @@ export function renderContributionBatchReceiptEmail(input: {
           <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(paidAtLabel)}</td>
         </tr>
         ${input.method?.trim()
-          ? `
+      ? `
               <tr>
                 <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Method</td>
                 <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(input.method.trim())}</td>
               </tr>
             `.trim()
-          : ""}
+      : ""}
       </tbody>
     </table>
   `.trim();

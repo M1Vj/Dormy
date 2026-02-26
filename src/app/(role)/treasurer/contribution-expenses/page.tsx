@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TREASURER_MANUAL_EXPENSE_MARKER } from "@/lib/finance/constants";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -26,6 +27,7 @@ type ExpenseRow = {
   status: "pending" | "approved" | "rejected";
   expense_group_title: string | null;
   contribution_reference_title: string | null;
+  transparency_notes: string | null;
 };
 
 type GroupSummary = {
@@ -70,7 +72,9 @@ export default async function TreasurerContributionExpensesPage() {
     return <div className="p-6 text-sm text-destructive">{expenseResult.error}</div>;
   }
 
-  const rows = (expenseResult.data ?? []) as ExpenseRow[];
+  const rows = ((expenseResult.data ?? []) as ExpenseRow[]).filter(
+    (row) => !(row.transparency_notes ?? "").includes(TREASURER_MANUAL_EXPENSE_MARKER)
+  );
 
   const groupMap = new Map<string, GroupSummary & { contributionTitleSet: Set<string> }>();
   for (const row of rows) {
@@ -137,7 +141,10 @@ export default async function TreasurerContributionExpensesPage() {
 
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/treasurer/finance/contributions">Back to Contributions</Link>
+            <Link href="/treasurer/finance">Finance</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/treasurer/contributions">Back to Contributions</Link>
           </Button>
           <SubmitExpenseDialog
             dormId={dormId}
@@ -209,7 +216,7 @@ export default async function TreasurerContributionExpensesPage() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{format(new Date(group.latestPurchasedAt), "MMM d, yyyy")}</span>
                   <Button asChild size="sm" variant="outline">
-                    <Link href={`/treasurer/finance/contribution-expenses/${encodeURIComponent(group.name)}`}>Open</Link>
+                    <Link href={`/treasurer/contribution-expenses/${encodeURIComponent(group.name)}`}>Open</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -246,7 +253,7 @@ export default async function TreasurerContributionExpensesPage() {
                 <TableCell>{format(new Date(group.latestPurchasedAt), "MMM d, yyyy")}</TableCell>
                 <TableCell className="text-right">
                   <Button asChild size="sm" variant="outline">
-                    <Link href={`/treasurer/finance/contribution-expenses/${encodeURIComponent(group.name)}`}>Open</Link>
+                    <Link href={`/treasurer/contribution-expenses/${encodeURIComponent(group.name)}`}>Open</Link>
                   </Button>
                 </TableCell>
               </TableRow>

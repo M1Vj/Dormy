@@ -279,7 +279,7 @@ export default async function EventDetailsPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/adviser/finance/events">
+            <Link href="/adviser/contributions">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -386,7 +386,7 @@ export default async function EventDetailsPage({
               </Button>
               {search || statusFilter ? (
                 <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/adviser/finance/events/${eventId}`}>Reset</Link>
+                  <Link href={`/adviser/contributions/${eventId}`}>Reset</Link>
                 </Button>
               ) : null}
             </div>

@@ -24,7 +24,10 @@ type EntryRow = {
 function parseContribution(entry: EntryRow) {
   const metadata = entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {};
   const contributionIdRaw = metadata.contribution_id ?? metadata.payable_batch_id ?? entry.event_id ?? null;
-  const contributionId = typeof contributionIdRaw === "string" ? contributionIdRaw : null;
+  const contributionId =
+    typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
+      ? contributionIdRaw
+      : entry.id;
 
   return {
     contributionId,
@@ -36,22 +39,22 @@ function parseContribution(entry: EntryRow) {
           : "Contribution",
     receiptSignature:
       typeof metadata.contribution_receipt_signature === "string" &&
-      metadata.contribution_receipt_signature.trim().length > 0
+        metadata.contribution_receipt_signature.trim().length > 0
         ? metadata.contribution_receipt_signature.trim()
         : null,
     receiptSubject:
       typeof metadata.contribution_receipt_subject === "string" &&
-      metadata.contribution_receipt_subject.trim().length > 0
+        metadata.contribution_receipt_subject.trim().length > 0
         ? metadata.contribution_receipt_subject.trim()
         : null,
     receiptMessage:
       typeof metadata.contribution_receipt_message === "string" &&
-      metadata.contribution_receipt_message.trim().length > 0
+        metadata.contribution_receipt_message.trim().length > 0
         ? metadata.contribution_receipt_message.trim()
         : null,
     receiptLogoUrl:
       typeof metadata.contribution_receipt_logo_url === "string" &&
-      metadata.contribution_receipt_logo_url.trim().length > 0
+        metadata.contribution_receipt_logo_url.trim().length > 0
         ? metadata.contribution_receipt_logo_url.trim()
         : null,
   };
@@ -98,7 +101,8 @@ export default async function ContributionReceiptBuilderPage({
       .select("id, occupant_id, event_id, amount_pesos, entry_type, metadata")
       .eq("dorm_id", dormId)
       .eq("ledger", "contributions")
-      .is("voided_at", null),
+      .is("voided_at", null)
+      .or(`id.eq.${contributionId},event_id.eq.${contributionId},metadata->>contribution_id.eq.${contributionId},metadata->>payable_batch_id.eq.${contributionId}`),
     supabase
       .from("occupants")
       .select("id, full_name, contact_email")
@@ -149,7 +153,7 @@ export default async function ContributionReceiptBuilderPage({
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/treasurer/finance/contributions/${contributionId}`}>
+          <Link href={`/treasurer/contributions/${contributionId}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

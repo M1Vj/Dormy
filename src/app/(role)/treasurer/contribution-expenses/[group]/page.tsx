@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TREASURER_MANUAL_EXPENSE_MARKER } from "@/lib/finance/constants";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -93,7 +94,9 @@ export default async function TreasurerContributionExpenseGroupPage({
     return <div className="p-6 text-sm text-destructive">{result.error}</div>;
   }
 
-  const rows = (result.data ?? []) as ExpenseRow[];
+  const rows = ((result.data ?? []) as ExpenseRow[]).filter(
+    (row) => !(row.transparency_notes ?? "").includes(TREASURER_MANUAL_EXPENSE_MARKER)
+  );
   const groupRows = rows.filter(
     (row) => (row.expense_group_title?.trim() || row.title) === groupName
   );
@@ -132,7 +135,10 @@ export default async function TreasurerContributionExpenseGroupPage({
 
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/treasurer/finance/contribution-expenses">Back to Groups</Link>
+            <Link href="/treasurer/finance">Finance</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/treasurer/contribution-expenses">Back to Groups</Link>
           </Button>
           <SubmitExpenseDialog
             dormId={dormId}

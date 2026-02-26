@@ -3,7 +3,7 @@ import { format } from "date-fns";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
-import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
+import { ensureActiveSemesterId, getActiveSemester, listDormSemesters } from "@/lib/semesters";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
@@ -34,6 +34,7 @@ type EventRef = {
 type SemesterRef = {
   id: string;
   label: string;
+  status: string;
 };
 
 type LedgerEntryRow = {
@@ -65,6 +66,11 @@ type ContributionGroup = {
   latestPostedAt: string;
   semesterLabels: string[];
 };
+
+function isManualInflowEntry(row: LedgerEntryRow) {
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  return metadata.finance_manual_inflow === true;
+}
 
 const normalizeParam = (value?: string | string[]) => {
   if (Array.isArray(value)) {
@@ -206,12 +212,8 @@ export default async function EventsFinancePage({
   const activeSemesterId = semesterResult.semesterId;
   const activeSemester = await getActiveSemester(activeDormId, supabase);
 
-  const [{ data: semesterRows }, dormOptions, { data: occupants }, { data: dormConfig }] = await Promise.all([
-    supabase
-      .from("dorm_semesters")
-      .select("id, label")
-      .eq("dorm_id", activeDormId)
-      .order("starts_on", { ascending: false }),
+  const [semesterRows, dormOptions, { data: occupants }, { data: dormConfig }] = await Promise.all([
+    listDormSemesters(activeDormId, supabase),
     getUserDorms(),
     supabase
       .from("occupants")
@@ -226,7 +228,7 @@ export default async function EventsFinancePage({
       .maybeSingle(),
   ]);
 
-  const semesters = (semesterRows ?? []) as SemesterRef[];
+  const semesters = semesterRows as SemesterRef[];
   const semesterIdsFromParams = normalizeArrayParam(params?.semester);
   const validSemesterIds = new Set(semesters.map((semester) => semester.id));
   const selectedSemesterIds =
@@ -239,8 +241,14 @@ export default async function EventsFinancePage({
       ? (dormConfig.attributes as Record<string, unknown>)
       : {};
   const allowHistoricalEdit = dormAttributes.finance_non_current_semester_override === true;
-  const isReadOnlyView =
-    !selectedSemesterIds.includes(activeSemesterId) && !allowHistoricalEdit;
+
+  // Any semester that is marked "active" in the DB should be editable.
+  const isSelectedActive = selectedSemesterIds.some((selectedId) => {
+    const sem = semesters.find(s => s.id === selectedId);
+    return sem?.status === "active";
+  });
+
+  const isReadOnlyView = !isSelectedActive && !allowHistoricalEdit;
 
   const { data: entryRows, error: entriesError } = await supabase
     .from("ledger_entries")
@@ -255,7 +263,9 @@ export default async function EventsFinancePage({
     return <div className="p-6 text-sm text-destructive">Error loading contribution ledger.</div>;
   }
 
-  const typedEntries = (entryRows ?? []) as LedgerEntryRow[];
+  const typedEntries = ((entryRows ?? []) as LedgerEntryRow[]).filter(
+    (entry) => !isManualInflowEntry(entry)
+  );
 
   const eventIds = Array.from(
     new Set(
@@ -431,6 +441,9 @@ export default async function EventsFinancePage({
             ) : (
               <Badge variant="outline">Selected semesters are view-only</Badge>
             )}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/treasurer/finance">Finance</Link>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link href="/treasurer/contribution-expenses">Expenses</Link>
             </Button>

@@ -38,7 +38,7 @@ export function TreasurerDashboard({
           <Progress value={collectionRate} className="h-2 bg-muted [&>div]:bg-emerald-500" />
           <div className="flex gap-2">
             <Button asChild size="sm" className="w-full">
-              <Link href={`/${role}/finance/contributions`}>
+              <Link href={`/${role}/contributions`}>
                 <Receipt className="mr-2 h-4 w-4" />
                 Contributions
               </Link>

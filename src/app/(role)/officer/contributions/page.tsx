@@ -200,7 +200,7 @@ export default async function EventsFinancePage({
             </Button>
             {search ? (
               <Button asChild type="button" variant="ghost" size="sm">
-                <Link href="/officer/finance/events">Reset</Link>
+                <Link href="/officer/contributions">Reset</Link>
               </Button>
             ) : null}
           </form>
@@ -293,7 +293,7 @@ export default async function EventsFinancePage({
                   {event.deadline ? format(new Date(event.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                 </p>
                 <Button asChild size="sm" className="w-full">
-                  <Link href={`/officer/finance/events/${event.id}`}>Manage</Link>
+                  <Link href={`/officer/contributions/${event.id}`}>Manage</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -334,7 +334,7 @@ export default async function EventsFinancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/officer/finance/events/${event.id}`}>Manage</Link>
+                    <Link href={`/officer/contributions/${event.id}`}>Manage</Link>
                   </Button>
                 </TableCell>
               </TableRow>

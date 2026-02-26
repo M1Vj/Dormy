@@ -520,7 +520,7 @@ export async function toggleFinanceHistoricalEditOverride(dormId: string, enable
   revalidatePath(`/${activeRole}`);
   revalidatePath(`/${activeRole}/settings`);
   revalidatePath(`/${activeRole}/finance`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   return { success: true };
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureActiveSemesterId } from "@/lib/semesters";
+import { TREASURER_MANUAL_EXPENSE_MARKER } from "@/lib/finance/constants";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { optimizeImage } from "@/lib/images";
@@ -100,6 +101,15 @@ const contributionPayableOverrideSchema = z.object({
   reason: z.string().trim().min(3).max(300),
 });
 
+const treasurerFinanceManualEntrySchema = z.object({
+  entry_kind: z.enum(["inflow", "expense"]),
+  title: z.string().trim().min(2).max(160),
+  amount: z.number().positive(),
+  happened_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  counterparty: z.string().trim().max(160).optional().nullable(),
+  note: z.string().trim().max(2000).optional().nullable(),
+});
+
 const overwriteLedgerSchema = z.object({
   entry_id: z.string().uuid(),
   amount: z.number().positive(),
@@ -191,6 +201,150 @@ function parseContributionMetadata(
         ? logoRaw.trim()
         : null,
   };
+}
+
+export async function createTreasurerFinanceManualEntry(
+  dormId: string,
+  payload: z.infer<typeof treasurerFinanceManualEntrySchema>
+) {
+  const parsed = treasurerFinanceManualEntrySchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid finance entry payload." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  if (membershipError || !memberships?.length) {
+    return { error: "Forbidden" };
+  }
+
+  if (!memberships.some((membership) => membership.role === "treasurer")) {
+    return { error: "Only the dorm treasurer can add finance entries here." };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "No active semester." };
+  }
+
+  const noteText = input.note?.trim() || "";
+  const counterpartyText = input.counterparty?.trim() || "";
+  const amount = Number(input.amount.toFixed(2));
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
+  if (input.entry_kind === "inflow") {
+    const { error: insertError } = await writeClient.from("ledger_entries").insert({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      ledger: "contributions",
+      entry_type: "payment",
+      occupant_id: null,
+      event_id: null,
+      fine_id: null,
+      posted_at: `${input.happened_on}T12:00:00.000Z`,
+      amount_pesos: -Math.abs(amount),
+      method: "manual_finance",
+      note: input.title.trim(),
+      metadata: {
+        finance_manual_inflow: true,
+        finance_counterparty: counterpartyText || null,
+        finance_note: noteText || null,
+        finance_source: "treasurer_finance_page",
+      },
+      created_by: user.id,
+    });
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  } else {
+    const combinedNote = [TREASURER_MANUAL_EXPENSE_MARKER, noteText].filter(Boolean).join("\n");
+    const { error: insertError } = await writeClient.from("expenses").insert({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      committee_id: null,
+      submitted_by: user.id,
+      title: input.title.trim(),
+      description: noteText || null,
+      amount_pesos: amount,
+      purchased_at: input.happened_on,
+      receipt_storage_path: null,
+      status: "approved",
+      approved_by: user.id,
+      approval_comment: "Treasurer finance manual entry",
+      approved_at: new Date().toISOString(),
+      category: "contributions",
+      expense_group_title: input.title.trim(),
+      contribution_reference_title: null,
+      vendor_name: counterpartyText || null,
+      official_receipt_no: null,
+      quantity: null,
+      unit_cost_pesos: null,
+      payment_method: "manual_finance",
+      purchased_by: counterpartyText || null,
+      transparency_notes: combinedNote || TREASURER_MANUAL_EXPENSE_MARKER,
+    });
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.manual_entry_created",
+      entityType: "finance",
+      metadata: {
+        entry_kind: input.entry_kind,
+        title: input.title,
+        amount_pesos: amount,
+        happened_on: input.happened_on,
+        counterparty: counterpartyText || null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for treasurer manual finance entry:", auditError);
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contribution-expenses`);
+  revalidatePath(`/${activeRole}/reporting`);
+
+  return { success: true };
 }
 
 // --- Actions ---
@@ -706,9 +860,9 @@ export async function overwriteLedgerEntry(
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/payments`);
   revalidatePath(`/${activeRole}/finance/maintenance`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   if (originalEntry.event_id) {
-    revalidatePath(`/${activeRole}/finance/events/${originalEntry.event_id}`);
+    revalidatePath(`/${activeRole}/contributions/${originalEntry.event_id}`);
   }
 
   return {
@@ -915,8 +1069,8 @@ export async function createContributionBatch(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events`);
-  revalidatePath(`/${activeRole}/finance/events/${batchId}`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contributions/${batchId}`);
   revalidatePath(`/${activeRole}/payments`);
 
   return {
@@ -1321,9 +1475,9 @@ export async function recordContributionBatchPayment(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   for (const row of allocRows) {
-    revalidatePath(`/${activeRole}/finance/events/${row.contributionId}`);
+    revalidatePath(`/${activeRole}/contributions/${row.contributionId}`);
   }
   revalidatePath(`/${activeRole}/payments`);
 
@@ -1823,9 +1977,9 @@ export async function updateContributionReceiptTemplate(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}/receipt`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}/receipt`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   return {
     success: true,
@@ -2088,9 +2242,9 @@ export async function updateContributionReceiptSignature(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}/receipt`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}/receipt`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   return {
     success: true,
@@ -2244,8 +2398,8 @@ export async function overrideContributionPayable(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions`);
   revalidatePath(`/${activeRole}/payments`);
 
   return { success: true, payable: input.new_payable };
@@ -2646,7 +2800,7 @@ export async function createPublicViewToken(
   if (error) return { error: error.message };
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${entityId}`);
+  revalidatePath(`/${activeRole}/contributions/${entityId}`);
   return { success: true, token: data.token };
 }
 

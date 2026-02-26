@@ -6,7 +6,6 @@ import { AlertCircle, ArrowLeft, CheckCircle, ReceiptText, XCircle } from "lucid
 import { getOccupants } from "@/app/actions/occupants";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { ContributionPayableOverrideDialog } from "@/components/finance/contribution-payable-override-dialog";
-import { ContributionReceiptSignatureForm } from "@/components/finance/contribution-receipt-signature-form";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -127,7 +126,7 @@ function parseContributionMetadata(entry: EntryRow) {
   const contributionId =
     typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
       ? contributionIdRaw
-      : null;
+      : entry.id;
 
   return {
     contributionId,
@@ -177,6 +176,7 @@ export default async function EventDetailsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const [{ id: contributionId }, paramValues] = await Promise.all([params, searchParams]);
+
   const search = normalizeParam(paramValues?.search)?.trim() || "";
   const statusFilter = normalizeParam(paramValues?.status)?.trim() || "";
 
@@ -225,7 +225,8 @@ export default async function EventDetailsPage({
       .select("id, semester_id, occupant_id, event_id, entry_type, amount_pesos, metadata")
       .eq("dorm_id", dormId)
       .eq("ledger", "contributions")
-      .is("voided_at", null),
+      .is("voided_at", null)
+      .or(`id.eq.${contributionId},event_id.eq.${contributionId},metadata->>contribution_id.eq.${contributionId},metadata->>payable_batch_id.eq.${contributionId}`),
     getOccupants(dormId, { status: "active" }),
     supabase
       .from("dorms")
@@ -375,7 +376,7 @@ export default async function EventDetailsPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/treasurer/finance/contributions">
+            <Link href="/treasurer/contributions">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -389,7 +390,7 @@ export default async function EventDetailsPage({
             ) : null}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0">
           {!isReadOnlyView ? (
             <>
               <LedgerOverwriteDialog dormId={dormId} />
@@ -401,9 +402,9 @@ export default async function EventDetailsPage({
           ) : (
             <Badge variant="outline">View-only semester</Badge>
           )}
-          <Button asChild variant="secondary">
-            <Link href={`/treasurer/finance/contributions/${contributionId}/receipt`}>
-              <ReceiptText className="mr-2 h-4 w-4" />
+          <Button asChild variant="secondary" className="gap-2 bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-sm">
+            <Link href={`/treasurer/contributions/${contributionId}/receipt`}>
+              <ReceiptText className="h-4 w-4" />
               Receipt Builder
             </Link>
           </Button>
@@ -415,17 +416,6 @@ export default async function EventDetailsPage({
           <CardContent className="pt-6 text-sm text-muted-foreground">{contributionDetails}</CardContent>
         </Card>
       ) : null}
-
-      <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm border-muted">
-        <CardContent className="pt-6">
-          <ContributionReceiptSignatureForm
-            dormId={dormId}
-            contributionId={contributionId}
-            initialSignature={contributionReceiptSignature}
-            disabled={isReadOnlyView}
-          />
-        </CardContent>
-      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
@@ -501,7 +491,7 @@ export default async function EventDetailsPage({
               </Button>
               {search || statusFilter ? (
                 <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/treasurer/finance/contributions/${contributionId}`}>Reset</Link>
+                  <Link href={`/treasurer/contributions/${contributionId}`}>Reset</Link>
                 </Button>
               ) : null}
             </div>

@@ -25,11 +25,13 @@ export function ContributionReceiptSignatureForm({
   contributionId,
   initialSignature,
   disabled = false,
+  onChange,
 }: {
   dormId: string;
   contributionId: string;
   initialSignature: string;
   disabled?: boolean;
+  onChange?: (newSignature: string) => void;
 }) {
   const router = useRouter();
   const [signature, setSignature] = useState(initialSignature);
@@ -61,6 +63,9 @@ export function ContributionReceiptSignatureForm({
 
       setSignature(trimmed);
       toast.success("Contribution receipt signature updated.");
+      if (onChange) {
+        onChange(trimmed);
+      }
       router.refresh();
     } catch {
       toast.error("Failed to save receipt signature.");

@@ -31,7 +31,7 @@ function StaffFinanceHub({ role }: { role: string }) {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href={role === "treasurer" ? "/treasurer/finance/contributions" : "/admin/finance/contributions"}>Open events ledger</Link>
+                <Link href={role === "treasurer" ? "/treasurer/contributions" : "/admin/contributions"}>Open events ledger</Link>
               </Button>
             </CardContent>
           </Card>
