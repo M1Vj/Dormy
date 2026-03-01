@@ -1,10 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarCheck2, Loader2 } from "lucide-react";
+import { CalendarCheck2, Loader2, Check, ChevronsUpDown, Plus, X } from "lucide-react";
 
 import {
   previewContributionBatchPaymentEmail,
@@ -31,6 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 type ContributionOption = {
   id: string;
@@ -40,7 +50,12 @@ type ContributionOption = {
   receiptSubject: string | null;
   receiptMessage: string | null;
   receiptLogoUrl: string | null;
+  isStore?: boolean;
+  storeItems?: any[];
 };
+
+/** Per-occupant remaining amounts keyed by `occupantId:contributionId` */
+type OccupantContributionRemaining = Record<string, number>;
 
 type OccupantOption = {
   id: string;
@@ -61,6 +76,7 @@ type BatchPaymentPayload = {
   receipt_message: string | null;
   receipt_signature: string | null;
   receipt_logo_url: string | null;
+  cart_items?: any[];
 };
 
 function nowLocalDateTimeValue() {
@@ -73,18 +89,30 @@ export function ContributionBatchPaymentDialog({
   dormId,
   contributions,
   occupants,
+  occupantContributionRemaining,
   triggerClassName,
   triggerVariant = "default",
 }: {
   dormId: string;
   contributions: ContributionOption[];
   occupants: OccupantOption[];
+  /** Map of `occupantId:contributionId` → remaining amount for that occupant */
+  occupantContributionRemaining?: OccupantContributionRemaining;
   triggerClassName?: string;
   triggerVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [occupantId, setOccupantId] = useState<string>("");
+  const [openOccupantCombobox, setOpenOccupantCombobox] = useState(false);
+  const [occupantId, setOccupantIdRaw] = useState<string>("");
+
+  /** When occupant changes, reset contribution selections since remaining amounts change per-occupant */
+  const setOccupantId = useCallback((newId: string) => {
+    setOccupantIdRaw(newId);
+    setSelectedContributionIds([]);
+    setAmount(0);
+    setAllocationTargetId("");
+  }, []);
   const [selectedContributionIds, setSelectedContributionIds] = useState<string[]>([]);
   const [amount, setAmount] = useState<number>(0);
   const [method, setMethod] = useState<"cash" | "gcash">("cash");
@@ -95,6 +123,7 @@ export function ContributionBatchPaymentDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreparingPreview, setIsPreparingPreview] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [overpaymentConfirmOpen, setOverpaymentConfirmOpen] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<BatchPaymentPayload | null>(null);
   const [emailPreview, setEmailPreview] = useState<{
     recipient_email: string;
@@ -102,87 +131,60 @@ export function ContributionBatchPaymentDialog({
     text: string;
   } | null>(null);
 
-  const selectedContributions = useMemo(
-    () => {
-      console.log("RERENDERING ContributionBatchPaymentDialog", { open });
-      return contributions.filter((contribution) => selectedContributionIds.includes(contribution.id));
+  // Store cart state: keyed by contribution id
+  const [storeCartItems, setStoreCartItems] = useState<Record<string, any[]>>({});
+
+  const storeCartTotal = useMemo(() => {
+    return Object.values(storeCartItems)
+      .flat()
+      .reduce((sum, item) => sum + (item.subtotal || 0), 0);
+  }, [storeCartItems]);
+
+  /** Resolve the per-occupant remaining for each contribution, falling back to total remaining if no occupant is selected */
+  const getOccupantRemaining = useCallback(
+    (contributionId: string) => {
+      if (!occupantId) return null;
+      const key = `${occupantId}:${contributionId}`;
+      return occupantContributionRemaining?.[key] ?? 0;
     },
+    [occupantId, occupantContributionRemaining]
+  );
+
+  const selectedContributions = useMemo(
+    () => contributions.filter((contribution) => selectedContributionIds.includes(contribution.id)),
     [contributions, selectedContributionIds]
   );
 
-  const computedTotal = useMemo(
-    () => selectedContributions.reduce((sum, contribution) => sum + Math.max(0, contribution.remaining), 0),
+  const hasAnyStoreContributions = useMemo(
+    () => selectedContributions.some((c) => c.isStore),
     [selectedContributions]
+  );
+
+  const computedTotal = useMemo(
+    () =>
+      selectedContributions.reduce((sum, contribution) => {
+        const remaining = occupantId
+          ? (getOccupantRemaining(contribution.id) ?? 0)
+          : contribution.remaining;
+        return sum + Math.max(0, remaining);
+      }, 0),
+    [selectedContributions, occupantId, getOccupantRemaining]
   );
 
   const amountDifference = useMemo(() => Number((amount - computedTotal).toFixed(2)), [amount, computedTotal]);
-  const selectedContributionSignatureSet = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          selectedContributions
-            .map((contribution) => contribution.receiptSignature?.trim() ?? "")
-            .filter((value) => value.length > 0)
-        )
-      ),
-    [selectedContributions]
-  );
-  const selectedContributionSubjectSet = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          selectedContributions
-            .map((contribution) => contribution.receiptSubject?.trim() ?? "")
-            .filter((value) => value.length > 0)
-        )
-      ),
-    [selectedContributions]
-  );
-  const selectedContributionMessageSet = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          selectedContributions
-            .map((contribution) => contribution.receiptMessage?.trim() ?? "")
-            .filter((value) => value.length > 0)
-        )
-      ),
-    [selectedContributions]
-  );
-  const selectedContributionLogoSet = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          selectedContributions
-            .map((contribution) => contribution.receiptLogoUrl?.trim() ?? "")
-            .filter((value) => value.length > 0)
-        )
-      ),
-    [selectedContributions]
-  );
-  const selectedContributionSignature =
-    selectedContributionSignatureSet.length === 1 ? selectedContributionSignatureSet[0] : "";
-  const selectedContributionSubject =
-    selectedContributionSubjectSet.length === 1 ? selectedContributionSubjectSet[0] : "";
-  const selectedContributionMessage =
-    selectedContributionMessageSet.length === 1 ? selectedContributionMessageSet[0] : "";
-  const selectedContributionLogoUrl =
-    selectedContributionLogoSet.length === 1 ? selectedContributionLogoSet[0] : "";
-  const hasMixedContributionSignatures = selectedContributionSignatureSet.length > 1;
-  const hasMixedContributionSubjects = selectedContributionSubjectSet.length > 1;
-  const hasMixedContributionMessages = selectedContributionMessageSet.length > 1;
-  const hasMixedContributionLogos = selectedContributionLogoSet.length > 1;
-  const hasMissingContributionSignature =
-    selectedContributions.length > 0 &&
-    selectedContributions.some((contribution) => !(contribution.receiptSignature?.trim() ?? ""));
 
   const previewRows = useMemo(() => {
     if (!selectedContributions.length) return [] as Array<{ title: string; amount: number }>;
-    const rows = selectedContributions.map((contribution) => ({
-      id: contribution.id,
-      title: contribution.title,
-      amount: Math.max(0, contribution.remaining),
-    }));
+    const rows = selectedContributions.map((contribution) => {
+      const remaining = occupantId
+        ? (getOccupantRemaining(contribution.id) ?? 0)
+        : contribution.remaining;
+      return {
+        id: contribution.id,
+        title: contribution.title,
+        amount: Math.max(0, remaining),
+      };
+    });
 
     if (Math.abs(amountDifference) < 0.01) {
       return rows.map((row) => ({ title: row.title, amount: row.amount }));
@@ -198,7 +200,7 @@ export function ContributionBatchPaymentDialog({
       }
       return { title: row.title, amount: Number((row.amount + amountDifference).toFixed(2)) };
     });
-  }, [allocationTargetId, amountDifference, selectedContributions]);
+  }, [allocationTargetId, amountDifference, selectedContributions, occupantId, getOccupantRemaining]);
 
   const toggleContribution = (id: string, checked: boolean) => {
     const next = checked
@@ -208,8 +210,15 @@ export function ContributionBatchPaymentDialog({
     setSelectedContributionIds(next);
 
     const nextSelected = contributions.filter((contribution) => next.includes(contribution.id));
-    const nextTotal = nextSelected.reduce((sum, contribution) => sum + Math.max(0, contribution.remaining), 0);
-    setAmount(Number(nextTotal.toFixed(2)));
+    const nextTotal = nextSelected.reduce((sum, contribution) => {
+      // For store contributions, don't add remaining — amount comes from cart
+      if (contribution.isStore) return sum;
+      const remaining = occupantId
+        ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
+        : contribution.remaining;
+      return sum + Math.max(0, remaining);
+    }, 0);
+    setAmount(Number((nextTotal + storeCartTotal).toFixed(2)));
 
     if (!next.includes(allocationTargetId)) {
       setAllocationTargetId("");
@@ -224,8 +233,10 @@ export function ContributionBatchPaymentDialog({
       setAllocationTargetId("");
       setPaidAtLocal(nowLocalDateTimeValue());
       setConfirmOpen(false);
+      setOverpaymentConfirmOpen(false);
       setPendingPayload(null);
       setEmailPreview(null);
+      setStoreCartItems({});
     }
   };
 
@@ -256,28 +267,7 @@ export function ContributionBatchPaymentDialog({
       return null;
     }
 
-    if (sendReceiptEmail) {
-      if (hasMixedContributionSignatures) {
-        toast.error("Selected contributions use different signatures. Use one signature template.");
-        return null;
-      }
-      if (hasMixedContributionSubjects) {
-        toast.error("Selected contributions use different receipt subjects. Use one receipt template.");
-        return null;
-      }
-      if (hasMixedContributionMessages) {
-        toast.error("Selected contributions use different receipt messages. Use one receipt template.");
-        return null;
-      }
-      if (hasMixedContributionLogos) {
-        toast.error("Selected contributions use different receipt logos. Use one receipt template.");
-        return null;
-      }
-      if (hasMissingContributionSignature || !selectedContributionSignature) {
-        toast.error("Set the contribution receipt signature on the contribution page first.");
-        return null;
-      }
-    }
+    // Use global templates for batch receipt emails
 
     const payload: BatchPaymentPayload = {
       occupant_id: occupantId,
@@ -292,6 +282,7 @@ export function ContributionBatchPaymentDialog({
       receipt_message: null,
       receipt_signature: null,
       receipt_logo_url: null,
+      cart_items: hasAnyStoreContributions ? Object.values(storeCartItems).flat() : undefined,
     };
 
     return payload;
@@ -321,6 +312,16 @@ export function ContributionBatchPaymentDialog({
   };
 
   const handleProceedToConfirmation = async () => {
+    if (computedTotal <= 0) {
+      const payload = buildPayload();
+      if (!payload) return;
+      setOverpaymentConfirmOpen(true);
+      return;
+    }
+    await processProceedToConfirmation();
+  };
+
+  const processProceedToConfirmation = async () => {
     const payload = buildPayload();
     if (!payload) {
       return;
@@ -385,21 +386,59 @@ export function ContributionBatchPaymentDialog({
 
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label>Occupant</Label>
-                <Select value={occupantId} onValueChange={setOccupantId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select occupant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {occupants.map((occupant) => (
-                      <SelectItem key={occupant.id} value={occupant.id}>
-                        {occupant.fullName}
-                        {occupant.studentId ? ` (${occupant.studentId})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={openOccupantCombobox} onOpenChange={setOpenOccupantCombobox}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openOccupantCombobox}
+                      className="justify-between w-full font-normal shadow-sm"
+                    >
+                      {occupantId
+                        ? (() => {
+                          const occ = occupants.find((o) => o.id === occupantId);
+                          return occ ? `${occ.fullName}${occ.studentId ? ` (${occ.studentId})` : ""}` : "Select occupant...";
+                        })()
+                        : "Select occupant..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search occupant..." />
+                      <CommandList>
+                        <CommandEmpty>No occupant found.</CommandEmpty>
+                        <CommandGroup>
+                          {occupants.map((occupant) => (
+                            <CommandItem
+                              key={occupant.id}
+                              value={`${occupant.fullName} ${occupant.studentId || ""}`}
+                              onSelect={() => {
+                                setOccupantId(occupant.id);
+                                setOpenOccupantCombobox(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  occupantId === occupant.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {occupant.fullName}
+                              {occupant.studentId ? (
+                                <span className="ml-1 text-muted-foreground text-xs">
+                                  ({occupant.studentId})
+                                </span>
+                              ) : null}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
@@ -425,11 +464,22 @@ export function ContributionBatchPaymentDialog({
                   contributions.map((contribution) => {
                     const checked = selectedContributionIds.includes(contribution.id);
                     return (
-                      <label key={contribution.id} className="flex items-start gap-3 rounded-md border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors cursor-pointer">
-                        <Checkbox checked={checked} onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))} className="mt-0.5" />
+                      <label key={contribution.id} className={`flex items-start gap-3 rounded-md border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors ${occupantId ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))}
+                          className="mt-0.5"
+                          disabled={!occupantId}
+                        />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium leading-none">{contribution.title}</p>
-                          <p className="text-xs text-muted-foreground mt-1.5">Remaining: <span className="font-semibold text-foreground">₱{contribution.remaining.toFixed(2)}</span></p>
+                          {occupantId ? (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Remaining: <span className="font-semibold text-foreground">₱{(getOccupantRemaining(contribution.id) ?? 0).toFixed(2)}</span>
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1.5">Select an occupant first</p>
+                          )}
                         </div>
                       </label>
                     );
@@ -441,6 +491,177 @@ export function ContributionBatchPaymentDialog({
                 <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Exact Total: ₱{computedTotal.toFixed(2)}</Badge>
               </div>
             </div>
+
+            {/* Store Cart Builder — per selected store contribution */}
+            {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore).map((contribution) => {
+              const cartForContribution = storeCartItems[contribution.id] || [];
+              const items = contribution.storeItems || [];
+
+              const addCartItem = () => {
+                const newItem = { id: crypto.randomUUID(), item_id: "", quantity: 1, options: [], subtotal: 0 };
+                const updated = [...cartForContribution, newItem];
+                const next = { ...storeCartItems, [contribution.id]: updated };
+                setStoreCartItems(next);
+                // Recalculate amount
+                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
+                const nonStoreTotal = selectedContributions
+                  .filter((c) => !c.isStore)
+                  .reduce((s, c) => {
+                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
+                    return s + Math.max(0, rem);
+                  }, 0);
+                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+              };
+
+              const removeCartItem = (itemIdx: number) => {
+                const updated = cartForContribution.filter((_: any, i: number) => i !== itemIdx);
+                const next = { ...storeCartItems, [contribution.id]: updated };
+                setStoreCartItems(next);
+                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
+                const nonStoreTotal = selectedContributions
+                  .filter((c) => !c.isStore)
+                  .reduce((s, c) => {
+                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
+                    return s + Math.max(0, rem);
+                  }, 0);
+                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+              };
+
+              const updateCartItem = (itemIdx: number, patch: Partial<any>) => {
+                const updated = cartForContribution.map((ci: any, i: number) => i === itemIdx ? { ...ci, ...patch } : ci);
+                const next = { ...storeCartItems, [contribution.id]: updated };
+                setStoreCartItems(next);
+                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
+                const nonStoreTotal = selectedContributions
+                  .filter((c) => !c.isStore)
+                  .reduce((s, c) => {
+                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
+                    return s + Math.max(0, rem);
+                  }, 0);
+                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+              };
+
+              return (
+                <div key={contribution.id} className="space-y-3 rounded-xl border p-4 bg-muted/10">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Store Cart — {contribution.title}</Label>
+                    <Button type="button" variant="secondary" size="sm" onClick={addCartItem}>
+                      <Plus className="mr-2 h-4 w-4" /> Add Item
+                    </Button>
+                  </div>
+                  {cartForContribution.length === 0 ? (
+                    <div className="rounded border border-dashed border-muted-foreground/30 p-6 text-center text-sm text-muted-foreground">
+                      No items added to cart yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {cartForContribution.map((cartItem: any, cartIdx: number) => {
+                        const selectedStoreItem = items.find((i: any) => i.id === cartItem.item_id);
+                        return (
+                          <div key={cartItem.id} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => removeCartItem(cartIdx)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                            <div className="grid grid-cols-[1fr_80px] gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold">Item</Label>
+                                <Select
+                                  onValueChange={(val) => {
+                                    const sItem = items.find((i: any) => i.id === val);
+                                    if (sItem) {
+                                      const defaultOpts = (sItem.options || []).map((o: any) => ({
+                                        name: o.name,
+                                        value: o.choices[0] || "",
+                                      }));
+                                      updateCartItem(cartIdx, {
+                                        item_id: val,
+                                        options: defaultOpts,
+                                        subtotal: sItem.price * (cartItem.quantity || 1),
+                                      });
+                                    } else {
+                                      updateCartItem(cartIdx, { item_id: val });
+                                    }
+                                  }}
+                                  value={cartItem.item_id}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select item" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {items.map((si: any) => (
+                                      <SelectItem key={si.id} value={si.id}>
+                                        {si.name} (₱{si.price})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs font-semibold">Qty</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  className="h-9"
+                                  value={cartItem.quantity}
+                                  onChange={(e) => {
+                                    const qty = parseInt(e.target.value) || 1;
+                                    updateCartItem(cartIdx, {
+                                      quantity: qty,
+                                      subtotal: selectedStoreItem ? selectedStoreItem.price * qty : cartItem.subtotal,
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {selectedStoreItem?.options?.length > 0 && (
+                              <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+                                {selectedStoreItem.options.map((opt: any, optIndex: number) => (
+                                  <div key={opt.name} className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">{opt.name}</Label>
+                                    <Select
+                                      onValueChange={(val) => {
+                                        const newOpts = [...(cartItem.options || [])];
+                                        newOpts[optIndex] = { name: opt.name, value: val };
+                                        updateCartItem(cartIdx, { options: newOpts });
+                                      }}
+                                      value={cartItem.options?.[optIndex]?.value || ""}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder={`Select ${opt.name}`} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {opt.choices.map((choice: string) => (
+                                          <SelectItem key={choice} value={choice}>
+                                            {choice}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="flex justify-end pt-1">
+                              <span className="text-sm font-semibold text-emerald-600">
+                                Subtotal: ₱{(cartItem.subtotal || 0).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -501,63 +722,10 @@ export function ContributionBatchPaymentDialog({
                   </div>
 
                   <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-                    <Label>Saved Receipt Template Source</Label>
-                    {hasMixedContributionSignatures ? (
-                      <p className="text-xs text-destructive">
-                        Selected contributions use different signatures. Select contributions that share one signature.
-                      </p>
-                    ) : hasMissingContributionSignature || !selectedContributionSignature ? (
-                      <p className="text-xs text-destructive">
-                        Set the receipt signature on the contribution page before sending this email.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Subject</p>
-                          <p className="text-sm font-medium">
-                            {hasMixedContributionSubjects
-                              ? "Mixed templates"
-                              : selectedContributionSubject || "Contribution payment receipt"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Message</p>
-                          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                            {hasMixedContributionMessages
-                              ? "Mixed templates"
-                              : selectedContributionMessage || "Default contribution receipt message will be used."}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Logo</p>
-                          {hasMixedContributionLogos ? (
-                            <p className="text-xs text-destructive">Selected contributions use different logos.</p>
-                          ) : selectedContributionLogoUrl ? (
-                            <img
-                              src={selectedContributionLogoUrl}
-                              alt="Contribution logo"
-                              className="mt-2 max-h-16 w-auto rounded border bg-white p-2"
-                            />
-                          ) : (
-                            <p className="text-xs text-muted-foreground">No logo saved for this template.</p>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Signature</p>
-                          {selectedContributionSignature.startsWith("http") ? (
-                            <img
-                              src={selectedContributionSignature}
-                              alt="Contribution signature"
-                              className="mt-2 max-h-20 w-auto rounded border bg-white p-2"
-                            />
-                          ) : (
-                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
-                              {selectedContributionSignature}
-                            </pre>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    <Label>Template Settings</Label>
+                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                      The global contribution receipt settings (Subject, Message, Signature, and Logo) will be used for this receipt.
+                    </p>
                   </div>
 
                   <div className="rounded-md bg-muted/40 p-3">
@@ -595,6 +763,38 @@ export function ContributionBatchPaymentDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={overpaymentConfirmOpen} onOpenChange={setOverpaymentConfirmOpen}>
+        <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-amber-600 dark:text-amber-500">Contributions Already Settled</DialogTitle>
+            <DialogDescription className="text-sm">
+              The selected contributions are already fully paid. Do you want to record an overpayment anyway?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-800 dark:text-amber-200">
+            <p className="text-sm">
+              <strong>Note:</strong> Overpayments are recorded but do not lower the remaining balances below zero.
+            </p>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="ghost" onClick={() => setOverpaymentConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                setOverpaymentConfirmOpen(false);
+                processProceedToConfirmation();
+              }}
+            >
+              Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>

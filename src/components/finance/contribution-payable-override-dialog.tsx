@@ -25,13 +25,19 @@ export function ContributionPayableOverrideDialog({
   contributionId,
   occupantId,
   currentPayable,
-  trigger,
+  variant = "outline",
+  className,
 }: {
   dormId: string;
   contributionId: string;
   occupantId: string;
   currentPayable: number;
-  trigger?: React.ReactNode;
+  // IMPORTANT: Do NOT use React.ReactNode for passing trigger elements from
+  // Server Components if this component will be rendered inside an array (.map).
+  // Next.js RSC (Flight) serialization can deduplicate identical JSX nodes,
+  // causing buttons to randomly disappear. Pass scalar props instead.
+  variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+  className?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -78,12 +84,10 @@ export function ContributionPayableOverrideDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger || (
-          <Button size="sm" variant="outline">
-            <PenLine className="mr-2 h-4 w-4" />
-            Change Payable
-          </Button>
-        )}
+        <Button size="sm" variant={variant} className={className}>
+          <PenLine className="mr-2 h-4 w-4" />
+          Change Payable
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
         <DialogHeader>
