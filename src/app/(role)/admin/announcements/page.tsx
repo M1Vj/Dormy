@@ -89,7 +89,7 @@ export default async function AdminAnnouncementsPage() {
                       {expiresAt ? ` • Expires ${format(expiresAt, "MMM d, yyyy h:mm a")}` : ""}
                     </CardDescription>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {announcement.committee ? (
                       <span className="rounded-full border bg-card px-2 py-0.5 text-xs">
                         {announcement.committee.name}

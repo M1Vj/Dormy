@@ -339,6 +339,7 @@ export default async function CommitteeDetailsPage({
                   hostDormId={dormId}
                   dormOptions={dormOptions}
                   committeeId={committee.id}
+                  basePath="/admin/events"
                 />
               ) : null}
             </CardHeader>

@@ -1,2 +1,0 @@
-[  211388ms] [ERROR] Failed to load resource: the server responded with a status of 503 () @ http://localhost:3000/treasurer/finance/events/71147e62-dd20-46e0-baff-a7643720cd1d/receipt:0
-[  211392ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:3000/favicon.ico:0
