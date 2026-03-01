@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type DormSemester = {
   id: string;
-  dorm_id: string;
+  dorm_id: string | null;
   school_year: string;
   semester: string;
   label: string;
@@ -34,84 +34,62 @@ async function resolveSupabase(supabase?: SupabaseClient) {
 }
 
 export async function ensureActiveSemesterId(
-  dormId: string,
+  dormId: string | null,
   supabaseClient?: SupabaseClient
 ) {
   const supabase = await resolveSupabase(supabaseClient);
   if (!supabase) {
-    return { error: "Supabase is not configured for this environment." } as const;
+    return { error: "Supabase not configured." } as const;
   }
 
   const { data, error } = await supabase.rpc("ensure_active_semester", {
     p_dorm_id: dormId,
   });
 
-  if (error) {
-    return { error: error.message } as const;
-  }
-
-  if (!data || typeof data !== "string") {
-    return { error: "Unable to resolve active semester." } as const;
-  }
-
-  return { semesterId: data } as const;
+  if (error) return { error: error.message } as const;
+  return { semesterId: data as string } as const;
 }
 
 export async function getActiveSemester(
-  dormId: string,
+  dormId: string | null,
   supabaseClient?: SupabaseClient
 ) {
   const supabase = await resolveSupabase(supabaseClient);
-  if (!supabase) {
-    return null;
-  }
+  if (!supabase) return null;
 
-  // Find the semester where today is between starts_on and ends_on
   const today = new Date().toISOString().split("T")[0];
 
-  const { data, error } = await supabase
+  // Semesters are institution-wide (global). We always resolve from dorm_id = NULL.
+  // Dorm-specific rows are legacy and should not exist; global always wins.
+  const { data } = await supabase
     .from("dorm_semesters")
-    .select(
-      "id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at"
-    )
-    .eq("dorm_id", dormId)
+    .select("id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at")
+    .is("dorm_id", null)
+    .eq("status", "active")
     .lte("starts_on", today)
     .gte("ends_on", today)
     .order("starts_on", { ascending: false })
-    .limit(1)
     .maybeSingle();
 
-  if (error) {
-    console.error("Failed to load active semester:", error);
-    return null;
-  }
-
-  return (data as DormSemester | null) ?? null;
+  return (data as DormSemester) ?? null;
 }
 
 export async function listDormSemesters(
-  dormId: string,
+  dormId: string | null,
   supabaseClient?: SupabaseClient
 ) {
   const supabase = await resolveSupabase(supabaseClient);
-  if (!supabase) {
-    return [];
-  }
+  if (!supabase) return [];
 
+  // Semesters are global — always show only dorm_id = NULL rows.
   const { data, error } = await supabase
     .from("dorm_semesters")
-    .select(
-      "id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at"
-    )
-    .eq("dorm_id", dormId)
+    .select("id, dorm_id, school_year, semester, label, starts_on, ends_on, status, archived_at, created_at, updated_at")
+    .is("dorm_id", null)
     .order("starts_on", { ascending: false });
 
-  if (error) {
-    console.error("Failed to load semesters:", error);
-    return [];
-  }
-
-  return (data as DormSemester[]) ?? [];
+  if (error || !data) return [];
+  return data as DormSemester[];
 }
 
 export async function listDormSemesterArchives(

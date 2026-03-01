@@ -8,6 +8,19 @@ import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
+
+const createAdminClient = () => {
+  return createSupabaseAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+      },
+    }
+  );
+};
 
 type Joined<T> = T | T[] | null;
 
@@ -70,48 +83,57 @@ export type DormAnnouncement = {
   updated_at: string;
 };
 
-export async function getDormAnnouncements(
-  dormId: string,
-  options: { limit?: number } = {}
-) {
+export async function getDormAnnouncements(dormId: string | null, options: { limit?: number; committeeId?: string } = {}) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
-    return { announcements: [] as DormAnnouncement[], error: "" };
+    return { announcements: [], error: "Supabase not configured." };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const cookieStore = await cookies();
-  const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
+  const { data: adminMembership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user?.id || "")
+    .eq("role", "admin")
+    .limit(1);
 
-  let role: string | null = null;
-  if (user) {
-    const { data: membership } = await supabase
-      .from("dorm_memberships")
-      .select("role")
-      .eq("dorm_id", dormId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    role = membership?.role ?? null;
+  const isGlobalAdmin = !!adminMembership?.length;
+  const client = isGlobalAdmin ? createAdminClient() : supabase;
+
+  let effectiveIsStaff = isGlobalAdmin;
+  let semesterId: string | null = null;
+
+  if (dormId) {
+    if (!isGlobalAdmin) {
+      const { data: membership } = await supabase
+        .from("dorm_memberships")
+        .select("role")
+        .eq("dorm_id", dormId)
+        .eq("user_id", user?.id)
+        .maybeSingle();
+
+      effectiveIsStaff = !!membership && STAFF_ROLES.has(membership.role);
+    }
+
+    const semesterResult = await ensureActiveSemesterId(dormId, client);
+    if (!("error" in semesterResult)) {
+      semesterId = semesterResult.semesterId;
+    }
   }
 
-  const isActuallyStaff = role && STAFF_ROLES.has(role);
-  const effectiveIsStaff = isActuallyStaff && !isOccupantMode;
-
-  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
-  if ("error" in semesterResult) {
-    return { announcements: [] as DormAnnouncement[], error: semesterResult.error ?? "Failed to load semester." };
-  }
-
-  const query = supabase
+  const query = client
     .from("dorm_announcements")
     .select(
       "id, dorm_id, semester_id, title, body, visibility, audience, committee_id, pinned, starts_at, expires_at, created_by, created_at, updated_at, committee:committees(id, name)"
-    )
-    .eq("dorm_id", dormId)
-    .eq("semester_id", semesterResult.semesterId);
+    );
+
+  if (dormId) {
+    query.or(`dorm_id.eq.${dormId},dorm_id.is.null`);
+  } else {
+    // No dormId → show only global announcements (dorm_id IS NULL)
+    query.is("dorm_id", null);
+  }
 
   if (!effectiveIsStaff) {
     query.eq("visibility", "members");
@@ -213,7 +235,7 @@ export async function getCommitteeAnnouncements(
   return { announcements: normalized, error: "" };
 }
 
-export async function createAnnouncement(dormId: string, formData: FormData) {
+export async function createAnnouncement(dormId: string | null, formData: FormData) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
@@ -226,20 +248,33 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  let role: string | null = null;
+  if (dormId) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    role = membership?.role ?? null;
+  } else {
+    // Global announcement: user must be an admin in at least one dorm
+    const { data: adminMembership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1);
+    role = adminMembership?.[0]?.role ?? null;
+  }
 
-  if (membershipError || !membership?.role) {
+  if (!role) {
     return { error: "Forbidden" };
   }
 
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
-  const isStaff = !isOccupantMode && STAFF_ROLES.has(membership.role);
+  const isStaff = !isOccupantMode && role !== null && STAFF_ROLES.has(role);
 
   const startsAt = parseDateTimeInput(formData.get("starts_at"));
   const expiresAt = parseDateTimeInput(formData.get("expires_at"));
@@ -270,13 +305,13 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     }
   }
 
-  if (parsed.data.audience === "committee" && !parsed.data.committee_id) {
+  if (parsed.data.audience === "committee" && (!parsed.data.committee_id || !dormId)) {
     return { error: "Select a committee for committee-only announcements." };
   }
 
   const committeeId = parsed.data.committee_id ?? null;
 
-  if (committeeId) {
+  if (committeeId && dormId) {
     const { data: committee } = await supabase
       .from("committees")
       .select("id")
@@ -310,14 +345,17 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     }
   }
 
-  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
-  if ("error" in semesterResult) {
-    return { error: semesterResult.error ?? "Failed to resolve active semester." };
+  let semesterId: string | null = null;
+  if (dormId) {
+    const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+    if (!("error" in semesterResult)) {
+      semesterId = semesterResult.semesterId;
+    }
   }
 
   const payload: Record<string, unknown> = {
     dorm_id: dormId,
-    semester_id: semesterResult.semesterId,
+    semester_id: semesterId,
     title: parsed.data.title,
     body: parsed.data.body,
     visibility: isStaff ? parsed.data.visibility : "members",
@@ -332,7 +370,8 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
     payload.starts_at = parsed.data.starts_at;
   }
 
-  const { data, error } = await supabase
+  const insertClient = dormId ? supabase : createAdminClient();
+  const { data, error } = await insertClient
     .from("dorm_announcements")
     .insert(payload)
     .select("id")
@@ -344,7 +383,7 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId || "global",
       actorUserId: user.id,
       action: "announcements.created",
       entityType: "announcement",
@@ -357,6 +396,7 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
         pinned: parsed.data.pinned,
         starts_at: parsed.data.starts_at ?? null,
         expires_at: parsed.data.expires_at ?? null,
+        is_global: !dormId
       },
     });
   } catch (auditError) {
@@ -364,14 +404,12 @@ export async function createAnnouncement(dormId: string, formData: FormData) {
   }
 
   const activeRole = await getActiveRole() || "occupant";
-  revalidatePath(`/${activeRole}/home`);
-  revalidatePath(`/${activeRole}/home/announcements`);
-
+  revalidatePath(`/${activeRole}/home`, "layout");
   return { success: true };
 }
 
 export async function updateAnnouncement(
-  dormId: string,
+  dormId: string | null,
   announcementId: string,
   formData: FormData
 ) {
@@ -387,27 +425,45 @@ export async function updateAnnouncement(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (membershipError || !membership?.role) {
-    return { error: "Forbidden" };
+  let membership: { role: string } | null = null;
+  if (dormId) {
+    const { data, error: membershipError } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError || !data?.role) {
+      return { error: "Forbidden" };
+    }
+    membership = data;
+  } else {
+    // Global context: check admin in any dorm
+    const { data: adminMembership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1);
+    if (!adminMembership?.length) {
+      return { error: "Forbidden" };
+    }
+    membership = { role: "admin" };
   }
 
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
   const isStaff = !isOccupantMode && STAFF_ROLES.has(membership.role);
 
-  const { data: existing } = await supabase
+  const mutationClient = dormId ? supabase : createAdminClient();
+
+  const existingQuery = mutationClient
     .from("dorm_announcements")
     .select("id, committee_id, visibility")
-    .eq("dorm_id", dormId)
-    .eq("id", announcementId)
-    .maybeSingle();
+    .eq("id", announcementId);
+  if (dormId) existingQuery.eq("dorm_id", dormId);
+  else existingQuery.is("dorm_id", null);
+  const { data: existing } = await existingQuery.maybeSingle();
 
   if (!existing) {
     return { error: "Announcement not found." };
@@ -496,7 +552,7 @@ export async function updateAnnouncement(
   }
 
   const nowIso = new Date().toISOString();
-  const { error } = await supabase
+  const updateQuery = mutationClient
     .from("dorm_announcements")
     .update({
       title: parsed.data.title,
@@ -509,8 +565,10 @@ export async function updateAnnouncement(
       expires_at: parsed.data.expires_at ?? null,
       updated_at: nowIso,
     })
-    .eq("dorm_id", dormId)
     .eq("id", announcementId);
+  if (dormId) updateQuery.eq("dorm_id", dormId);
+  else updateQuery.is("dorm_id", null);
+  const { error } = await updateQuery;
 
   if (error) {
     return { error: error.message };
@@ -518,7 +576,7 @@ export async function updateAnnouncement(
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId ?? "",
       actorUserId: user.id,
       action: "announcements.updated",
       entityType: "announcement",
@@ -544,7 +602,7 @@ export async function updateAnnouncement(
   return { success: true };
 }
 
-export async function deleteAnnouncement(dormId: string, announcementId: string) {
+export async function deleteAnnouncement(dormId: string | null, announcementId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
@@ -557,27 +615,44 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("dorm_memberships")
-    .select("role")
-    .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (membershipError || !membership?.role) {
-    return { error: "Forbidden" };
+  let membership: { role: string } | null = null;
+  if (dormId) {
+    const { data, error: membershipError } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("dorm_id", dormId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError || !data?.role) {
+      return { error: "Forbidden" };
+    }
+    membership = data;
+  } else {
+    const { data: adminMembership } = await supabase
+      .from("dorm_memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1);
+    if (!adminMembership?.length) {
+      return { error: "Forbidden" };
+    }
+    membership = { role: "admin" };
   }
 
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
   const isPowerStaff = !isOccupantMode && new Set(["admin", "adviser", "student_assistant"]).has(membership.role);
 
-  const { data: existing } = await supabase
+  const mutationClient = dormId ? supabase : createAdminClient();
+
+  const existingQuery = mutationClient
     .from("dorm_announcements")
     .select("id, title, visibility, pinned, audience, committee_id")
-    .eq("dorm_id", dormId)
-    .eq("id", announcementId)
-    .maybeSingle();
+    .eq("id", announcementId);
+  if (dormId) existingQuery.eq("dorm_id", dormId);
+  else existingQuery.is("dorm_id", null);
+  const { data: existing } = await existingQuery.maybeSingle();
 
   if (!existing) {
     return { error: "Announcement not found." };
@@ -607,11 +682,13 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
     }
   }
 
-  const { error } = await supabase
+  const deleteQuery = mutationClient
     .from("dorm_announcements")
     .delete()
-    .eq("dorm_id", dormId)
     .eq("id", announcementId);
+  if (dormId) deleteQuery.eq("dorm_id", dormId);
+  else deleteQuery.is("dorm_id", null);
+  const { error } = await deleteQuery;
 
   if (error) {
     return { error: error.message };
@@ -619,7 +696,7 @@ export async function deleteAnnouncement(dormId: string, announcementId: string)
 
   try {
     await logAuditEvent({
-      dormId,
+      dormId: dormId ?? "",
       actorUserId: user.id,
       action: "announcements.deleted",
       entityType: "announcement",

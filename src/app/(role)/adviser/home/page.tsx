@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
-import { CalendarDays, FileText } from "lucide-react";
+import { CalendarDays, FileText, GraduationCap } from "lucide-react";
 
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import { getCleaningSnapshot } from "@/app/actions/cleaning";
@@ -21,6 +21,7 @@ import { getFineRules } from "@/app/actions/fines";
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FacultyProfileForm } from "@/components/admin/dorms/faculty-profile-form";
 
 type RoomRef = {
   id?: string | null;
@@ -111,7 +112,7 @@ export default async function HomePage() {
   );
   const currentRoom = asFirst(asFirst(currentAssignment?.room ?? null));
 
-  const [fineRules, events, cleaningSnapshot, balance, , stats, expensesResult] = await Promise.all([
+  const [fineRules, events, cleaningSnapshot, balance, , stats, expensesResult, facultyProfileResult] = await Promise.all([
     getFineRules(dormId),
     getEventsOverview(dormId),
     getCleaningSnapshot(),
@@ -119,7 +120,10 @@ export default async function HomePage() {
     occupant ? getLedgerEntries(dormId, occupant.id) : Promise.resolve([]),
     getDashboardStats(dormId),
     getExpenses(dormId, { status: "pending" }),
+    supabase.from("faculty_profiles").select("*").eq("user_id", user.id).maybeSingle(),
   ]);
+
+  const facultyProfile = facultyProfileResult?.data;
 
   if ("error" in stats) {
     return <div className="p-6">Error loading stats: {stats.error}</div>;
@@ -168,7 +172,7 @@ export default async function HomePage() {
             A safe, high-signal view of your dorm status, schedules, deadlines, and rules.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
           <span className="rounded-full border bg-card px-3 py-1">{dorm?.name ?? "Dorm"}</span>
           {semester ? (
             <span className="rounded-full border bg-card px-3 py-1">{semester.label}</span>
@@ -236,8 +240,11 @@ export default async function HomePage() {
               {announcements.length ? (
                 <div className="space-y-3">
                   {announcements.map((announcement) => (
-                    <div key={announcement.id} className="text-sm">
-                      <div className="font-medium">{announcement.title}</div>
+                    <div key={announcement.id} className={`text-sm ${!announcement.dorm_id ? "rounded-md border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10 p-2" : ""}`}>
+                      <div className="flex items-center gap-2">
+                        {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
+                        <div className="font-medium">{announcement.title}</div>
+                      </div>
                       <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
                         {announcement.body}
                       </div>
@@ -269,6 +276,15 @@ export default async function HomePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Faculty Profile Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <GraduationCap className="h-4 w-4" />
+            Professional Profile
+          </div>
+          <FacultyProfileForm initialData={facultyProfile || {}} />
+        </div>
       </div>
 
       <Card className="border-l-4 border-l-blue-500">
@@ -290,10 +306,13 @@ export default async function HomePage() {
                     ? `${announcement.body.slice(0, 220).trim()}…`
                     : announcement.body;
                 return (
-                  <div key={announcement.id} className="rounded-lg border p-3 text-sm">
+                  <div key={announcement.id} className={`rounded-lg border p-3 text-sm ${!announcement.dorm_id ? "border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10" : ""}`}>
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{announcement.title}</div>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
+                          <div className="truncate font-medium">{announcement.title}</div>
+                        </div>
                         {announcement.committee ? (
                           <div className="mt-1 text-[11px] text-muted-foreground">
                             {announcement.committee.name} · {announcement.audience === "committee" ? "Committee members" : "Whole dorm"}

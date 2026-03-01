@@ -9,6 +9,7 @@ import { StatCard } from "@/components/reporting/stat-card";
 import { CommitteeReportView } from "@/components/reporting/committee-report-view";
 import { PrintReportButton } from "@/components/reporting/print-report-button";
 import { getActiveDormId } from "@/lib/dorms";
+import { getTreasurerSemesterSnapshots } from "@/lib/finance/treasurer-semester-balance";
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -169,7 +170,7 @@ export default async function TreasurerReportingPage() {
     return <div className="p-6 text-sm text-destructive">{semesterResult.error ?? "No active semester."}</div>;
   }
 
-  const [statsRes, expensesRes, committeesRes, contributionLedgerRes, contributionExpensesRes] = await Promise.all([
+  const [statsRes, expensesRes, committeesRes, contributionLedgerRes, contributionExpensesRes, semesterSnapshots] = await Promise.all([
     getDashboardStats(dormId),
     getExpenses(dormId, { status: "pending" }),
     getCommitteeDashboardData(dormId),
@@ -181,6 +182,7 @@ export default async function TreasurerReportingPage() {
       .eq("semester_id", semesterResult.semesterId)
       .is("voided_at", null),
     getExpenses(dormId, { category: "contributions" }),
+    getTreasurerSemesterSnapshots(dormId, supabase),
   ]);
 
   if ("error" in statsRes) return <div className="p-6 text-sm text-destructive">{statsRes.error}</div>;
@@ -195,6 +197,10 @@ export default async function TreasurerReportingPage() {
   }
   const contributionLedgerRows = (contributionLedgerRes.data ?? []) as ContributionLedgerRow[];
   const contributionExpenseRows = (contributionExpensesRes.data ?? []) as ContributionExpenseRow[];
+  const activeSemesterSnapshot = semesterSnapshots.find(
+    (snapshot) => snapshot.semesterId === semesterResult.semesterId
+  );
+  const treasurerCashOnHand = Number((activeSemesterSnapshot?.closingCash ?? stats.cashOnHand).toFixed(2));
 
   const collectionRate = stats.eventsCharged > 0 ? (stats.eventsPaid / stats.eventsCharged) * 100 : 0;
   const visibleTotalCharged =
@@ -298,8 +304,8 @@ export default async function TreasurerReportingPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Cash on Hand"
-          value={`₱${stats.cashOnHand.toFixed(2)}`}
-          sublabel="All-time collections minus expenses"
+          value={`₱${treasurerCashOnHand.toFixed(2)}`}
+          sublabel="Closing balance with semester handover"
           icon={Wallet}
           variant="success"
         />

@@ -760,7 +760,7 @@ export async function createEvent(formData: FormData) {
 
   revalidatePath(`/${activeRole}/events`);
   revalidatePath(`/${activeRole}/events/${event.id}`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   await safeLogEventAudit({
     dormId: context.dormId,
@@ -865,7 +865,7 @@ export async function updateEvent(formData: FormData) {
 
   revalidatePath(`/${activeRole}/events`);
   revalidatePath(`/${activeRole}/events/${eventId}`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   const changedFields = [
     existingEvent.title !== parsed.data.title ? "title" : null,
@@ -972,7 +972,7 @@ export async function deleteEvent(formData: FormData) {
 
   revalidatePath(`/${activeRole}/events`);
   revalidatePath(`/${activeRole}/events/${eventId}`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   await safeLogEventAudit({
     dormId: context.dormId,

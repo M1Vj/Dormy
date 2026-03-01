@@ -35,7 +35,7 @@ export default async function EventsPage() {
             Calendar, event pages, photos, and ratings for your dorm activities.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
             <CalendarCheck2 className="size-4 text-emerald-600" />
             <span>{events.length} total events</span>
@@ -45,6 +45,7 @@ export default async function EventsPage() {
               mode="create"
               hostDormId={context.dormId}
               dormOptions={dormOptions}
+              basePath="/admin/events"
             />
           ) : null}
         </div>

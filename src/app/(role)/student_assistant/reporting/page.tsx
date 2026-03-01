@@ -124,7 +124,7 @@ export default async function StudentAssistantReportingPage() {
         <h1 className="text-3xl font-bold tracking-tight">SA Operations Report</h1>
         <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           {currentDate}
-          <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-700 dark:text-violet-400 text-xs uppercase tracking-wider font-semibold">Student Assistant</span>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs uppercase tracking-wider font-semibold">Student Assistant</span>
         </p>
       </div>
 
@@ -181,8 +181,8 @@ export default async function StudentAssistantReportingPage() {
                     const pct = activeFines.length > 0 ? (count / activeFines.length) * 100 : 0;
                     const colorClass =
                       severity === "major" ? "bg-red-500" :
-                      severity === "minor" ? "bg-amber-500" :
-                      "bg-slate-400";
+                        severity === "minor" ? "bg-amber-500" :
+                          "bg-slate-400";
                     return (
                       <div key={severity} className="space-y-1.5">
                         <div className="flex justify-between text-xs font-medium">
@@ -269,11 +269,10 @@ export default async function StudentAssistantReportingPage() {
                       <td className="px-3 py-2 font-medium">{fine.occupant?.full_name ?? "Unknown"}</td>
                       <td className="px-3 py-2 text-muted-foreground">{fine.rule?.title ?? "Fine"}</td>
                       <td className="px-3 py-2 text-center">
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${
-                          fine.rule?.severity === "major"
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${fine.rule?.severity === "major"
                             ? "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400"
                             : "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        }`}>
+                          }`}>
                           {fine.rule?.severity ?? "—"}
                         </span>
                       </td>

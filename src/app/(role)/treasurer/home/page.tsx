@@ -10,7 +10,8 @@ import { getDashboardStats } from "@/app/actions/stats";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId } from "@/lib/dorms";
-import { getActiveSemester } from "@/lib/semesters";
+import { getTreasurerSemesterSnapshots } from "@/lib/finance/treasurer-semester-balance";
+import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function formatPesos(value: number) {
@@ -49,13 +50,24 @@ export default async function TreasurerHomePage() {
 
   const dormId = resolvedMembership.dorm_id;
 
-  const [{ data: dorm }, semester, { announcements }, events, financeOverview, statsResult] = await Promise.all([
+  const [
+    { data: dorm },
+    semester,
+    { announcements },
+    events,
+    financeOverview,
+    statsResult,
+    activeSemesterResult,
+    semesterSnapshots,
+  ] = await Promise.all([
     supabase.from("dorms").select("name, treasurer_maintenance_access").eq("id", dormId).maybeSingle(),
     getActiveSemester(dormId, supabase),
     getDormAnnouncements(dormId, { limit: 4 }),
     getEventsOverview(dormId),
     getDormFinanceOverview(dormId),
     getDashboardStats(dormId),
+    ensureActiveSemesterId(dormId, supabase),
+    getTreasurerSemesterSnapshots(dormId, supabase),
   ]);
 
   const showTreasurerMaintenance = dorm?.treasurer_maintenance_access === true;
@@ -67,6 +79,15 @@ export default async function TreasurerHomePage() {
   if ("error" in statsResult) {
     return <div className="p-6 text-sm text-destructive">Failed to load dashboard stats: {statsResult.error}</div>;
   }
+
+  const activeSemesterId =
+    "semesterId" in activeSemesterResult ? activeSemesterResult.semesterId : (semester?.id ?? null);
+  const activeSemesterSnapshot = semesterSnapshots.find(
+    (snapshot) => snapshot.semesterId === activeSemesterId
+  );
+  const treasurerCashOnHand = Number(
+    (activeSemesterSnapshot?.closingCash ?? statsResult.cashOnHand).toFixed(2)
+  );
 
   const upcomingEvents = events
     .filter((event) => (event.starts_at ? new Date(event.starts_at) >= new Date() : false))
@@ -120,8 +141,8 @@ export default async function TreasurerHomePage() {
             <CardTitle className="text-sm font-medium">Cash on Hand</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">{formatPesos(statsResult.cashOnHand)}</div>
-            <p className="text-xs text-muted-foreground">All-time paid less approved expenses</p>
+            <div className="text-2xl font-semibold">{formatPesos(treasurerCashOnHand)}</div>
+            <p className="text-xs text-muted-foreground">Closing balance with semester handover</p>
           </CardContent>
         </Card>
       </div>
@@ -166,8 +187,11 @@ export default async function TreasurerHomePage() {
           <CardContent className="space-y-3">
             {announcements.length ? (
               announcements.map((announcement) => (
-                <div key={announcement.id} className="rounded-md border p-3">
-                  <p className="text-sm font-medium">{announcement.title}</p>
+                <div key={announcement.id} className={`rounded-md border p-3 ${!announcement.dorm_id ? "border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
+                    <p className="text-sm font-medium">{announcement.title}</p>
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{announcement.body}</p>
                 </div>
               ))
@@ -191,13 +215,19 @@ export default async function TreasurerHomePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/finance/events">
+            <Link href="/treasurer/finance">
+              <Wallet className="mr-2 h-4 w-4" />
+              Finance
+            </Link>
+          </Button>
+          <Button asChild variant="secondary" size="sm">
+            <Link href="/treasurer/contributions">
               <CalendarDays className="mr-2 h-4 w-4" />
               Contributions
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/finance/contribution-expenses">
+            <Link href="/treasurer/contribution-expenses">
               <ReceiptText className="mr-2 h-4 w-4" />
               Contribution Expenses
             </Link>

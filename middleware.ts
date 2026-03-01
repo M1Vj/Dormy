@@ -153,6 +153,7 @@ export async function middleware(req: NextRequest) {
         "/admin/dorms",
         "/admin/clearance",
         "/admin/terms",
+        "/admin/announcements",
         "/admin/profile",
         "/admin/settings",
       ];
@@ -174,6 +175,20 @@ export async function middleware(req: NextRequest) {
       redirectUrl.pathname = "/occupant/payments";
       redirectUrl.search = "";
       return redirect(redirectUrl, "Occupant reporting route redirected to dorm finance totals.");
+    }
+
+    // Role scoping: ensure users can only access their actual role prefix
+    const rolePrefixes = ["admin", "adviser", "student_assistant", "treasurer", "officer", "occupant"];
+    const matchedPrefix = rolePrefixes.find(p => pathname.startsWith(`/${p}`));
+
+    if (matchedPrefix) {
+      const activeRole = req.cookies.get("dormy_active_role")?.value;
+      if (activeRole && matchedPrefix !== activeRole) {
+        const redirectUrl = req.nextUrl.clone();
+        redirectUrl.pathname = `/${activeRole}/home`;
+        redirectUrl.search = "";
+        return redirect(redirectUrl, `Role mismatch: tried ${matchedPrefix}, but active is ${activeRole}.`);
+      }
     }
 
     if (!req.cookies.has("dorm_id")) {

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
@@ -11,6 +10,7 @@ import {
   DoorOpen,
   FileText,
   Home,
+  Loader2,
   Receipt,
   Shield,
   Users,
@@ -47,11 +47,9 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
   if (role === "admin") {
     return [
       { title: "Home", url: "/admin/home", icon: Home, color: "text-sky-500" },
-      { title: "Occupants", url: "/admin/occupants", icon: Users, color: "text-emerald-500" },
       { title: "Dorms", url: "/admin/dorms", icon: Building2, color: "text-blue-500" },
-      { title: "Clearance", url: "/admin/clearance", icon: ClipboardCheck, color: "text-green-600" },
       { title: "Semesters", url: "/admin/terms", icon: Calendar, color: "text-indigo-500" },
-      { title: "Announcements", url: "/admin/home/announcements", icon: Bell, color: "text-orange-500" },
+      { title: "Announcements", url: "/admin/announcements", icon: Bell, color: "text-orange-500" },
       { title: "Settings", url: "/admin/settings", icon: Shield, color: "text-zinc-500" },
     ];
   }
@@ -61,7 +59,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
       { title: "Home", url: "/occupant/home", icon: Home, color: "text-sky-500" },
       { title: "Finance Totals", url: "/occupant/payments", icon: Wallet, color: "text-amber-500" },
       { title: "Fine Reports", url: "/occupant/fines/reports", icon: FileText, color: "text-rose-500" },
-      { title: "My Committee", url: "/occupant/committees", icon: Users, color: "text-violet-500" },
+      { title: "My Committee", url: "/occupant/committees", icon: Users, color: "text-emerald-500" },
       { title: "Cleaning", url: "/occupant/cleaning", icon: Calendar, color: "text-lime-500" },
       { title: "Events", url: "/occupant/events", icon: Calendar, color: "text-orange-500" },
       { title: "Announcements", url: "/occupant/home/announcements", icon: Bell, color: "text-blue-500" },
@@ -72,7 +70,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/adviser/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/adviser/occupants", icon: Users, color: "text-emerald-500" },
-      { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-violet-500" },
+      { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-emerald-500" },
       { title: "Finance", url: "/adviser/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Cleaning", url: "/adviser/cleaning", icon: Calendar, color: "text-lime-500" },
       { title: "Evaluation", url: "/adviser/evaluation", icon: Shield, color: "text-cyan-500" },
@@ -86,7 +84,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/student_assistant/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/student_assistant/occupants", icon: Users, color: "text-emerald-500" },
-      { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-violet-500" },
+      { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-emerald-500" },
       { title: "Fines", url: "/student_assistant/fines", icon: FileText, color: "text-rose-500" },
       { title: "Finance", url: "/student_assistant/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Cleaning", url: "/student_assistant/cleaning", icon: Calendar, color: "text-lime-500" },
@@ -100,8 +98,10 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
   if (role === "treasurer") {
     const treasurerItems: MenuItem[] = [
       { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
-      { title: "Contributions", url: "/treasurer/finance/events", icon: Calendar, color: "text-orange-500" },
-      { title: "Contribution Expenses", url: "/treasurer/finance/contribution-expenses", icon: Receipt, color: "text-violet-500" },
+      { title: "Occupants", url: "/treasurer/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Finance", url: "/treasurer/finance", icon: Wallet, color: "text-amber-500" },
+      { title: "Contributions", url: "/treasurer/contributions", icon: Calendar, color: "text-orange-500" },
+      { title: "Contribution Expenses", url: "/treasurer/contribution-expenses", icon: Receipt, color: "text-emerald-500" },
       { title: "Reporting", url: "/treasurer/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Events", url: "/treasurer/events", icon: Calendar, color: "text-orange-500" },
     ];
@@ -131,12 +131,33 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { role } = useAuth();
   const { activeDorm } = useDorm();
   const { isMobile, setOpenMobile } = useSidebar();
   const showTreasurerMaintenance = activeDorm?.treasurer_maintenance_access === true;
+  const [isPending, startTransition] = useTransition();
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
   const menuItems = useMemo(() => getMenuItems(role, showTreasurerMaintenance), [role, showTreasurerMaintenance]);
+
+  const handleNav = useCallback(
+    (e: React.MouseEvent, url: string) => {
+      e.preventDefault();
+      if (isMobile) setOpenMobile(false);
+
+      const resolvedPath = url.split("?")[0];
+      // Skip if already on the target route
+      if (pathname === resolvedPath || pathname.startsWith(`${resolvedPath}/`)) return;
+
+      setPendingUrl(url);
+      startTransition(() => {
+        router.push(url);
+        setPendingUrl(null);
+      });
+    },
+    [isMobile, pathname, router, setOpenMobile, startTransition]
+  );
 
   return (
     <Sidebar>
@@ -151,19 +172,22 @@ export function AppSidebar() {
                 const resolvedUrl = item.url;
                 const resolvedPath = resolvedUrl.split("?")[0];
                 const isActive = pathname === resolvedPath || (resolvedPath !== "/" && pathname.startsWith(`${resolvedPath}/`));
+                const isItemPending = isPending && pendingUrl === resolvedUrl;
 
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link
+                      <a
                         href={resolvedUrl}
-                        onClick={() => {
-                          if (isMobile) setOpenMobile(false);
-                        }}
+                        onClick={(e) => handleNav(e, resolvedUrl)}
                       >
-                        <item.icon className={isActive ? "text-primary" : item.color} />
+                        {isItemPending ? (
+                          <Loader2 className="animate-spin text-primary" />
+                        ) : (
+                          <item.icon className={isActive ? "text-primary" : item.color} />
+                        )}
                         <span>{item.title}</span>
-                      </Link>
+                      </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -175,3 +199,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+

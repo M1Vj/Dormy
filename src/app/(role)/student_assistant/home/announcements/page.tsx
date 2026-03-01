@@ -76,7 +76,7 @@ export default async function AnnouncementsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button asChild variant="ghost" size="sm" className="-ml-2">
               <Link href="/student_assistant/home">
                 <ArrowLeft className="mr-2 size-4" />
@@ -112,11 +112,14 @@ export default async function AnnouncementsPage() {
           const expiresAt = announcement.expires_at ? new Date(announcement.expires_at) : null;
 
           return (
-            <Card key={announcement.id}>
+            <Card key={announcement.id} className={!announcement.dorm_id ? "border-l-4 border-l-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/10" : ""}>
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1">
-                    <CardTitle className="text-base">{announcement.title}</CardTitle>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {!announcement.dorm_id && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Admin</span>}
+                      <CardTitle className="text-base">{announcement.title}</CardTitle>
+                    </div>
                     <CardDescription>
                       {startsAt ? `Published ${format(startsAt, "MMM d, yyyy h:mm a")}` : "Published"}
                       {expiresAt ? ` • Expires ${format(expiresAt, "MMM d, yyyy h:mm a")}` : ""}

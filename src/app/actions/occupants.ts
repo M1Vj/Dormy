@@ -5,7 +5,20 @@ import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { AppRole } from "@/lib/auth";
+
+const createAdminClient = () => {
+  return createSupabaseAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+      },
+    }
+  );
+};
 
 const occupantStatusSchema = z.enum(["active", "left", "removed"]);
 
@@ -25,9 +38,9 @@ const systemAccessSchema = z.object({
     "assistant_adviser",
     "occupant",
     "officer",
-  ]).optional(),
-  committee_id: z.string().uuid().optional().or(z.literal("")),
-  committee_role: z.enum(["head", "co-head", "member"]).optional().or(z.literal("")),
+  ]).optional().nullable(),
+  committee_id: z.string().uuid().optional().nullable().or(z.literal("")),
+  committee_role: z.enum(["head", "co-head", "member"]).optional().nullable().or(z.literal("")),
 });
 
 type RoomRef = {
@@ -94,7 +107,17 @@ export async function getOccupants(
     throw new Error("Supabase is not configured for this environment.");
   }
 
-  let query = supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: adminMembership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user?.id || "")
+    .eq("role", "admin")
+    .limit(1);
+
+  const client = adminMembership?.length ? createAdminClient() : supabase;
+
+  let query = client
     .from("occupants")
     .select(`
       id, full_name, student_id, user_id, course:classification, joined_at, status, 
@@ -128,7 +151,7 @@ export async function getOccupants(
   const membershipsMap = new Map<string, AppRole[]>();
 
   if (userIds.length > 0) {
-    const { data: memData, error: memError } = await supabase
+    const { data: memData, error: memError } = await client
       .from("dorm_memberships")
       .select("user_id, role")
       .eq("dorm_id", dormId)
@@ -192,7 +215,17 @@ export async function getOccupant(dormId: string, occupantId: string) {
     throw new Error("Supabase is not configured for this environment.");
   }
 
-  const { data, error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: adminMembership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user?.id || "")
+    .eq("role", "admin")
+    .limit(1);
+
+  const client = adminMembership?.length ? createAdminClient() : supabase;
+
+  const { data, error } = await client
     .from("occupants")
     .select(`
       id, full_name, student_id, user_id, course:classification, joined_at, status,
@@ -219,7 +252,7 @@ export async function getOccupant(dormId: string, occupantId: string) {
   let committeeMemberships: { committee_id: string; role: string; committee_name: string }[] = [];
 
   if (data.user_id) {
-    const { data: memData } = await supabase
+    const { data: memData } = await client
       .from("dorm_memberships")
       .select("role")
       .eq("dorm_id", dormId)
@@ -229,13 +262,13 @@ export async function getOccupant(dormId: string, occupantId: string) {
       memRoles = memData.map((m) => m.role as AppRole);
     }
 
-    const { data: commData } = await supabase
+    const { data: commData } = await client
       .from("committee_members")
       .select("role, committee_id, committees(name)")
       .eq("user_id", data.user_id);
 
     // filter to only committees in this dorm
-    const { data: dormCommittees } = await supabase
+    const { data: dormCommittees } = await client
       .from("committees")
       .select("id")
       .eq("dorm_id", dormId);

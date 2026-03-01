@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { getSemesterWorkspace } from "@/app/actions/semesters";
 import { SemesterManagement } from "@/components/admin/semester-management";
-import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AdminTermsPage() {
@@ -23,12 +22,20 @@ export default async function AdminTermsPage() {
     redirect("/login");
   }
 
-  const activeDormId = await getActiveDormId();
-  if (!activeDormId) {
-    return <div className="p-6 text-sm text-muted-foreground">No active dorm selected.</div>;
+  // Verify the user is an admin
+  const { data: adminMemberships } = await supabase
+    .from("dorm_memberships")
+    .select("dorm_id")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .limit(1);
+
+  if (!adminMemberships?.length) {
+    return <div className="p-6 text-sm text-muted-foreground">You do not have permission to manage global semesters.</div>;
   }
 
-  const workspace = await getSemesterWorkspace(activeDormId);
+  // Pass null for global semester management
+  const workspace = await getSemesterWorkspace(null);
   if ("error" in workspace) {
     return <div className="p-6 text-sm text-muted-foreground">{workspace.error}</div>;
   }
@@ -36,18 +43,19 @@ export default async function AdminTermsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Semester management</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">System-wide Semesters</h1>
         <p className="text-sm text-muted-foreground">
-          Group dorm workflows by semester, archive history, and manage new-school-year turnover.
+          Manage global semesters applicable to all dormitories. Semesters activate automatically based on their dates.
         </p>
       </div>
 
       <SemesterManagement
-        dormId={activeDormId}
+        dormId={null}
         activeSemester={workspace.activeSemester}
         semesters={workspace.semesters}
         activeOccupants={workspace.activeOccupants}
         outstandingMoney={workspace.outstandingMoney}
+        hideFinance
       />
     </div>
   );

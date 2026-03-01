@@ -7,15 +7,27 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { useTheme } from "next-themes"
 
+/**
+ * Toaster wrapper around sonner that picks up the active next-themes value.
+ *
+ * NOTE: `useTheme` from next-themes returns `undefined` on the first server
+ * render (before hydration) and the real theme afterwards.  When the hook's
+ * return value changes between the server and client renders React sees a
+ * *different number of rendered hooks* which triggers error #310 ("Rendered
+ * more hooks than during the previous render").
+ *
+ * The `theme ?? "system"` default ensures a stable fallback so the same
+ * code-path always runs, keeping the hook call-count identical on every render.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={(resolvedTheme as ToasterProps["theme"]) ?? "system"}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

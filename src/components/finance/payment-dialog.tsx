@@ -1,12 +1,14 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { usePathname } from "next/navigation";
+
+import { useState, useEffect } from "react";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Wallet, AlertCircle, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,14 +47,28 @@ import {
 import { draftPaymentReceiptEmail } from "@/app/actions/email";
 import { LedgerCategory } from "@/lib/types/finance";
 
+const cartItemOptionSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+});
+
+const cartItemSchema = z.object({
+  id: z.string(),
+  item_id: z.string().min(1, "Item is required"),
+  quantity: z.number().min(1, "Quantity must be at least 1"),
+  options: z.array(cartItemOptionSchema).optional(),
+  subtotal: z.number().min(0),
+});
+
 const formSchema = z.object({
-  amount: z.number().min(1, "Amount must be greater than 0"),
+  amount: z.number().min(0, "Amount must be greater than or equal to 0"),
   method: z.string().min(1, "Method is required"),
   note: z.string().optional(),
   sendReceiptEmail: z.boolean(),
   receiptSubject: z.string().trim().max(140).optional(),
   receiptMessage: z.string().trim().max(2000).optional(),
   receiptSignature: z.string().trim().max(600).optional(),
+  cartItems: z.array(cartItemSchema).optional(),
 });
 
 interface PaymentDialogProps {
@@ -62,7 +78,14 @@ interface PaymentDialogProps {
   eventId?: string;
   eventTitle?: string;
   metadata?: Record<string, unknown>;
+  // IMPORTANT: Do NOT use React.ReactNode for passing trigger elements from
+  // Server Components if this component will be rendered inside an array (.map).
+  // Next.js RSC (Flight) serialization can deduplicate identical JSX nodes,
+  // causing buttons to randomly disappear. Pass scalar props instead.
   trigger?: React.ReactNode;
+  triggerText?: string;
+  triggerVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+  triggerClassName?: string;
 }
 
 type PaymentFormValues = z.infer<typeof formSchema>;
@@ -86,6 +109,168 @@ type TransactionPayload = {
   | undefined;
 };
 
+function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }) {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "cartItems",
+  });
+
+  const cartValues = form.watch("cartItems") || [];
+
+  useEffect(() => {
+    const total = cartValues.reduce((acc: number, item: any) => acc + (item.subtotal || 0), 0);
+    if (form.getValues("amount") !== total) {
+      form.setValue("amount", total, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [cartValues, form]);
+
+  return (
+    <div className="space-y-4 rounded-xl border p-4 bg-muted/10">
+      <div className="flex items-center justify-between">
+        <FormLabel className="text-base">Store Cart</FormLabel>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => append({ id: crypto.randomUUID(), item_id: "", quantity: 1, options: [], subtotal: 0 })}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Item
+        </Button>
+      </div>
+
+      {fields.length === 0 ? (
+        <div className="rounded border border-dashed border-muted-foreground/30 p-6 text-center text-sm text-muted-foreground">
+          No items added to cart yet.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {fields.map((field, index) => {
+            const currentItemVal = cartValues[index];
+            const selectedStoreItem = storeItems.find((i) => i.id === currentItemVal?.item_id);
+
+            return (
+              <div key={field.id} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-2 h-6 w-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => remove(index)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+
+                <div className="grid grid-cols-[1fr_80px] gap-4">
+                  <FormField
+                    control={form.control}
+                    name={`cartItems.${index}.item_id`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold">Item</FormLabel>
+                        <Select
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            const sItem = storeItems.find((i) => i.id === val);
+                            if (sItem) {
+                              const defaultOpts = (sItem.options || []).map((o: any) => ({
+                                name: o.name,
+                                value: o.choices[0] || "",
+                              }));
+                              form.setValue(`cartItems.${index}.options`, defaultOpts);
+                              form.setValue(`cartItems.${index}.subtotal`, sItem.price * (currentItemVal?.quantity || 1));
+                            }
+                          }}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="Select item" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {storeItems.map((si) => (
+                              <SelectItem key={si.id} value={si.id}>
+                                {si.name} (₱{si.price})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name={`cartItems.${index}.quantity`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-semibold">Qty</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min="1"
+                            className="h-9"
+                            {...field}
+                            onChange={(e) => {
+                              const qty = parseInt(e.target.value) || 1;
+                              field.onChange(qty);
+                              if (selectedStoreItem) {
+                                form.setValue(`cartItems.${index}.subtotal`, selectedStoreItem.price * qty);
+                              }
+                            }}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {selectedStoreItem?.options?.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+                    {selectedStoreItem.options.map((opt: any, optIndex: number) => (
+                      <FormField
+                        key={opt.name}
+                        control={form.control}
+                        name={`cartItems.${index}.options.${optIndex}.value`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">{opt.name}</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl>
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder={`Select ${opt.name}`} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {opt.choices.map((choice: string) => (
+                                  <SelectItem key={choice} value={choice}>
+                                    {choice}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
+                  <span className="text-sm font-semibold text-emerald-600">
+                    Subtotal: ₱{(currentItemVal?.subtotal || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PaymentDialog({
   dormId,
   occupantId,
@@ -94,12 +279,18 @@ export function PaymentDialog({
   eventTitle,
   metadata,
   trigger,
+  triggerText = "Pay",
+  triggerVariant = "outline",
+  triggerClassName = "w-full",
 }: PaymentDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
+  const pathname = usePathname();
   const [isPreparingPreview, setIsPreparingPreview] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [overpaymentConfirmOpen, setOverpaymentConfirmOpen] = useState(false);
+  const [pendingFormValues, setPendingFormValues] = useState<PaymentFormValues | null>(null);
   const [pendingPayload, setPendingPayload] = useState<TransactionPayload | null>(null);
   const [emailPreview, setEmailPreview] = useState<{
     recipient_email: string;
@@ -107,30 +298,6 @@ export function PaymentDialog({
     text: string;
   } | null>(null);
   const isContribution = category === "contributions";
-  const contributionSignature =
-    isContribution &&
-      typeof metadata?.contribution_receipt_signature === "string" &&
-      metadata.contribution_receipt_signature.trim().length > 0
-      ? metadata.contribution_receipt_signature.trim()
-      : "";
-  const contributionReceiptSubject =
-    isContribution &&
-      typeof metadata?.contribution_receipt_subject === "string" &&
-      metadata.contribution_receipt_subject.trim().length > 0
-      ? metadata.contribution_receipt_subject.trim()
-      : "";
-  const contributionReceiptMessage =
-    isContribution &&
-      typeof metadata?.contribution_receipt_message === "string" &&
-      metadata.contribution_receipt_message.trim().length > 0
-      ? metadata.contribution_receipt_message.trim()
-      : "";
-  const contributionReceiptLogoUrl =
-    isContribution &&
-      typeof metadata?.contribution_receipt_logo_url === "string" &&
-      metadata.contribution_receipt_logo_url.trim().length > 0
-      ? metadata.contribution_receipt_logo_url.trim()
-      : "";
 
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(formSchema),
@@ -139,14 +306,18 @@ export function PaymentDialog({
       method: "cash",
       note: "",
       sendReceiptEmail: true,
-      receiptSubject:
-        contributionReceiptSubject || (eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt"),
-      receiptMessage: contributionReceiptMessage || "",
-      receiptSignature: isContribution ? "" : "Dormy Admin",
+      receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
+      receiptMessage: "",
+      receiptSignature: isContribution ? "Global contribution signature" : "Dormy Admin",
+      cartItems: [],
     },
   });
 
   const sendReceiptEmail = form.watch("sendReceiptEmail");
+  const cartItems = form.watch("cartItems");
+
+  // Automatically update the main amount when cart items change 
+  // Moved calculation into StoreCartBuilder
 
   async function onDraftReceipt() {
     const values = form.getValues();
@@ -188,10 +359,6 @@ export function PaymentDialog({
   }
 
   function buildPayload(values: PaymentFormValues): TransactionPayload | null {
-    if (values.sendReceiptEmail && isContribution && !contributionSignature) {
-      toast.error("Set the contribution receipt signature on the contribution page first.");
-      return null;
-    }
 
     return {
       occupant_id: occupantId,
@@ -201,20 +368,23 @@ export function PaymentDialog({
       method: values.method,
       note: values.note,
       event_id: eventId,
-      metadata,
+      metadata: {
+        ...metadata,
+        cart_items: values.cartItems, // Forward cart items to the action for processing
+      },
       receipt_email: values.sendReceiptEmail
         ? {
           enabled: true,
           subject: isContribution
-            ? contributionReceiptSubject || undefined
+            ? undefined // Fetched on backend
             : values.receiptSubject?.trim() || undefined,
           message: isContribution
-            ? contributionReceiptMessage || undefined
+            ? undefined // Fetched on backend
             : values.receiptMessage?.trim() || undefined,
           signature: isContribution
-            ? contributionSignature || undefined
+            ? undefined // Fetched on backend
             : values.receiptSignature?.trim() || undefined,
-          logo_url: isContribution ? contributionReceiptLogoUrl || undefined : undefined,
+          logo_url: isContribution ? undefined : undefined,
         }
         : { enabled: false },
     };
@@ -244,6 +414,15 @@ export function PaymentDialog({
   }
 
   async function onSubmit(values: PaymentFormValues) {
+    if (isContribution && metadata?.remaining_balance !== undefined && (metadata.remaining_balance as number) <= 0) {
+      setPendingFormValues(values);
+      setOverpaymentConfirmOpen(true);
+      return;
+    }
+    await processSubmit(values);
+  }
+
+  async function processSubmit(values: PaymentFormValues) {
     const payload = buildPayload(values);
     if (!payload) return;
 
@@ -286,18 +465,52 @@ export function PaymentDialog({
     await submitPayment(pendingPayload);
   }
 
+  if (metadata?.is_store && !pathname?.startsWith("/treasurer")) {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <div className="inline-block w-full">
+            {trigger || (
+              <Button variant={triggerVariant} size="sm" className={triggerClassName}>
+                <Wallet className="mr-2 h-4 w-4" />
+                {triggerText}
+              </Button>
+            )}
+          </div>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Store Payment</DialogTitle>
+            <DialogDescription>
+              Record payment for store items and variations.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 flex flex-col items-center justify-center text-center gap-2 text-muted-foreground">
+            <AlertCircle className="h-8 w-8 text-amber-500" />
+            <p>Store contributions can only be managed and processed by the Treasurer.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          {trigger || (
-            <Button variant="outline" size="sm">
-              <Wallet className="mr-2 h-4 w-4" />
-              Pay
-            </Button>
-          )}
+          <div className="inline-block w-full">
+            {trigger || (
+              <Button variant={triggerVariant} size="sm" className={triggerClassName}>
+                <Wallet className="mr-2 h-4 w-4" />
+                {triggerText}
+              </Button>
+            )}
+          </div>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[560px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[560px] bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Record Payment</DialogTitle>
             <DialogDescription className="text-sm">
@@ -306,6 +519,11 @@ export function PaymentDialog({
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+              {metadata?.is_store && Array.isArray(metadata?.store_items) ? (
+                <StoreCartBuilder form={form} storeItems={metadata.store_items} />
+              ) : null}
+
               <FormField
                 control={form.control}
                 name="amount"
@@ -317,7 +535,9 @@ export function PaymentDialog({
                         type="number"
                         step="0.01"
                         {...field}
+                        readOnly={metadata?.is_store === true}
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        className={metadata?.is_store === true ? "bg-muted font-mono" : ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -377,7 +597,7 @@ export function PaymentDialog({
                         <FormLabel className="leading-none">Email receipt</FormLabel>
                         <p className="text-xs text-muted-foreground">
                           {isContribution
-                            ? "Uses the saved contribution receipt template from the contribution page."
+                            ? "Uses the global contribution receipt template."
                             : "Sends a receipt to the occupant email on file. Customize the subject/message, or draft with AI."}
                         </p>
                       </div>
@@ -390,36 +610,10 @@ export function PaymentDialog({
                     {isContribution ? (
                       <>
                         <div className="rounded-lg border bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Template Subject</p>
-                          <p className="mt-1 text-sm font-medium">
-                            {contributionReceiptSubject || eventTitle || "Contribution payment receipt"}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Template Message</p>
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Template Settings</p>
                           <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                            {contributionReceiptMessage || "Default contribution receipt message will be used."}
+                            The global contribution receipt settings (Subject, Message, Signature, and Logo) will be used for this receipt.
                           </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Signature Source</p>
-                          {contributionSignature ? (
-                            contributionSignature.startsWith("http") ? (
-                              <img
-                                src={contributionSignature}
-                                alt="Contribution signature"
-                                className="mt-2 max-h-20 w-auto rounded border bg-white p-2"
-                              />
-                            ) : (
-                              <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
-                                {contributionSignature}
-                              </pre>
-                            )
-                          ) : (
-                            <p className="mt-1 text-xs text-destructive">
-                              Set the contribution receipt signature on the contribution page first.
-                            </p>
-                          )}
                         </div>
                       </>
                     ) : (
@@ -504,6 +698,39 @@ export function PaymentDialog({
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={overpaymentConfirmOpen} onOpenChange={setOverpaymentConfirmOpen}>
+        <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-amber-600 dark:text-amber-500">Contribution Already Settled</DialogTitle>
+            <DialogDescription className="text-sm">
+              This occupant has already fully paid this contribution. Do you want to record an overpayment anyway?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-800 dark:text-amber-200">
+            <p className="text-sm">
+              <strong>Note:</strong> Overpayments are recorded but do not lower the remaining balance below zero.
+            </p>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="ghost" onClick={() => setOverpaymentConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                setOverpaymentConfirmOpen(false);
+                if (pendingFormValues) {
+                  processSubmit(pendingFormValues);
+                }
+              }}
+            >
+              Confirm Payment
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

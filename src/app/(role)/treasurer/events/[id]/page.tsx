@@ -100,7 +100,7 @@ export default async function EventDetailPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{event.title}</h1>
             {event.is_competition ? (
               <Badge variant="secondary" className="gap-1">
@@ -138,7 +138,8 @@ export default async function EventDetailPage({
                 event={event}
                 hostDormId={context.dormId}
                 dormOptions={dormOptions}
-              />
+                basePath="/treasurer/events"
+            />
               <DeleteEventButton eventId={event.id} />
             </>
           ) : null}

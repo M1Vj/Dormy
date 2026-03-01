@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getAllDorms } from "@/app/actions/dorm";
@@ -61,14 +62,30 @@ export default async function AdminDormsPage() {
                 <tr className="border-b">
                   <th className="px-3 py-2 font-medium">Name</th>
                   <th className="px-3 py-2 font-medium">Code</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
                 </tr>
               </thead>
               <tbody>
                 {dorms.map((dorm) => (
-                  <tr key={dorm.id} className="border-b">
-                    <td className="px-3 py-2">{dorm.name}</td>
+                  <tr key={dorm.id} className="border-b hover:bg-muted/50 transition-colors">
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/admin/dorms/${dorm.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {dorm.name}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {dorm.slug}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-xs capitalize ${dorm.sex === "male" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                          : dorm.sex === "female" ? "border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950 dark:text-pink-300"
+                            : "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                        }`}>
+                        {dorm.sex === "male" ? "Male only" : dorm.sex === "female" ? "Female only" : "Coed"}
+                      </span>
                     </td>
                   </tr>
                 ))}

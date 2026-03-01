@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getUserRolesAllDorms } from "@/lib/access";
+import { getUserRolesForDorm } from "@/lib/access";
+import { getActiveDormId } from "@/lib/dorms";
 
 const ALLOWED_ROLES = new Set(["admin"]);
 
@@ -21,14 +21,16 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  // Check across ALL dorms — the middleware and pages handle active-dorm scoping.
-  // Never redirect to /join here — middleware already handles dorm_id cookie setup.
-  const memberships = await getUserRolesAllDorms(supabase, user.id);
-  const hasAccess = memberships.some((m) => ALLOWED_ROLES.has(m.role));
+  const activeDormId = await getActiveDormId();
+  if (!activeDormId) {
+    redirect("/join");
+  }
+
+  const roles = await getUserRolesForDorm(supabase, user.id, activeDormId);
+  const hasAccess = roles.includes("admin");
 
   if (!hasAccess) {
-    const role = await getActiveRole() || "occupant";
-    redirect(`/${role}/home`);
+    redirect("/");
   }
 
   return <>{children}</>;

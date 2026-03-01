@@ -32,6 +32,9 @@ type OccupantTableProps = {
   dormId: string;
   occupants: OccupantRow[];
   role?: string;
+  basePath?: string;
+  /** Override for occupant detail links (View/Edit). Falls back to basePath. */
+  occupantBasePath?: string;
   filters?: {
     search?: string;
     status?: string;
@@ -75,8 +78,16 @@ const getStatusClass = (status?: string | null) => {
   return "border-muted bg-muted text-muted-foreground";
 };
 
-export function OccupantTable({ dormId, occupants, role = "admin", filters }: OccupantTableProps) {
-  const basePath = `/${role}/occupants`;
+export function OccupantTable({
+  dormId,
+  occupants,
+  role = "admin",
+  basePath: providedBasePath,
+  occupantBasePath,
+  filters
+}: OccupantTableProps) {
+  const basePath = providedBasePath ?? `/${role}/occupants`;
+  const detailPath = occupantBasePath ?? basePath;
   const hasFilters =
     Boolean(filters?.search) ||
     Boolean(filters?.status) ||
@@ -188,25 +199,27 @@ export function OccupantTable({ dormId, occupants, role = "admin", filters }: Oc
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
-                      <Link href={`${basePath}/${occupant.id}`}>
+                      <Link href={`${detailPath}/${occupant.id}`}>
                         View
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="ghost" className="w-full">
                       <Link
-                        href={`${basePath}/${occupant.id}?mode=edit`}
+                        href={`${detailPath}/${occupant.id}?mode=edit`}
                       >
                         Edit
                       </Link>
                     </Button>
-                    <div className="flex justify-center">
-                      <UpdateRoleDialog
-                        dormId={dormId}
-                        userId={occupant.user_id}
-                        occupantName={occupant.full_name ?? "User"}
-                        currentRoles={occupant.roles}
-                      />
-                    </div>
+                    {role !== "admin" && (
+                      <div className="flex justify-center">
+                        <UpdateRoleDialog
+                          dormId={dormId}
+                          userId={occupant.user_id}
+                          occupantName={occupant.full_name ?? "User"}
+                          currentRoles={occupant.roles}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -288,23 +301,25 @@ export function OccupantTable({ dormId, occupants, role = "admin", filters }: Oc
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Button asChild size="sm" variant="ghost">
-                            <Link href={`${basePath}/${occupant.id}`}>
+                            <Link href={`${detailPath}/${occupant.id}`}>
                               View
                             </Link>
                           </Button>
                           <Button asChild size="sm" variant="ghost">
                             <Link
-                              href={`${basePath}/${occupant.id}?mode=edit`}
+                              href={`${detailPath}/${occupant.id}?mode=edit`}
                             >
                               Edit
                             </Link>
                           </Button>
-                          <UpdateRoleDialog
-                            dormId={dormId}
-                            userId={occupant.user_id}
-                            occupantName={occupant.full_name ?? "User"}
-                            currentRoles={occupant.roles}
-                          />
+                          {role !== "admin" && (
+                            <UpdateRoleDialog
+                              dormId={dormId}
+                              userId={occupant.user_id}
+                              occupantName={occupant.full_name ?? "User"}
+                              currentRoles={occupant.roles}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>
