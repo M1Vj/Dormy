@@ -179,13 +179,16 @@ function isImageSource(value: string) {
   );
 }
 
-function renderSignatureHtml(signatureValue: string | null | undefined) {
+function renderSignatureHtml(
+  signatureValue: string | null | undefined,
+  treasurerNameOverride?: string | null
+) {
   const signature = signatureValue?.trim();
   if (!signature) {
     return "";
   }
 
-  const namePlaceholder = "[Treasurer Name]";
+  const namePlaceholder = treasurerNameOverride?.trim() || "[Treasurer Name]";
   const title = "Dormitory Treasurer";
 
   if (isImageSource(signature)) {
@@ -215,13 +218,16 @@ function renderSignatureHtml(signatureValue: string | null | undefined) {
   `.trim();
 }
 
-function renderSignatureText(signatureValue: string | null | undefined) {
+function renderSignatureText(
+  signatureValue: string | null | undefined,
+  treasurerNameOverride?: string | null
+) {
   const signature = signatureValue?.trim();
   if (!signature) {
     return "";
   }
 
-  const namePlaceholder = "[Treasurer Name]";
+  const namePlaceholder = treasurerNameOverride?.trim() || "[Treasurer Name]";
   const title = "Dormitory Treasurer";
 
   if (isImageSource(signature)) {
@@ -238,9 +244,16 @@ export function renderPaymentReceiptEmail(input: {
   method: string | null;
   note: string | null;
   eventTitle: string | null;
+  orderItems?: Array<{
+    itemName: string;
+    options: string[];
+    quantity: number;
+    subtotal: number;
+  }>;
   customMessage: string | null;
   subjectOverride?: string | null;
   signatureOverride?: string | null;
+  treasurerNameOverride?: string | null;
   logoUrl?: string | null;
 }) {
   const subject =
@@ -256,7 +269,7 @@ export function renderPaymentReceiptEmail(input: {
     ? textToHtml(input.customMessage)
     : "";
   const logoHtml = input.logoUrl?.trim()
-    ? `<div style="margin:0 0 12px 0;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:56px; width:auto;"/></div>`
+    ? `<div style="margin:0 0 16px 0; text-align:center;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:96px; width:auto;"/></div>`
     : "";
 
   const greeting = input.recipientName?.trim()
@@ -268,6 +281,10 @@ export function renderPaymentReceiptEmail(input: {
     ["Ledger", escapeHtml(input.ledgerLabel)],
     ["Date", escapeHtml(paidAtLabel)],
   ];
+
+  if (input.recipientName?.trim()) {
+    detailRows.unshift(["Payer", escapeHtml(input.recipientName.trim())]);
+  }
 
   if (input.eventTitle?.trim()) {
     detailRows.splice(2, 0, ["Event", escapeHtml(input.eventTitle.trim())]);
@@ -296,6 +313,34 @@ export function renderPaymentReceiptEmail(input: {
     </table>
   `.trim();
 
+  const orderDetailsHtml = (input.orderItems ?? []).length > 0
+    ? `
+      <div style="margin-top:18px;">
+        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Your Order Details</div>
+        <table role="presentation" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Item</th>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Specs</th>
+              <th style="text-align:center; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Qty</th>
+              <th style="text-align:right; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(input.orderItems ?? []).map((o) => `
+              <tr>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px;">${escapeHtml(o.itemName)}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569; font-size:13px;">${o.options.length > 0 ? escapeHtml(o.options.join(" · ")) : "—"}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:center;">${o.quantity}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:right; font-weight:600;">${normalizePesos(o.subtotal)}</td>
+              </tr>
+            `.trim()).join("")}
+          </tbody>
+        </table>
+      </div>
+    `.trim()
+    : "";
+
   const defaultMessageHtml = `<p style="margin:0 0 12px 0;">We received your payment. Thank you.</p>`;
 
   const bodyHtml = [
@@ -303,25 +348,27 @@ export function renderPaymentReceiptEmail(input: {
     greeting,
     messageHtml || defaultMessageHtml,
     tableHtml,
-    renderSignatureHtml(input.signatureOverride),
+    orderDetailsHtml,
+    renderSignatureHtml(input.signatureOverride, input.treasurerNameOverride),
   ].join("");
 
   const textParts = [
     input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
     input.customMessage?.trim() ? `\n${input.customMessage.trim()}\n` : "",
     input.customMessage?.trim() ? "" : `We received your payment. Thank you.`,
+    input.recipientName?.trim() ? `Payer: ${input.recipientName.trim()}` : "",
     `Amount: ${normalizePesos(input.amountPesos)}`,
     input.eventTitle?.trim() ? `Event: ${input.eventTitle.trim()}` : "",
     `Ledger: ${input.ledgerLabel}`,
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
     input.note?.trim() ? `Note: ${input.note.trim()}` : "",
-    renderSignatureText(input.signatureOverride),
+    renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ].filter(Boolean);
 
   return {
     subject,
-    html: renderShell({ title: "Payment receipt", bodyHtml }),
+    html: renderShell({ title: "Dorm Treasurer E-Receipt", bodyHtml }),
     text: textParts.join("\n"),
   };
 }
@@ -333,11 +380,18 @@ export function renderContributionBatchReceiptEmail(input: {
   contributions: Array<{
     title: string;
     amountPesos: number;
+    orderItems?: Array<{
+      itemName: string;
+      options: string[];
+      quantity: number;
+      subtotal: number;
+    }>;
   }>;
   totalAmountPesos: number;
   customMessage: string | null;
   subjectOverride?: string | null;
   signatureOverride?: string | null;
+  treasurerNameOverride?: string | null;
   logoUrl?: string | null;
 }) {
   const subject = input.subjectOverride?.trim() || "Contribution payment receipt";
@@ -353,17 +407,17 @@ export function renderContributionBatchReceiptEmail(input: {
 
   const messageHtml = input.customMessage?.trim()
     ? textToHtml(input.customMessage)
-    : `<p style="margin:0 0 12px 0;">We received your contribution payment. Thank you.</p>`;
+    : `<p style="margin:0 0 12px 0;">We received your payment below. Thank you.</p>`;
 
   const logoHtml = input.logoUrl?.trim()
-    ? `<div style="margin:0 0 12px 0;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:56px; width:auto;"/></div>`
+    ? `<div style="margin:0 0 16px 0; text-align:center;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:96px; width:auto;"/></div>`
     : "";
 
   const lineItemsTable = `
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
       <thead>
         <tr>
-          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Paid</th>
           <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Amount</th>
         </tr>
       </thead>
@@ -388,9 +442,47 @@ export function renderContributionBatchReceiptEmail(input: {
     </table>
   `.trim();
 
+  // Build a per-contribution order details section (only shown for store contributions that have cart items)
+  const allOrderItems = safeRows.flatMap((item) => (item.orderItems ?? []).map(o => ({ ...o, forContribution: item.title })));
+  const orderDetailsHtml = allOrderItems.length > 0
+    ? `
+      <div style="margin-top:18px;">
+        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Your Order Details</div>
+        <table role="presentation" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Item</th>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Specs</th>
+              <th style="text-align:center; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Qty</th>
+              <th style="text-align:right; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allOrderItems.map((o) => `
+              <tr>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px;">${escapeHtml(o.itemName)}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569; font-size:13px;">${o.options.length > 0 ? escapeHtml(o.options.join(" · ")) : "—"}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:center;">${o.quantity}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:right; font-weight:600;">${normalizePesos(o.subtotal)}</td>
+              </tr>
+            `.trim()).join("")}
+          </tbody>
+        </table>
+      </div>
+    `.trim()
+    : "";
+
   const detailsHtml = `
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:14px;">
       <tbody>
+        ${input.recipientName?.trim()
+      ? `
+              <tr>
+                <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:140px;">Payer</td>
+                <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(input.recipientName.trim())}</td>
+              </tr>
+            `.trim()
+      : ""}
         <tr>
           <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:140px;">Date</td>
           <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(paidAtLabel)}</td>
@@ -412,26 +504,33 @@ export function renderContributionBatchReceiptEmail(input: {
     greeting,
     messageHtml,
     lineItemsTable,
+    orderDetailsHtml,
     detailsHtml,
-    renderSignatureHtml(input.signatureOverride),
+    renderSignatureHtml(input.signatureOverride, input.treasurerNameOverride),
   ].join("");
+
+  const orderTextLines = allOrderItems.map(
+    (o) => `  - ${o.quantity}x ${o.itemName}${o.options.length > 0 ? ` (${o.options.join(", ")})` : ""}: ${normalizePesos(o.subtotal)}`
+  );
 
   const text = [
     input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
-    input.customMessage?.trim() || "We received your contribution payment. Thank you.",
+    input.customMessage?.trim() || "We received your payment below. Thank you.",
     "",
+    input.recipientName?.trim() ? `Payer: ${input.recipientName.trim()}` : "",
     ...safeRows.map((item) => `${item.title}: ${normalizePesos(item.amountPesos)}`),
     `Total: ${normalizePesos(input.totalAmountPesos)}`,
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
-    renderSignatureText(input.signatureOverride),
+    ...(orderTextLines.length > 0 ? ["\nYour Order:", ...orderTextLines] : []),
+    renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ]
     .filter(Boolean)
     .join("\n");
 
   return {
     subject,
-    html: renderShell({ title: "Contribution receipt", bodyHtml }),
+    html: renderShell({ title: "Dorm Treasurer E-Receipt", bodyHtml }),
     text,
   };
 }

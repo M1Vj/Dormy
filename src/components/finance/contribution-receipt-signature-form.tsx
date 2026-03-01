@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Upload } from "lucide-react";
@@ -10,6 +10,10 @@ import {
   updateContributionReceiptSignature,
   uploadContributionReceiptAsset,
 } from "@/app/actions/finance";
+import {
+  updateGlobalReceiptTemplate,
+  uploadGlobalReceiptAsset,
+} from "@/app/actions/dorm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,8 +38,8 @@ export function ContributionReceiptSignatureForm({
   onChange?: (newSignature: string) => void;
 }) {
   const router = useRouter();
+  const signatureInputRef = useRef<HTMLInputElement>(null);
   const [signature, setSignature] = useState(initialSignature);
-  const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -51,10 +55,17 @@ export function ContributionReceiptSignatureForm({
 
     setIsSaving(true);
     try {
-      const result = await updateContributionReceiptSignature(dormId, {
-        contribution_id: contributionId,
-        signature: trimmed,
-      });
+      let result;
+      if (contributionId === "GLOBAL") {
+        result = await updateGlobalReceiptTemplate(dormId, {
+          signature: trimmed,
+        });
+      } else {
+        result = await updateContributionReceiptSignature(dormId, {
+          contribution_id: contributionId,
+          signature: trimmed,
+        });
+      }
 
       if (result && "error" in result) {
         toast.error(result.error);
@@ -74,20 +85,21 @@ export function ContributionReceiptSignatureForm({
     }
   };
 
-  const uploadSignature = async () => {
-    if (!signatureFile) {
-      toast.error("Select a signature image first.");
-      return;
-    }
-
+  const uploadSignature = async (file: File) => {
     setIsUploading(true);
     try {
       const formData = new FormData();
-      formData.set("contribution_id", contributionId);
       formData.set("asset_type", "signature");
-      formData.set("file", signatureFile);
+      formData.set("file", file);
 
-      const uploadResult = await uploadContributionReceiptAsset(dormId, formData);
+      let uploadResult;
+      if (contributionId === "GLOBAL") {
+        uploadResult = await uploadGlobalReceiptAsset(dormId, formData);
+      } else {
+        formData.set("contribution_id", contributionId);
+        uploadResult = await uploadContributionReceiptAsset(dormId, formData);
+      }
+
       if (uploadResult && "error" in uploadResult) {
         toast.error(uploadResult.error);
         return;
@@ -100,12 +112,12 @@ export function ContributionReceiptSignatureForm({
 
       const uploadedUrl = uploadResult.asset_url;
       setSignature(uploadedUrl);
-      setSignatureFile(null);
       await saveSignature(uploadedUrl);
     } catch {
       toast.error("Failed to upload signature.");
     } finally {
       setIsUploading(false);
+      if (signatureInputRef.current) signatureInputRef.current.value = "";
     }
   };
 
@@ -136,21 +148,25 @@ export function ContributionReceiptSignatureForm({
         )}
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <Input
+      <div className="flex items-center gap-2">
+        <input
+          ref={signatureInputRef}
           type="file"
           accept="image/*"
-          disabled={disabled || isUploading || isSaving}
-          onChange={(event) => setSignatureFile(event.target.files?.[0] ?? null)}
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void uploadSignature(file);
+          }}
         />
         <Button
           type="button"
           variant="outline"
-          onClick={uploadSignature}
-          disabled={disabled || isUploading || isSaving || !signatureFile}
+          onClick={() => signatureInputRef.current?.click()}
+          disabled={disabled || isUploading || isSaving}
         >
           {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-          Upload Signature
+          {isUploading ? "Uploading..." : "Upload Signature"}
         </Button>
       </div>
 
