@@ -11,9 +11,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
 const createAdminClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null;
+  }
+
   return createSupabaseAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     {
       auth: {
         persistSession: false,
@@ -99,7 +105,7 @@ export async function getDormAnnouncements(dormId: string | null, options: { lim
     .limit(1);
 
   const isGlobalAdmin = !!adminMembership?.length;
-  const client = isGlobalAdmin ? createAdminClient() : supabase;
+  const client = isGlobalAdmin ? createAdminClient() ?? supabase : supabase;
 
   let effectiveIsStaff = isGlobalAdmin;
   let semesterId: string | null = null;
@@ -370,7 +376,7 @@ export async function createAnnouncement(dormId: string | null, formData: FormDa
     payload.starts_at = parsed.data.starts_at;
   }
 
-  const insertClient = dormId ? supabase : createAdminClient();
+  const insertClient = dormId ? supabase : createAdminClient() ?? supabase;
   const { data, error } = await insertClient
     .from("dorm_announcements")
     .insert(payload)
@@ -455,7 +461,7 @@ export async function updateAnnouncement(
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
   const isStaff = !isOccupantMode && STAFF_ROLES.has(membership.role);
 
-  const mutationClient = dormId ? supabase : createAdminClient();
+  const mutationClient = dormId ? supabase : createAdminClient() ?? supabase;
 
   const existingQuery = mutationClient
     .from("dorm_announcements")
@@ -644,7 +650,7 @@ export async function deleteAnnouncement(dormId: string | null, announcementId: 
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
   const isPowerStaff = !isOccupantMode && new Set(["admin", "adviser", "student_assistant"]).has(membership.role);
 
-  const mutationClient = dormId ? supabase : createAdminClient();
+  const mutationClient = dormId ? supabase : createAdminClient() ?? supabase;
 
   const existingQuery = mutationClient
     .from("dorm_announcements")

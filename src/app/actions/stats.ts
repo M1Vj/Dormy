@@ -303,10 +303,16 @@ export async function getGlobalAdminStats(): Promise<{
   if (!membership?.length) return { error: "Forbidden" };
 
   // Use service role client to bypass RLS for system-wide stats
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { error: "SUPABASE_SERVICE_ROLE_KEY is not configured for admin stats." };
+  }
+
   const { createClient: createSupabaseAdminClient } = await import("@supabase/supabase-js");
   const adminClient = createSupabaseAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     { auth: { persistSession: false } }
   );
 
