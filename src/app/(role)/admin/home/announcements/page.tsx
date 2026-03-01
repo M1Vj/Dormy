@@ -76,7 +76,7 @@ export default async function AnnouncementsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button asChild variant="ghost" size="sm" className="-ml-2">
               <Link href={`/${role}/home`}>
                 <ArrowLeft className="mr-2 size-4" />
@@ -122,7 +122,7 @@ export default async function AnnouncementsPage() {
                       {expiresAt ? ` • Expires ${format(expiresAt, "MMM d, yyyy h:mm a")}` : ""}
                     </CardDescription>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {announcement.committee ? (
                       <span className="rounded-full border bg-card px-2 py-0.5 text-xs">
                         {announcement.committee.name}

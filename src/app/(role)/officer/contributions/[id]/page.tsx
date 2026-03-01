@@ -60,6 +60,7 @@ type OccupantWithStatus = OccupantRow & {
   status: "paid" | "partial" | "unpaid";
   deadline: string | null;
   overdue: boolean;
+  cartItems: any[];
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -112,6 +113,33 @@ function parseDeadline(value: unknown) {
     return null;
   }
   return parsed.toISOString();
+}
+
+function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: any[] }) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1 rounded-md bg-muted/30 p-2 text-xs">
+      <div className="font-medium text-muted-foreground mb-1 border-b pb-1">Order Details</div>
+      {items.map((item, idx) => {
+        const sItem = storeItems.find((s) => s.id === item.item_id);
+        const itemName = sItem ? sItem.name : "Unknown Item";
+        const optionsTxt =
+          item.options?.length > 0
+            ? `(${item.options.map((o: any) => `${o.value}`).join(", ")})`
+            : "";
+
+        return (
+          <div key={idx} className="flex justify-between items-start gap-2">
+            <div>
+              <span className="font-semibold">{item.quantity}x</span> {itemName} {optionsTxt}
+            </div>
+            <div className="font-mono text-muted-foreground">₱{item.subtotal?.toFixed(2)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default async function EventDetailsPage({
@@ -240,6 +268,12 @@ export default async function EventDetailsPage({
       charged > 0 &&
       paid < charged;
 
+    const cartItems = occupantEntries
+      .filter((entry) => Array.isArray(entry.metadata?.cart_items))
+      .map((entry) => entry.metadata!.cart_items as any[])
+      .filter((items) => items.length > 0)
+      .flat();
+
     return {
       ...occupant,
       paid,
@@ -247,6 +281,7 @@ export default async function EventDetailsPage({
       status,
       deadline,
       overdue,
+      cartItems,
     };
   });
 
@@ -273,6 +308,12 @@ export default async function EventDetailsPage({
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
+
+  const isStore = entryRows.map(entry => entry.metadata?.is_store === true).find(Boolean) ?? false;
+
+  const storeItems = entryRows
+    .map(entry => Array.isArray(entry.metadata?.store_items) ? entry.metadata.store_items : [])
+    .find(items => items.length > 0) ?? [];
 
   return (
     <div className="space-y-6">
@@ -411,6 +452,9 @@ export default async function EventDetailsPage({
                           {roomCode ? `Room ${roomCode}` : "No room"}
                           {occupant.student_id ? ` · ${occupant.student_id}` : ""}
                         </p>
+                        {isStore && occupant.cartItems?.length > 0 && (
+                          <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <StatusBadge status={occupant.status} />
@@ -445,6 +489,10 @@ export default async function EventDetailsPage({
                       category="contributions"
                       eventId={eventId}
                       eventTitle={event.title}
+                      metadata={{
+                        is_store: isStore,
+                        store_items: storeItems,
+                      }}
                       trigger={
                         <Button size="sm" variant="outline" className="w-full">
                           Record Payment
@@ -472,19 +520,24 @@ export default async function EventDetailsPage({
               </TableHeader>
               <TableBody>
                 {filteredOccupants.map((occupant) => (
-                  <TableRow key={occupant.id}>
+                  <TableRow key={occupant.id} className="border-border/50 hover:bg-muted/30 transition-colors">
                     <TableCell>
                       <div className="font-medium">{occupant.full_name}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
+                      {isStore && occupant.cartItems?.length > 0 && (
+                        <div className="mt-2 w-full max-w-[200px]">
+                          <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
+                        </div>
+                      )}
                     </TableCell>
-                    <TableCell>{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="align-top">{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
+                    <TableCell className="text-right font-mono align-top">
                       {occupant.charged > 0 ? `₱${occupant.charged.toFixed(2)}` : "-"}
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className="text-right font-mono align-top">
                       {occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}
                     </TableCell>
-                    <TableCell className="text-right text-xs">
+                    <TableCell className="text-right text-xs align-top">
                       {occupant.deadline
                         ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
                         : "Not set"}
@@ -506,6 +559,10 @@ export default async function EventDetailsPage({
                         category="contributions"
                         eventId={eventId}
                         eventTitle={event.title}
+                        metadata={{
+                          is_store: isStore,
+                          store_items: storeItems,
+                        }}
                         trigger={
                           <Button size="sm" variant="outline">
                             Record Pay

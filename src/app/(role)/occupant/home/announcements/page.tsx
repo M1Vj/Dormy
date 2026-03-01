@@ -76,7 +76,7 @@ export default async function AnnouncementsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button asChild variant="ghost" size="sm" className="-ml-2">
               <Link href={`/${role}/home`}>
                 <ArrowLeft className="mr-2 size-4" />
@@ -116,7 +116,7 @@ export default async function AnnouncementsPage() {
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {!announcement.dorm_id && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Admin</span>}
                       <CardTitle className="text-base">{announcement.title}</CardTitle>
                     </div>
