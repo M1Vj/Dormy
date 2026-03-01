@@ -86,7 +86,7 @@ export async function getTreasurerSemesterSnapshots(
   const { data: semestersData, error: semestersError } = await supabase
     .from("dorm_semesters")
     .select("id, label, starts_on")
-    .eq("dorm_id", dormId)
+    .is("dorm_id", null)
     .order("starts_on", { ascending: true });
 
   if (semestersError) {
