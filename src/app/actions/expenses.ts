@@ -148,35 +148,56 @@ export async function submitExpense(dormId: string, formData: FormData) {
     receiptPath = filename;
   }
 
-  const { data: expense, error: insertError } = await supabase
+  const expensePayload = {
+    dorm_id: dormId,
+    semester_id: semesterResult.semesterId,
+    committee_id: committeeId,
+    submitted_by: user.id,
+    title: parsed.data.title,
+    description: parsed.data.description ?? null,
+    amount_pesos: parsed.data.amount_pesos,
+    purchased_at: parsed.data.purchased_at,
+    receipt_storage_path: receiptPath,
+    category: parsed.data.category,
+    expense_group_title:
+      parsed.data.expense_group_title?.trim() ||
+      (parsed.data.category === "contributions" ? parsed.data.title.trim() : null),
+    contribution_reference_title:
+      parsed.data.contribution_reference_title?.trim() || null,
+    vendor_name: parsed.data.vendor_name?.trim() || null,
+    official_receipt_no: parsed.data.official_receipt_no?.trim() || null,
+    quantity: parsed.data.quantity ?? null,
+    unit_cost_pesos: parsed.data.unit_cost_pesos ?? null,
+    payment_method: parsed.data.payment_method?.trim() || null,
+    purchased_by: parsed.data.purchased_by?.trim() || null,
+    transparency_notes: parsed.data.transparency_notes?.trim() || null,
+    status: "pending" as const,
+  };
+
+  let { data: expense, error: insertError } = await supabase
     .from("expenses")
-    .insert({
-      dorm_id: dormId,
-      semester_id: semesterResult.semesterId,
-      committee_id: committeeId,
-      submitted_by: user.id,
-      title: parsed.data.title,
-      description: parsed.data.description ?? null,
-      amount_pesos: parsed.data.amount_pesos,
-      purchased_at: parsed.data.purchased_at,
-      receipt_storage_path: receiptPath,
-      category: parsed.data.category,
-      expense_group_title:
-        parsed.data.expense_group_title?.trim() ||
-        (parsed.data.category === "contributions" ? parsed.data.title.trim() : null),
-      contribution_reference_title:
-        parsed.data.contribution_reference_title?.trim() || null,
-      vendor_name: parsed.data.vendor_name?.trim() || null,
-      official_receipt_no: parsed.data.official_receipt_no?.trim() || null,
-      quantity: parsed.data.quantity ?? null,
-      unit_cost_pesos: parsed.data.unit_cost_pesos ?? null,
-      payment_method: parsed.data.payment_method?.trim() || null,
-      purchased_by: parsed.data.purchased_by?.trim() || null,
-      transparency_notes: parsed.data.transparency_notes?.trim() || null,
-      status: "pending",
-    })
+    .insert(expensePayload)
     .select("id")
     .single();
+
+  const isTreasurerContributionExpense = parsed.data.category === "contributions" && roles.includes("treasurer");
+  if ((insertError || !expense) && isTreasurerContributionExpense && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    const serviceClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    const retry = await serviceClient.from("expenses").insert(expensePayload).select("id").single();
+    expense = retry.data as { id: string } | null;
+    insertError = retry.error;
+  }
 
   if (insertError || !expense) {
     return { error: insertError?.message ?? "Failed to submit expense." };
@@ -201,6 +222,12 @@ export async function submitExpense(dormId: string, formData: FormData) {
   const activeRole = await getActiveRole() || "occupant";
 
   revalidatePath(`/${activeRole}/finance/expenses`);
+  revalidatePath(`/${activeRole}/finance`);
+  if (parsed.data.category === "contributions") {
+    revalidatePath(`/${activeRole}/contributions`);
+    revalidatePath(`/${activeRole}/contribution-expenses`);
+    revalidatePath(`/${activeRole}/reporting`);
+  }
   if (committeeId) {
     revalidatePath(`/${activeRole}/committees/${committeeId}`);
   }

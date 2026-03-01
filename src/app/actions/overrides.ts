@@ -594,9 +594,9 @@ export async function overrideLedgerEntryOccupant(
   revalidatePath(`/${activeRole}/payments`);
   revalidatePath("/payments"); // Occupant
   revalidatePath(`/${activeRole}/finance/maintenance`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   if (entry.event_id) {
-    revalidatePath(`/${activeRole}/finance/events/${entry.event_id}`);
+    revalidatePath(`/${activeRole}/contributions/${entry.event_id}`);
   }
   revalidatePath(`/${activeRole}/fines`);
   revalidatePath(`/${activeRole}/overrides`);
@@ -735,8 +735,8 @@ export async function overrideEventRecord(
 
   revalidatePath(`/${activeRole}/events`);
   revalidatePath(`/${activeRole}/events/${parsed.data.event_id}`);
-  revalidatePath(`/${activeRole}/finance/events`);
-  revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contributions/${parsed.data.event_id}`);
   revalidatePath(`/${activeRole}/overrides`);
 
   return { success: true };
@@ -856,8 +856,8 @@ export async function overrideEventPayableDeadline(
   const { getActiveRole } = await import("@/lib/roles-server");
   const activeRole = await getActiveRole() || "occupant";
 
-  revalidatePath(`/${activeRole}/finance/events`);
-  revalidatePath(`/${activeRole}/finance/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contributions/${parsed.data.event_id}`);
   revalidatePath(`/${activeRole}/payments`);
   revalidatePath("/payments");
   revalidatePath(`/${activeRole}/overrides`);

@@ -52,12 +52,14 @@ export function EventFormDialog({
   dormOptions,
   event,
   committeeId,
+  basePath,
 }: {
   mode: "create" | "edit";
   hostDormId: string;
   dormOptions: EventDormOption[];
   event?: EventDetail;
   committeeId?: string;
+  basePath: string;
 }) {
   const router = useRouter();
   const action = mode === "create" ? createEvent : updateEvent;
@@ -82,7 +84,7 @@ export function EventFormDialog({
           : event?.id ?? null;
 
       if (mode === "create" && eventId) {
-        router.push(`/events/${eventId}`);
+        router.push(`${basePath}/${eventId}`);
       } else {
         router.refresh();
       }

@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
 import { HeaderRoleChip } from "@/components/nav/header-role-chip"
 import { HeaderLogo } from "@/components/nav/header-logo"
+import { RouteProgress } from "@/components/nav/route-progress"
 import { UserNav } from "@/components/nav/user-nav"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { DormProvider } from "@/components/providers/dorm-provider"
@@ -25,6 +26,7 @@ export default async function AppLayout({
   return (
     <AuthProvider>
       <DormProvider dorms={dorms} initialDormId={initialDormId}>
+        <RouteProgress />
         <SidebarProvider>
           <AppSidebar />
           <main className="min-w-0 flex-1">

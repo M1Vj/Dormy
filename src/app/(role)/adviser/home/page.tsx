@@ -172,7 +172,7 @@ export default async function HomePage() {
             A safe, high-signal view of your dorm status, schedules, deadlines, and rules.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
           <span className="rounded-full border bg-card px-3 py-1">{dorm?.name ?? "Dorm"}</span>
           {semester ? (
             <span className="rounded-full border bg-card px-3 py-1">{semester.label}</span>
@@ -309,7 +309,7 @@ export default async function HomePage() {
                   <div key={announcement.id} className={`rounded-lg border p-3 text-sm ${!announcement.dorm_id ? "border-l-4 border-l-teal-500 bg-teal-50/30 dark:bg-teal-950/10" : ""}`}>
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {!announcement.dorm_id && <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-900 dark:text-teal-300">Admin</span>}
                           <div className="truncate font-medium">{announcement.title}</div>
                         </div>

@@ -315,7 +315,8 @@ export async function updateDormAttributes(dormId: string, updates: Record<strin
   const currentAttributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes : {};
   const newAttributes = { ...currentAttributes, ...updates };
 
-  const { error } = await supabase
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
     .from("dorms")
     .update({ attributes: newAttributes })
     .eq("id", dormId);
@@ -496,7 +497,8 @@ export async function toggleFinanceHistoricalEditOverride(dormId: string, enable
     finance_non_current_semester_override: enabled,
   };
 
-  const { error } = await supabase
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
     .from("dorms")
     .update({ attributes: nextAttributes })
     .eq("id", dormId);
@@ -520,7 +522,7 @@ export async function toggleFinanceHistoricalEditOverride(dormId: string, enable
   revalidatePath(`/${activeRole}`);
   revalidatePath(`/${activeRole}/settings`);
   revalidatePath(`/${activeRole}/finance`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   return { success: true };
 }
 
@@ -737,4 +739,134 @@ export async function findUserByEmail(email: string) {
       display_name: profile?.display_name || authUser.email || "Unknown",
     },
   };
+}
+
+export async function getGlobalReceiptTemplate(dormId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: dorm, error } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
+  if (error || !dorm) {
+    return { error: error?.message ?? "Dorm not found" };
+  }
+
+  const attributes = typeof dorm.attributes === 'object' && dorm.attributes !== null ? dorm.attributes as Record<string, any> : {};
+  return { template: attributes.global_receipt_template || {} };
+}
+
+export async function updateGlobalReceiptTemplate(dormId: string, template: any) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId);
+
+  if (!memberships || !memberships.some(m => ["admin", "adviser", "treasurer"].includes(m.role))) {
+    return { error: "You do not have permission." };
+  }
+
+  const { data: dorm } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
+  const attributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as Record<string, any> : {};
+  const existingTemplate = attributes.global_receipt_template || {};
+
+  attributes.global_receipt_template = {
+    ...existingTemplate,
+    ...template,
+  };
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient
+    .from("dorms")
+    .update({ attributes })
+    .eq("id", dormId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/treasurer/settings/receipt");
+  return { success: true };
+}
+
+export async function uploadGlobalReceiptAsset(dormId: string, formData: FormData) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId);
+
+  if (!memberships || !memberships.some(m => ["admin", "adviser", "treasurer"].includes(m.role))) {
+    return { error: "You do not have permission." };
+  }
+
+  const file = formData.get("file") as File;
+  if (!file) return { error: "No file provided" };
+
+  const assetType = formData.get("asset_type") as string | null;
+  console.log("[uploadGlobalReceiptAsset] file:", file.name, "size:", file.size, "type:", file.type, "assetType:", assetType);
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+  const filePath = `receipts/${dormId}/${fileName}`;
+
+  console.log("[uploadGlobalReceiptAsset] uploading to path:", filePath);
+
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  // Use service role client for storage to bypass RLS policies
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { error: "Storage configuration is missing." };
+  }
+
+  const { createClient } = await import("@supabase/supabase-js");
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { error: uploadError } = await adminClient.storage
+    .from('public_assets')
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error("[uploadGlobalReceiptAsset] upload error:", uploadError);
+    return { error: uploadError.message };
+  }
+
+  const { data: { publicUrl } } = adminClient.storage
+    .from('public_assets')
+    .getPublicUrl(filePath);
+
+  console.log("[uploadGlobalReceiptAsset] success! publicUrl:", publicUrl);
+
+  return { success: true, asset_url: publicUrl };
 }

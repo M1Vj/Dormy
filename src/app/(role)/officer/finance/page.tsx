@@ -45,7 +45,7 @@ export default async function FinanceDashboard() {
       )}
 
       {canViewEvents && (
-        <Link href={`/${role}/finance/events`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
+        <Link href={`/${role}/contributions`} className="block outline-none focus:ring-2 focus:ring-primary rounded-xl">
           <Card className="hover:bg-muted/50 transition-colors h-full">
             <CardHeader>
               <Calendar className="h-8 w-8 text-orange-500 mb-2" />

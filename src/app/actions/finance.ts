@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureActiveSemesterId } from "@/lib/semesters";
+import { TREASURER_MANUAL_EXPENSE_MARKER } from "@/lib/finance/constants";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { optimizeImage } from "@/lib/images";
@@ -38,8 +39,20 @@ const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
   contributions: ["admin", "treasurer"],
 };
 
+const storeOptionSchema = z.object({
+  name: z.string().trim().min(1, "Option name is required (e.g., Size)"),
+  choices: z.array(z.string().trim().min(1, "Choice cannot be empty")).min(1, "At least one choice is required"),
+});
+
+const storeItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Item name is required"),
+  price: z.number().min(0, "Price must be positive"),
+  options: z.array(storeOptionSchema).default([]),
+});
+
 const contributionBatchSchema = z.object({
-  amount: z.number().positive(),
+  amount: z.number().min(0),
   title: z.string().trim().min(2).max(120),
   details: z.string().trim().max(1200).optional().nullable(),
   description: z.string().trim().min(2).max(200).optional().nullable(),
@@ -47,6 +60,8 @@ const contributionBatchSchema = z.object({
   event_id: z.string().uuid().optional().nullable(),
   event_title: z.string().trim().max(200).optional().nullable(),
   include_already_charged: z.boolean().default(false),
+  is_store: z.boolean().default(false),
+  store_items: z.array(storeItemSchema).optional(),
 });
 
 const contributionBatchPaymentSchema = z.object({
@@ -100,6 +115,15 @@ const contributionPayableOverrideSchema = z.object({
   reason: z.string().trim().min(3).max(300),
 });
 
+const treasurerFinanceManualEntrySchema = z.object({
+  entry_kind: z.enum(["inflow", "expense"]),
+  title: z.string().trim().min(2).max(160),
+  amount: z.number().positive(),
+  happened_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  counterparty: z.string().trim().max(160).optional().nullable(),
+  note: z.string().trim().max(2000).optional().nullable(),
+});
+
 const overwriteLedgerSchema = z.object({
   entry_id: z.string().uuid(),
   amount: z.number().positive(),
@@ -118,6 +142,8 @@ type ContributionMetadata = {
   contribution_receipt_subject: string | null;
   contribution_receipt_message: string | null;
   contribution_receipt_logo_url: string | null;
+  store_items: Array<{ id: string; name: string; price: number; options: Array<{ name: string; choices: string[] }> }>;
+  cart_items: Array<{ item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }>;
 };
 
 function asMetadataRecord(value: unknown): Record<string, unknown> {
@@ -190,7 +216,153 @@ function parseContributionMetadata(
       typeof logoRaw === "string" && logoRaw.trim().length > 0
         ? logoRaw.trim()
         : null,
+    store_items: Array.isArray(metadata.store_items) ? (metadata.store_items as ContributionMetadata["store_items"]) : [],
+    cart_items: Array.isArray(metadata.cart_items) ? (metadata.cart_items as ContributionMetadata["cart_items"]) : [],
   };
+}
+
+export async function createTreasurerFinanceManualEntry(
+  dormId: string,
+  payload: z.infer<typeof treasurerFinanceManualEntrySchema>
+) {
+  const parsed = treasurerFinanceManualEntrySchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid finance entry payload." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  if (membershipError || !memberships?.length) {
+    return { error: "Forbidden" };
+  }
+
+  if (!memberships.some((membership) => membership.role === "treasurer")) {
+    return { error: "Only the dorm treasurer can add finance entries here." };
+  }
+
+  const semesterResult = await ensureActiveSemesterId(dormId, supabase);
+  if ("error" in semesterResult) {
+    return { error: semesterResult.error ?? "No active semester." };
+  }
+
+  const noteText = input.note?.trim() || "";
+  const counterpartyText = input.counterparty?.trim() || "";
+  const amount = Number(input.amount.toFixed(2));
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
+  if (input.entry_kind === "inflow") {
+    const { error: insertError } = await writeClient.from("ledger_entries").insert({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      ledger: "contributions",
+      entry_type: "payment",
+      occupant_id: null,
+      event_id: null,
+      fine_id: null,
+      posted_at: `${input.happened_on}T12:00:00.000Z`,
+      amount_pesos: -Math.abs(amount),
+      method: "manual_finance",
+      note: input.title.trim(),
+      metadata: {
+        finance_manual_inflow: true,
+        finance_counterparty: counterpartyText || null,
+        finance_note: noteText || null,
+        finance_source: "treasurer_finance_page",
+      },
+      created_by: user.id,
+    });
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  } else {
+    const combinedNote = [TREASURER_MANUAL_EXPENSE_MARKER, noteText].filter(Boolean).join("\n");
+    const { error: insertError } = await writeClient.from("expenses").insert({
+      dorm_id: dormId,
+      semester_id: semesterResult.semesterId,
+      committee_id: null,
+      submitted_by: user.id,
+      title: input.title.trim(),
+      description: noteText || null,
+      amount_pesos: amount,
+      purchased_at: input.happened_on,
+      receipt_storage_path: null,
+      status: "approved",
+      approved_by: user.id,
+      approval_comment: "Treasurer finance manual entry",
+      approved_at: new Date().toISOString(),
+      category: "contributions",
+      expense_group_title: input.title.trim(),
+      contribution_reference_title: null,
+      vendor_name: counterpartyText || null,
+      official_receipt_no: null,
+      quantity: null,
+      unit_cost_pesos: null,
+      payment_method: "manual_finance",
+      purchased_by: counterpartyText || null,
+      transparency_notes: combinedNote || TREASURER_MANUAL_EXPENSE_MARKER,
+    });
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.manual_entry_created",
+      entityType: "finance",
+      metadata: {
+        entry_kind: input.entry_kind,
+        title: input.title,
+        amount_pesos: amount,
+        happened_on: input.happened_on,
+        counterparty: counterpartyText || null,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for treasurer manual finance entry:", auditError);
+  }
+
+  const activeRole = (await getActiveRole()) || "occupant";
+  revalidatePath(`/${activeRole}/finance`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contribution-expenses`);
+  revalidatePath(`/${activeRole}/reporting`);
+
+  return { success: true };
 }
 
 // --- Actions ---
@@ -209,18 +381,17 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  const allowed = allowedRolesByLedger[tx.category].includes(membership.role);
+  const allowed = memberships.some(m => allowedRolesByLedger[tx.category].includes(m.role));
   if (!allowed) {
     return { error: "You do not have permission to record this transaction." };
   }
@@ -247,6 +418,51 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         },
       }
     ) as typeof supabase;
+  }
+
+  // Intercept store contribution payments to update the base charge
+  if (
+    tx.entry_type === "payment" &&
+    tx.category === "contributions" &&
+    tx.metadata?.is_store === true &&
+    Array.isArray(tx.metadata?.cart_items) &&
+    tx.metadata?.contribution_id
+  ) {
+    const { data: chargeEntries } = await writeClient
+      .from("ledger_entries")
+      .select("id, metadata, amount_pesos")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", tx.occupant_id)
+      .eq("entry_type", "charge")
+      .eq("ledger", "contributions")
+      .is("voided_at", null);
+
+    const chargeEntry = chargeEntries?.find((e) => {
+      const meta = typeof e.metadata === "object" && e.metadata !== null ? (e.metadata as Record<string, unknown>) : {};
+      return meta.contribution_id === tx.metadata!.contribution_id;
+    });
+
+    if (chargeEntry) {
+      // The exact total for this cart replaces the previous original charge of 0.
+      const newChargeAmount = Math.abs(tx.amount);
+      const updatedMetadata = {
+        ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null ? chargeEntry.metadata : {}),
+        cart_items: tx.metadata.cart_items,
+      };
+
+      const { error: updateError } = await writeClient
+        .from("ledger_entries")
+        .update({
+          amount_pesos: newChargeAmount,
+          metadata: updatedMetadata,
+        })
+        .eq("id", chargeEntry.id);
+
+      if (updateError) {
+        console.error("Store charge update error:", updateError);
+        return { error: "Failed to process store order." };
+      }
+    }
   }
 
   const { error } = await writeClient.from("ledger_entries").insert({
@@ -348,31 +564,76 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         eventTitle = event?.title?.trim() || null;
       }
 
+      let mergedMetadata = tx.metadata ?? {};
+      if (tx.category === "contributions" && mergedMetadata.contribution_id) {
+        const { data: origEntry } = await supabase
+          .from("ledger_entries")
+          .select("metadata")
+          .eq("id", mergedMetadata.contribution_id)
+          .single();
+        if (origEntry?.metadata) {
+          mergedMetadata = { ...mergedMetadata, ...(origEntry.metadata as Record<string, unknown>) };
+        }
+      }
+
+      const { data: dorm } = await supabase
+        .from("dorms")
+        .select("attributes")
+        .eq("id", dormId)
+        .single();
+      const dormAttributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
+      const globalTemplate = dormAttributes.global_receipt_template || {};
+
       const contributionMetadata =
         tx.category === "contributions"
-          ? parseContributionMetadata(tx.metadata ?? {}, {
-              eventId: tx.event_id ?? null,
-              note: tx.note ?? null,
-            })
+          ? parseContributionMetadata(mergedMetadata, {
+            eventId: tx.event_id ?? null,
+            note: tx.note ?? null,
+          })
           : null;
       const resolvedSignature =
         receiptConfig?.signature?.trim() ||
         contributionMetadata?.contribution_receipt_signature ||
+        globalTemplate.signature ||
         null;
       const resolvedSubject =
         receiptConfig?.subject?.trim() ||
         contributionMetadata?.contribution_receipt_subject ||
+        globalTemplate.subject ||
         null;
       const resolvedMessage =
         receiptConfig?.message?.trim() ||
         contributionMetadata?.contribution_receipt_message ||
+        globalTemplate.message ||
         null;
       const resolvedLogoUrl =
         receiptConfig?.logo_url?.trim() ||
         contributionMetadata?.contribution_receipt_logo_url ||
+        globalTemplate.logo_url || globalTemplate.logoUrl ||
         null;
 
+      let orderItems;
+      if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
+        const catalogItems = contributionMetadata.store_items ?? [];
+        orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
+          let options: string[] = [];
+
+          if (Array.isArray(cartItem.options)) {
+            options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
+          }
+
+          const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
+          return {
+            itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
+            options,
+            quantity: cartItem.quantity ?? 1,
+            subtotal: cartItem.subtotal ?? 0,
+          };
+        });
+      }
+
       const rendered = renderPaymentReceiptEmail({
+        treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
         recipientName: occupant.full_name ?? null,
         amountPesos: Math.abs(finalAmount),
         paidAtIso: new Date().toISOString(),
@@ -380,6 +641,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         method: tx.method?.trim() || null,
         note: tx.note?.trim() || null,
         eventTitle,
+        orderItems,
         customMessage: resolvedMessage,
         subjectOverride: resolvedSubject,
         signatureOverride: resolvedSignature,
@@ -440,18 +702,17 @@ export async function previewTransactionReceiptEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  const allowed = allowedRolesByLedger[tx.category].includes(membership.role);
+  const allowed = memberships.some(m => allowedRolesByLedger[tx.category].includes(m.role));
   if (!allowed) {
     return { error: "You do not have permission to preview this receipt email." };
   }
@@ -508,32 +769,77 @@ export async function previewTransactionReceiptEmail(
     eventTitle = event?.title?.trim() || null;
   }
 
+  let mergedMetadata = tx.metadata ?? {};
+  if (tx.category === "contributions" && mergedMetadata.contribution_id) {
+    const { data: origEntry } = await supabase
+      .from("ledger_entries")
+      .select("metadata")
+      .eq("id", mergedMetadata.contribution_id)
+      .single();
+    if (origEntry?.metadata) {
+      mergedMetadata = { ...mergedMetadata, ...(origEntry.metadata as Record<string, unknown>) };
+    }
+  }
+
+  const { data: dormDoc } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+  const dormAttributes = typeof dormDoc?.attributes === 'object' && dormDoc?.attributes !== null ? dormDoc.attributes as any : {};
+  const globalTemplate = dormAttributes.global_receipt_template || {};
+
   const contributionMetadata =
     tx.category === "contributions"
-      ? parseContributionMetadata(tx.metadata ?? {}, {
-          eventId: tx.event_id ?? null,
-          note: tx.note ?? null,
-        })
+      ? parseContributionMetadata(mergedMetadata, {
+        eventId: tx.event_id ?? null,
+        note: tx.note ?? null,
+      })
       : null;
   const resolvedSignature =
     receiptConfig?.signature?.trim() ||
     contributionMetadata?.contribution_receipt_signature ||
+    globalTemplate.signature ||
     null;
   const resolvedSubject =
     receiptConfig?.subject?.trim() ||
     contributionMetadata?.contribution_receipt_subject ||
+    globalTemplate.subject ||
     null;
   const resolvedMessage =
     receiptConfig?.message?.trim() ||
     contributionMetadata?.contribution_receipt_message ||
+    globalTemplate.message ||
     null;
   const resolvedLogoUrl =
     receiptConfig?.logo_url?.trim() ||
     contributionMetadata?.contribution_receipt_logo_url ||
+    globalTemplate.logo_url || globalTemplate.logoUrl ||
     null;
+
+  let orderItems;
+  if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
+    const catalogItems = contributionMetadata.store_items ?? [];
+    orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
+      let options: string[] = [];
+
+      if (Array.isArray(cartItem.options)) {
+        options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
+      }
+
+      const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
+      return {
+        itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
+        options,
+        quantity: cartItem.quantity ?? 1,
+        subtotal: cartItem.subtotal ?? 0,
+      };
+    });
+  }
 
   const { renderPaymentReceiptEmail } = await import("@/lib/email");
   const rendered = renderPaymentReceiptEmail({
+    treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
     recipientName: occupant.full_name ?? null,
     amountPesos: tx.amount,
     paidAtIso: new Date().toISOString(),
@@ -541,6 +847,7 @@ export async function previewTransactionReceiptEmail(
     method: tx.method?.trim() || null,
     note: tx.note?.trim() || null,
     eventTitle,
+    orderItems,
     customMessage: resolvedMessage,
     subjectOverride: resolvedSubject,
     signatureOverride: resolvedSignature,
@@ -583,14 +890,13 @@ export async function overwriteLedgerEntry(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
@@ -612,7 +918,7 @@ export async function overwriteLedgerEntry(
   }
 
   const ledger = originalEntry.ledger as LedgerCategory;
-  if (!allowedRolesByLedger[ledger]?.includes(membership.role)) {
+  if (!memberships.some(m => allowedRolesByLedger[ledger]?.includes(m.role))) {
     return { error: "You do not have permission to overwrite this ledger entry." };
   }
 
@@ -709,9 +1015,9 @@ export async function overwriteLedgerEntry(
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/payments`);
   revalidatePath(`/${activeRole}/finance/maintenance`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   if (originalEntry.event_id) {
-    revalidatePath(`/${activeRole}/finance/events/${originalEntry.event_id}`);
+    revalidatePath(`/${activeRole}/contributions/${originalEntry.event_id}`);
   }
 
   return {
@@ -731,6 +1037,13 @@ export async function createContributionBatch(
     event_id?: string | null;
     event_title?: string | null;
     include_already_charged?: boolean;
+    is_store?: boolean;
+    store_items?: {
+      id: string;
+      name: string;
+      price: number;
+      options: { name: string; choices: string[] }[];
+    }[];
   }
 ) {
   const parsed = contributionBatchSchema.safeParse({
@@ -742,6 +1055,8 @@ export async function createContributionBatch(
     event_id: payload.event_id ?? null,
     event_title: payload.event_title ?? null,
     include_already_charged: payload.include_already_charged ?? false,
+    is_store: payload.is_store ?? false,
+    store_items: payload.store_items ?? [],
   });
 
   if (!parsed.success) {
@@ -758,18 +1073,17 @@ export async function createContributionBatch(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only treasurer and admin can create payable events." };
   }
 
@@ -887,6 +1201,8 @@ export async function createContributionBatch(
         payable_batch_id: batchId,
         payable_deadline: deadlineIso,
         payable_label: contributionTitle,
+        is_store: parsed.data.is_store,
+        store_items: parsed.data.store_items,
       },
       created_by: user.id,
     }))
@@ -919,8 +1235,8 @@ export async function createContributionBatch(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events`);
-  revalidatePath(`/${activeRole}/finance/events/${batchId}`);
+  revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/contributions/${batchId}`);
   revalidatePath(`/${activeRole}/payments`);
 
   return {
@@ -942,66 +1258,14 @@ type ContributionGroupEntry = {
   semesterId: string | null;
   eventId: string | null;
   deadline: string | null;
+  storeItems: ContributionMetadata["store_items"];
+  cartItems: ContributionMetadata["cart_items"];
   payable: number;
   paid: number;
   outstanding: number;
 };
 
-function resolveContributionReceiptSignature(rows: Array<{ title: string; receiptSignature: string | null }>) {
-  const signatures = Array.from(
-    new Set(
-      rows
-        .map((row) => row.receiptSignature?.trim() ?? "")
-        .filter((value) => value.length > 0)
-    )
-  );
 
-  if (signatures.length > 1) {
-    return { error: "Selected contributions have different receipt signatures. Use contributions with one signature template." as const };
-  }
-
-  if (signatures.length === 0) {
-    return { error: "Set a contribution receipt signature on the contribution page before sending email." as const };
-  }
-
-  return { signature: signatures[0] as string };
-}
-
-function resolveContributionReceiptTemplate(
-  rows: Array<{
-    receiptSubject: string | null;
-    receiptMessage: string | null;
-    receiptLogoUrl: string | null;
-  }>
-) {
-  const normalize = (value: string | null) => {
-    const trimmed = value?.trim() || "";
-    return trimmed.length > 0 ? trimmed : null;
-  };
-
-  const uniqueSubjects = Array.from(new Set(rows.map((row) => normalize(row.receiptSubject))));
-  if (uniqueSubjects.length > 1) {
-    return { error: "Selected contributions have different receipt subjects. Use one receipt template." as const };
-  }
-
-  const uniqueMessages = Array.from(new Set(rows.map((row) => normalize(row.receiptMessage))));
-  if (uniqueMessages.length > 1) {
-    return { error: "Selected contributions have different receipt messages. Use one receipt template." as const };
-  }
-
-  const uniqueLogos = Array.from(new Set(rows.map((row) => normalize(row.receiptLogoUrl))));
-  if (uniqueLogos.length > 1) {
-    return { error: "Selected contributions have different receipt logos. Use one receipt template." as const };
-  }
-
-  return {
-    template: {
-      subject: uniqueSubjects[0] ?? null,
-      message: uniqueMessages[0] ?? null,
-      logoUrl: uniqueLogos[0] ?? null,
-    },
-  };
-}
 
 export async function recordContributionBatchPayment(
   dormId: string,
@@ -1025,18 +1289,17 @@ export async function recordContributionBatchPayment(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can record contribution payments." };
   }
 
@@ -1082,6 +1345,8 @@ export async function recordContributionBatchPayment(
       semesterId: row.semester_id ?? null,
       eventId: row.event_id ?? null,
       deadline: metadata.payable_deadline,
+      storeItems: metadata.store_items,
+      cartItems: metadata.cart_items,
       payable: 0,
       paid: 0,
       outstanding: 0,
@@ -1137,9 +1402,6 @@ export async function recordContributionBatchPayment(
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
-  if (totalDue <= 0) {
-    return { error: "Selected contributions are already settled." };
-  }
 
   const allocations = new Map(dueByContribution);
   const difference = Number((input.amount - totalDue).toFixed(2));
@@ -1171,26 +1433,40 @@ export async function recordContributionBatchPayment(
     return { error: "Nothing to record after allocation." };
   }
 
-  const signatureResult = resolveContributionReceiptSignature(allocRows);
-  if (input.send_receipt_email && "error" in signatureResult) {
-    return { error: signatureResult.error };
+  let globalTemplate = {
+    signature: null as string | null,
+    subject: null as string | null,
+    message: null as string | null,
+    logoUrl: null as string | null,
+  };
+
+  if (input.send_receipt_email) {
+    const { data: dorm } = await supabase
+      .from("dorms")
+      .select("attributes")
+      .eq("id", dormId)
+      .single();
+
+    const attributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
+    if (attributes.global_receipt_template) {
+      const g = attributes.global_receipt_template;
+      globalTemplate = {
+        signature: g.signature ?? null,
+        subject: g.subject ?? null,
+        message: g.message ?? null,
+        logoUrl: g.logo_url ?? g.logoUrl ?? null,
+      };
+    }
+
+    if (!globalTemplate.signature) {
+      return { error: "Set a global receipt signature in Settings -> Receipt before sending email." };
+    }
   }
 
-  const templateResult = resolveContributionReceiptTemplate(allocRows);
-  if (input.send_receipt_email && "error" in templateResult) {
-    return { error: templateResult.error };
-  }
-
-  const resolvedTemplate =
-    "template" in templateResult && templateResult.template
-      ? templateResult.template
-      : { subject: null, message: null, logoUrl: null };
-  const resolvedReceiptSignature =
-    input.receipt_signature?.trim() ||
-    ("signature" in signatureResult ? signatureResult.signature : null);
-  const resolvedReceiptSubject = input.receipt_subject?.trim() || resolvedTemplate.subject;
-  const resolvedReceiptMessage = input.receipt_message?.trim() || resolvedTemplate.message;
-  const resolvedReceiptLogoUrl = input.receipt_logo_url?.trim() || resolvedTemplate.logoUrl;
+  const resolvedReceiptSignature = input.receipt_signature?.trim() || globalTemplate.signature;
+  const resolvedReceiptSubject = input.receipt_subject?.trim() || globalTemplate.subject;
+  const resolvedReceiptMessage = input.receipt_message?.trim() || globalTemplate.message;
+  const resolvedReceiptLogoUrl = input.receipt_logo_url?.trim() || globalTemplate.logoUrl;
 
   const batchPaymentId = crypto.randomUUID();
   let writeClient: typeof supabase = supabase;
@@ -1295,13 +1571,30 @@ export async function recordContributionBatchPayment(
 
       if (recipientEmail) {
         const rendered = renderContributionBatchReceiptEmail({
+          treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
           recipientName: occupant.full_name ?? null,
           paidAtIso: input.paid_at_iso,
           method: input.method,
-          contributions: allocRows.map((row) => ({
-            title: row.title,
-            amountPesos: row.allocation,
-          })),
+          contributions: allocRows.map((row) => {
+            let orderItems;
+            if (row.cartItems && Array.isArray(row.cartItems)) {
+              orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
+                const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
+                const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
+                return {
+                  itemName: catalogItem?.name ?? "Item",
+                  options,
+                  quantity: ci.quantity ?? 1,
+                  subtotal: ci.subtotal ?? 0,
+                };
+              });
+            }
+            return {
+              title: row.title,
+              amountPesos: row.allocation,
+              orderItems,
+            };
+          }),
           totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
           customMessage: resolvedReceiptMessage,
           subjectOverride: resolvedReceiptSubject,
@@ -1326,9 +1619,9 @@ export async function recordContributionBatchPayment(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions`);
   for (const row of allocRows) {
-    revalidatePath(`/${activeRole}/finance/events/${row.contributionId}`);
+    revalidatePath(`/${activeRole}/contributions/${row.contributionId}`);
   }
   revalidatePath(`/${activeRole}/payments`);
 
@@ -1365,18 +1658,17 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can preview contribution payment emails." };
   }
 
@@ -1417,6 +1709,8 @@ export async function previewContributionBatchPaymentEmail(
       semesterId: row.semester_id ?? null,
       eventId: row.event_id ?? null,
       deadline: metadata.payable_deadline,
+      storeItems: metadata.store_items,
+      cartItems: metadata.cart_items,
       payable: 0,
       paid: 0,
       outstanding: 0,
@@ -1472,9 +1766,6 @@ export async function previewContributionBatchPaymentEmail(
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
-  if (totalDue <= 0) {
-    return { error: "Selected contributions are already settled." };
-  }
 
   const allocations = new Map(dueByContribution);
   const difference = Number((input.amount - totalDue).toFixed(2));
@@ -1504,24 +1795,38 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "Nothing to preview after allocation." };
   }
 
-  const signatureResult = resolveContributionReceiptSignature(allocRows);
-  if ("error" in signatureResult) {
-    return { error: signatureResult.error };
+  let globalTemplate = {
+    signature: null as string | null,
+    subject: null as string | null,
+    message: null as string | null,
+    logoUrl: null as string | null,
+  };
+
+  const { data: dorm } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
+  const attributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
+  if (attributes.global_receipt_template) {
+    const g = attributes.global_receipt_template;
+    globalTemplate = {
+      signature: g.signature ?? null,
+      subject: g.subject ?? null,
+      message: g.message ?? null,
+      logoUrl: g.logo_url ?? g.logoUrl ?? null,
+    };
   }
 
-  const templateResult = resolveContributionReceiptTemplate(allocRows);
-  if ("error" in templateResult) {
-    return { error: templateResult.error };
+  if (!globalTemplate.signature) {
+    return { error: "Set a global receipt signature in Settings -> Receipt before sending email." };
   }
 
-  const resolvedReceiptSubject =
-    input.receipt_subject?.trim() || templateResult.template.subject;
-  const resolvedReceiptMessage =
-    input.receipt_message?.trim() || templateResult.template.message;
-  const resolvedReceiptLogoUrl =
-    input.receipt_logo_url?.trim() || templateResult.template.logoUrl;
-  const resolvedReceiptSignature =
-    input.receipt_signature?.trim() || signatureResult.signature;
+  const resolvedReceiptSubject = input.receipt_subject?.trim() || globalTemplate.subject;
+  const resolvedReceiptMessage = input.receipt_message?.trim() || globalTemplate.message;
+  const resolvedReceiptLogoUrl = input.receipt_logo_url?.trim() || globalTemplate.logoUrl;
+  const resolvedReceiptSignature = input.receipt_signature?.trim() || globalTemplate.signature;
 
   const { data: occupant } = await supabase
     .from("occupants")
@@ -1558,13 +1863,30 @@ export async function previewContributionBatchPaymentEmail(
 
   const { renderContributionBatchReceiptEmail } = await import("@/lib/email");
   const rendered = renderContributionBatchReceiptEmail({
+    treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
     recipientName: occupant.full_name ?? null,
     paidAtIso: input.paid_at_iso,
     method: input.method,
-    contributions: allocRows.map((row) => ({
-      title: row.title,
-      amountPesos: row.allocation,
-    })),
+    contributions: allocRows.map((row) => {
+      let orderItems;
+      if (row.cartItems && Array.isArray(row.cartItems)) {
+        orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
+          const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
+          const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
+          return {
+            itemName: catalogItem?.name ?? "Item",
+            options,
+            quantity: ci.quantity ?? 1,
+            subtotal: ci.subtotal ?? 0,
+          };
+        });
+      }
+      return {
+        title: row.title,
+        amountPesos: row.allocation,
+        orderItems,
+      };
+    }),
     totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
     customMessage: resolvedReceiptMessage,
     subjectOverride: resolvedReceiptSubject,
@@ -1616,18 +1938,17 @@ export async function uploadContributionReceiptAsset(dormId: string, formData: F
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can upload contribution receipt assets." };
   }
 
@@ -1736,18 +2057,17 @@ export async function updateContributionReceiptTemplate(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update contribution receipt templates." };
   }
 
@@ -1831,9 +2151,9 @@ export async function updateContributionReceiptTemplate(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}/receipt`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}/receipt`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   return {
     success: true,
@@ -1863,18 +2183,17 @@ export async function previewContributionReceiptTemplateEmail(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can preview contribution receipt templates." };
   }
 
@@ -2011,18 +2330,17 @@ export async function updateContributionReceiptSignature(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update contribution receipt signatures." };
   }
 
@@ -2098,9 +2416,9 @@ export async function updateContributionReceiptSignature(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}/receipt`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}/receipt`);
+  revalidatePath(`/${activeRole}/contributions`);
 
   return {
     success: true,
@@ -2130,18 +2448,17 @@ export async function overrideContributionPayable(
     return { error: "Unauthorized" };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
-  if (!new Set(["admin", "treasurer"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "treasurer"]).has(m.role))) {
     return { error: "Only admins and treasurers can update payable amounts." };
   }
 
@@ -2255,8 +2572,8 @@ export async function overrideContributionPayable(
   }
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${input.contribution_id}`);
-  revalidatePath(`/${activeRole}/finance/events`);
+  revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
+  revalidatePath(`/${activeRole}/contributions`);
   revalidatePath(`/${activeRole}/payments`);
 
   return { success: true, payable: input.new_payable };
@@ -2293,19 +2610,18 @@ export async function createMaintenanceBatch(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (membershipError || !membership?.role) {
+  if (membershipError || !memberships?.length) {
     return { error: "Forbidden" };
   }
 
   // Allowed roles for maintenance fee bulk charge
-  if (!new Set(["admin", "adviser"]).has(membership.role)) {
+  if (!memberships.some(m => new Set(["admin", "adviser"]).has(m.role))) {
     return { error: "Only admins and advisers can create maintenance charges." };
   }
 
@@ -2498,14 +2814,14 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
     return { error: "Unauthorized" };
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("id")
     .eq("dorm_id", dormId)
     .eq("user_id", user.id)
-    .maybeSingle();
+    .limit(1);
 
-  if (!membership?.id) {
+  if (!memberships?.length) {
     return { error: "Forbidden" };
   }
 
@@ -2629,14 +2945,13 @@ export async function createPublicViewToken(
   if (!user) return { error: "Unauthorized" };
 
   // Permission check
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership || !['admin', 'treasurer', 'adviser', 'assistant_adviser'].includes(membership.role)) {
+  if (!memberships?.length || !memberships.some(m => ['admin', 'treasurer', 'adviser', 'assistant_adviser'].includes(m.role))) {
     return { error: "Forbidden" };
   }
 
@@ -2659,7 +2974,7 @@ export async function createPublicViewToken(
   if (error) return { error: error.message };
 
   const activeRole = (await getActiveRole()) || "occupant";
-  revalidatePath(`/${activeRole}/finance/events/${entityId}`);
+  revalidatePath(`/${activeRole}/contributions/${entityId}`);
   return { success: true, token: data.token };
 }
 
@@ -2717,4 +3032,68 @@ export async function togglePublicViewToken(dormId: string, tokenId: string, act
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/finance`);
   return { success: true };
+}
+
+export async function previewGlobalReceiptTemplateEmail(
+  dormId: string,
+  payload: {
+    subject: string | null;
+    message: string | null;
+    signature: string | null;
+    logo_url: string | null;
+  }
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("dorm_id", dormId);
+
+  if (!memberships || !memberships.some((m) => ["admin", "adviser", "treasurer"].includes(m.role))) {
+    return { error: "Forbidden" };
+  }
+
+  const { renderContributionBatchReceiptEmail } = await import("@/lib/email");
+
+  const rendered = renderContributionBatchReceiptEmail({
+    treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
+    recipientName: "John Doe",
+    paidAtIso: new Date().toISOString(),
+    method: "cash",
+    contributions: [
+      {
+        title: "Sample Contribution A",
+        amountPesos: 50.0,
+      },
+      {
+        title: "Sample Contribution B",
+        amountPesos: 150.0,
+      },
+    ],
+    totalAmountPesos: 200.0,
+    customMessage: payload.message || null,
+    subjectOverride: payload.subject || null,
+    signatureOverride: payload.signature || null,
+    logoUrl: payload.logo_url || null,
+  });
+
+  return {
+    success: true,
+    subject: rendered.subject,
+    text: rendered.text,
+    html: rendered.html,
+    recipient_email: "john.doe@example.com",
+  };
 }

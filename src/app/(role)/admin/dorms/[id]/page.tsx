@@ -94,7 +94,7 @@ export default async function DormDetailPage({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <EditDormDialog dorm={dorm as any} />
           <CreateOccupantForm action={createOccupantAction} />
           <Button asChild variant="outline">

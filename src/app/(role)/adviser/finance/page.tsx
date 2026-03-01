@@ -6,7 +6,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 export default function AdviserFinanceHubPage() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <Link href="/adviser/finance/contributions" className="block rounded-xl outline-none focus:ring-2 focus:ring-primary">
+      <Link href="/adviser/contributions" className="block rounded-xl outline-none focus:ring-2 focus:ring-primary">
         <Card className="h-full transition-colors hover:bg-muted/50">
           <CardHeader>
             <CalendarDays className="mb-2 h-8 w-8 text-orange-500" />

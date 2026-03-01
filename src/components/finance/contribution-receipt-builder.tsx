@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Save, Upload } from "lucide-react";
@@ -9,8 +9,21 @@ import { Loader2, RefreshCw, Save, Upload } from "lucide-react";
 import {
   previewContributionReceiptTemplateEmail,
   updateContributionReceiptTemplate,
+  updateContributionReceiptSignature,
   uploadContributionReceiptAsset,
 } from "@/app/actions/finance";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ContributionReceiptSignatureForm } from "@/components/finance/contribution-receipt-signature-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +60,7 @@ export function ContributionReceiptBuilder({
   initialSubject,
   initialMessage,
   initialLogoUrl,
+  globalTemplate,
   occupants,
 }: {
   dormId: string;
@@ -57,6 +71,12 @@ export function ContributionReceiptBuilder({
   initialSubject: string;
   initialMessage: string;
   initialLogoUrl: string;
+  globalTemplate: {
+    signature: string;
+    subject: string;
+    message: string;
+    logoUrl: string;
+  };
   occupants: Array<{
     id: string;
     fullName: string;
@@ -64,15 +84,20 @@ export function ContributionReceiptBuilder({
   }>;
 }) {
   const router = useRouter();
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [occupantId, setOccupantId] = useState(occupants[0]?.id ?? "");
   const [previewAmount, setPreviewAmount] = useState(defaultAmount > 0 ? Number(defaultAmount.toFixed(2)) : 1);
   const [previewMethod, setPreviewMethod] = useState<"cash" | "gcash" | "bank_transfer">("cash");
-  const [subject, setSubject] = useState(
-    initialSubject.trim().length > 0 ? initialSubject.trim() : `Contribution payment receipt`
-  );
-  const [message, setMessage] = useState(initialMessage);
-  const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  const defaultSubject = initialSubject.trim() || globalTemplate.subject || "Contribution payment receipt";
+  const defaultMessage = initialMessage || globalTemplate.message || "We received your payment below. Thank you.";
+  const defaultLogoUrl = initialLogoUrl || globalTemplate.logoUrl;
+  const defaultSignature = initialSignature.trim() || globalTemplate.signature;
+
+  const [subject, setSubject] = useState(defaultSubject);
+  const [message, setMessage] = useState(defaultMessage);
+  const [logoUrl, setLogoUrl] = useState(defaultLogoUrl);
+  const [signatureValue, setSignatureValue] = useState(defaultSignature);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
@@ -83,7 +108,6 @@ export function ContributionReceiptBuilder({
     [occupantId, occupants]
   );
 
-  const signatureValue = initialSignature.trim();
   const signatureIsImage = isImageValue(signatureValue);
 
   const refreshPreview = async (showSuccessToast: boolean) => {
@@ -160,18 +184,44 @@ export function ContributionReceiptBuilder({
     }
   };
 
-  const uploadLogo = async () => {
-    if (!logoFile) {
-      toast.error("Select a logo image first.");
-      return;
-    }
+  const resetToGlobal = async () => {
+    setIsSaving(true);
+    try {
+      await updateContributionReceiptTemplate(dormId, {
+        contribution_id: contributionId,
+        subject: null,
+        message: null,
+        logo_url: null,
+      });
 
+      // Clear the custom signature as well
+      await updateContributionReceiptSignature(dormId, {
+        contribution_id: contributionId,
+        signature: "", // Empty string to signify clearing the local override
+      });
+
+      setSubject(globalTemplate.subject || "Contribution payment receipt");
+      setMessage(globalTemplate.message || "We received your payment below. Thank you.");
+      setLogoUrl(globalTemplate.logoUrl);
+      setSignatureValue(globalTemplate.signature);
+
+      toast.success("Reverted to global default template.");
+      router.refresh();
+      await refreshPreview(false);
+    } catch {
+      toast.error("Failed to reset template.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const uploadLogo = async (file: File) => {
     setIsUploadingLogo(true);
     try {
       const formData = new FormData();
       formData.set("contribution_id", contributionId);
       formData.set("asset_type", "logo");
-      formData.set("file", logoFile);
+      formData.set("file", file);
 
       const result = await uploadContributionReceiptAsset(dormId, formData);
       if (result && "error" in result) {
@@ -186,7 +236,6 @@ export function ContributionReceiptBuilder({
 
       const nextLogoUrl = result.asset_url;
       setLogoUrl(nextLogoUrl);
-      setLogoFile(null);
 
       const saveResult = await updateContributionReceiptTemplate(dormId, {
         contribution_id: contributionId,
@@ -200,23 +249,50 @@ export function ContributionReceiptBuilder({
         return;
       }
 
-      toast.success("Logo uploaded and saved to this contribution template.");
+      toast.success("Logo uploaded and saved.");
       router.refresh();
       await refreshPreview(false);
     } catch {
       toast.error("Failed to upload logo.");
     } finally {
       setIsUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
     }
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+    <div className="space-y-4">
       <Card className="border-muted/60">
         <CardHeader className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>Receipt Editor</CardTitle>
-            <Badge variant="secondary">Saved per contribution</Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>Receipt Editor</CardTitle>
+              <Badge variant="secondary">Saved per contribution</Badge>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isSaving || isUploadingLogo || isRefreshingPreview}>
+                  Reset to Global Default
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset to Global Default?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to revert to the global default template? This will clear custom settings for this contribution.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => {
+                    // Slight delay to allow dialog to close before freezing main thread with state updates
+                    setTimeout(() => void resetToGlobal(), 50);
+                  }}>
+                    Continue
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
           <p className="text-sm text-muted-foreground">
             Configure the contribution receipt template once. Payment dialogs will reuse this template automatically.
@@ -301,36 +377,34 @@ export function ContributionReceiptBuilder({
                 <p className="text-xs text-muted-foreground">No logo saved yet.</p>
               )}
             </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
-              />
-              <Button type="button" variant="outline" onClick={uploadLogo} disabled={isUploadingLogo || !logoFile}>
-                {isUploadingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Upload Logo
-              </Button>
-            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadLogo(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={isUploadingLogo}
+            >
+              {isUploadingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {isUploadingLogo ? "Uploading..." : "Upload Logo"}
+            </Button>
           </div>
 
-          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-            <div>
-              <Label>Signature Source</Label>
-              <p className="text-xs text-muted-foreground">Managed on the contribution details page.</p>
-            </div>
-            {signatureValue ? (
-              signatureIsImage ? (
-                <img src={signatureValue} alt="Contribution signature" className="max-h-24 w-auto rounded border bg-white p-2" />
-              ) : (
-                <pre className="whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
-                  {signatureValue}
-                </pre>
-              )
-            ) : (
-              <p className="text-xs text-destructive">No signature set yet.</p>
-            )}
-          </div>
+          <ContributionReceiptSignatureForm
+            dormId={dormId}
+            contributionId={contributionId}
+            initialSignature={initialSignature}
+            disabled={isSaving || isUploadingLogo}
+            onChange={setSignatureValue}
+          />
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={saveTemplate} disabled={isSaving || isUploadingLogo}>
