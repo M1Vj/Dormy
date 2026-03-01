@@ -66,6 +66,7 @@ type OccupantWithStatus = OccupantRow & {
   paymentStatus: "paid" | "partial" | "unpaid";
   deadline: string | null;
   overdue: boolean;
+  cartItems: any[];
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -106,6 +107,36 @@ function StatusBadge({ status }: { status: OccupantWithStatus["paymentStatus"] }
       <XCircle className="mr-1 h-3 w-3" />
       Unpaid
     </Badge>
+  );
+}
+
+function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: any[] }) {
+  if (!items || !Array.isArray(items) || items.length === 0) return null;
+
+  const validItems = items.filter(Boolean);
+  if (validItems.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1 rounded-md bg-muted/30 p-2 text-xs">
+      <div className="font-medium text-muted-foreground mb-1 border-b pb-1">Order Details</div>
+      {validItems.map((item, idx) => {
+        const sItem = storeItems.find((s) => s.id === item.item_id);
+        const itemName = sItem ? sItem.name : "Unknown Item";
+        const optionsTxt =
+          Array.isArray(item.options) && item.options.length > 0
+            ? `(${item.options.map((o: any) => `${o?.name ? `${o.name}: ` : ""}${o?.value}`).join(", ")})`
+            : "";
+
+        return (
+          <div key={idx} className="flex justify-between items-start gap-2">
+            <div>
+              <span className="font-semibold">{item.quantity || 1}x</span> {itemName} {optionsTxt}
+            </div>
+            <div className="font-mono text-muted-foreground">₱{(item.subtotal || 0).toFixed(2)}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -165,6 +196,9 @@ function parseContributionMetadata(entry: EntryRow) {
         metadata.contribution_receipt_logo_url.trim().length > 0
         ? metadata.contribution_receipt_logo_url.trim()
         : null,
+    isStore: metadata.is_store === true,
+    storeItems: Array.isArray(metadata.store_items) ? metadata.store_items : [],
+    cartItems: Array.isArray(metadata.cart_items) ? metadata.cart_items : [],
   };
 }
 
@@ -301,6 +335,12 @@ export default async function EventDetailsPage({
       .map((entry) => parseContributionMetadata(entry).receiptLogoUrl)
       .find((value): value is string => Boolean(value && value.trim().length > 0)) ??
     "";
+  const isStore =
+    entryRows.map((entry) => parseContributionMetadata(entry).isStore).find(Boolean) ?? false;
+  const storeItems =
+    entryRows
+      .map((entry) => parseContributionMetadata(entry).storeItems)
+      .find((items) => items.length > 0) ?? [];
 
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const nowIso = new Date().toISOString();
@@ -343,6 +383,11 @@ export default async function EventDetailsPage({
 
     const overdue = deadline !== null && deadline < nowIso && remaining > 0;
 
+    const cartItems = occupantEntries
+      .map((entry) => parseContributionMetadata(entry).cartItems)
+      .filter((items) => items.length > 0)
+      .flat();
+
     return {
       ...occupant,
       payable,
@@ -351,6 +396,7 @@ export default async function EventDetailsPage({
       paymentStatus,
       deadline,
       overdue,
+      cartItems,
     };
   });
 
@@ -402,12 +448,6 @@ export default async function EventDetailsPage({
           ) : (
             <Badge variant="outline">View-only semester</Badge>
           )}
-          <Button asChild variant="secondary" className="gap-2 bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-sm">
-            <Link href={`/treasurer/contributions/${contributionId}/receipt`}>
-              <ReceiptText className="h-4 w-4" />
-              Receipt Builder
-            </Link>
-          </Button>
         </div>
       </div>
 
@@ -544,6 +584,10 @@ export default async function EventDetailsPage({
                       </div>
                     </div>
 
+                    {isStore && occupant.cartItems?.length > 0 && (
+                      <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
+                    )}
+
                     <p className="text-xs text-muted-foreground">
                       Deadline: {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                     </p>
@@ -551,34 +595,43 @@ export default async function EventDetailsPage({
                     <div className="flex flex-col gap-2">
                       {!isReadOnlyView ? (
                         <>
-                          <ContributionPayableOverrideDialog
-                            dormId={dormId}
-                            contributionId={contributionId}
-                            occupantId={occupant.id}
-                            currentPayable={occupant.payable}
-                          />
-                          <PaymentDialog
-                            dormId={dormId}
-                            occupantId={occupant.id}
-                            category="contributions"
-                            eventTitle={contributionTitle}
-                            metadata={{
-                              contribution_id: contributionId,
-                              contribution_title: contributionTitle,
-                              contribution_details: contributionDetails,
-                              contribution_event_title: linkedEventTitle,
-                              payable_deadline: occupant.deadline,
-                              contribution_receipt_signature: contributionReceiptSignature || null,
-                              contribution_receipt_subject: contributionReceiptSubject || null,
-                              contribution_receipt_message: contributionReceiptMessage || null,
-                              contribution_receipt_logo_url: contributionReceiptLogoUrl || null,
-                            }}
-                            trigger={
-                              <Button size="sm" variant="outline" className="w-full">
-                                Record Payment
-                              </Button>
-                            }
-                          />
+                          <div>
+                            <ContributionPayableOverrideDialog
+                              key={`mobile-override-${occupant.id}`}
+                              dormId={dormId}
+                              contributionId={contributionId}
+                              occupantId={occupant.id}
+                              currentPayable={occupant.payable}
+                              variant="secondary"
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <PaymentDialog
+                              key={`mobile-pay-${occupant.id}`}
+                              dormId={dormId}
+                              occupantId={occupant.id}
+                              category="contributions"
+                              eventTitle={contributionTitle}
+                              metadata={{
+                                contribution_id: contributionId,
+                                contribution_title: contributionTitle,
+                                contribution_details: contributionDetails,
+                                contribution_event_title: linkedEventTitle,
+                                payable_deadline: occupant.deadline,
+                                has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
+                                has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
+                                has_contribution_receipt_message: Boolean(contributionReceiptMessage),
+                                has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                is_store: isStore,
+                                store_items: storeItems,
+                                remaining_balance: occupant.remaining,
+                              }}
+                              triggerText="Record Payment"
+                              triggerVariant="outline"
+                              triggerClassName="w-full"
+                            />
+                          </div>
                         </>
                       ) : null}
                     </div>
@@ -608,17 +661,22 @@ export default async function EventDetailsPage({
                     <TableCell>
                       <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
+                      {isStore && occupant.cartItems?.length > 0 && (
+                        <div className="mt-2 w-full max-w-[200px]">
+                          <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
+                        </div>
+                      )}
                     </TableCell>
-                    <TableCell>{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
-                    <TableCell className="text-right font-mono">₱{occupant.payable.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-emerald-600">₱{occupant.paid.toFixed(2)}</TableCell>
-                    <TableCell className={`text-right font-mono ${occupant.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                    <TableCell className="align-top">{getRoomCode(occupant) ?? <span className="italic text-muted-foreground">Unassigned</span>}</TableCell>
+                    <TableCell className="text-right font-mono align-top">₱{occupant.payable.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-emerald-600 align-top">₱{occupant.paid.toFixed(2)}</TableCell>
+                    <TableCell className={`text-right font-mono align-top ${occupant.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
                       ₱{occupant.remaining.toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-right text-xs">
+                    <TableCell className="text-right text-xs align-top">
                       {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center align-top">
                       <div className="flex flex-col items-center gap-1">
                         <StatusBadge status={occupant.paymentStatus} />
                         {occupant.overdue ? (
@@ -631,39 +689,40 @@ export default async function EventDetailsPage({
                     <TableCell className="text-right">
                       {!isReadOnlyView ? (
                         <div className="flex items-center justify-end gap-2">
-                          <ContributionPayableOverrideDialog
-                            dormId={dormId}
-                            contributionId={contributionId}
-                            occupantId={occupant.id}
-                            currentPayable={occupant.payable}
-                            trigger={
-                              <Button size="sm" variant="secondary">
-                                Change Payable
-                              </Button>
-                            }
-                          />
-                          <PaymentDialog
-                            dormId={dormId}
-                            occupantId={occupant.id}
-                            category="contributions"
-                            eventTitle={contributionTitle}
-                            metadata={{
-                              contribution_id: contributionId,
-                              contribution_title: contributionTitle,
-                              contribution_details: contributionDetails,
-                              contribution_event_title: linkedEventTitle,
-                              payable_deadline: occupant.deadline,
-                              contribution_receipt_signature: contributionReceiptSignature || null,
-                              contribution_receipt_subject: contributionReceiptSubject || null,
-                              contribution_receipt_message: contributionReceiptMessage || null,
-                              contribution_receipt_logo_url: contributionReceiptLogoUrl || null,
-                            }}
-                            trigger={
-                              <Button size="sm" variant="outline">
-                                Record Pay
-                              </Button>
-                            }
-                          />
+                          <div>
+                            <ContributionPayableOverrideDialog
+                              key={`desktop-override-${occupant.id}`}
+                              dormId={dormId}
+                              contributionId={contributionId}
+                              occupantId={occupant.id}
+                              currentPayable={occupant.payable}
+                              variant="secondary"
+                            />
+                          </div>
+                          <div>
+                            <PaymentDialog
+                              key={`desktop-pay-${occupant.id}`}
+                              dormId={dormId}
+                              occupantId={occupant.id}
+                              category="contributions"
+                              eventTitle={contributionTitle}
+                              metadata={{
+                                contribution_id: contributionId,
+                                contribution_title: contributionTitle,
+                                contribution_details: contributionDetails,
+                                contribution_event_title: linkedEventTitle,
+                                payable_deadline: occupant.deadline,
+                                has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
+                                has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
+                                has_contribution_receipt_message: Boolean(contributionReceiptMessage),
+                                has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                is_store: isStore,
+                                store_items: storeItems,
+                              }}
+                              triggerText="Record Pay"
+                              triggerVariant="outline"
+                            />
+                          </div>
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">View only</span>

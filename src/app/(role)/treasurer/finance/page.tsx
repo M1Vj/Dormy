@@ -280,7 +280,7 @@ export default async function TreasurerFinancePage({
     supabase
       .from("dorm_semesters")
       .select("id, label")
-      .eq("dorm_id", activeDormId)
+      .is("dorm_id", null)
       .order("starts_on", { ascending: false }),
     supabase
       .from("dorms")
@@ -634,13 +634,8 @@ export default async function TreasurerFinancePage({
             <p className="mt-1 text-xs text-muted-foreground">Active semester: {activeSemester.label}</p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/treasurer/contributions">Contributions</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/treasurer/contribution-expenses">Contribution Expenses</Link>
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+
           {isReadOnlyView ? (
             <Badge variant="outline">Selected semesters are view-only</Badge>
           ) : (

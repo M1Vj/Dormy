@@ -63,8 +63,11 @@ type ContributionGroup = {
   collected: number;
   remaining: number;
   participantCount: number;
+  participantPayables: Set<number>;
   latestPostedAt: string;
   semesterLabels: string[];
+  isStore: boolean;
+  storeItems: any[];
 };
 
 function isManualInflowEntry(row: LedgerEntryRow) {
@@ -140,6 +143,9 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
       ? metadata.contribution_receipt_logo_url.trim()
       : null;
 
+  const isStore = metadata.is_store === true;
+  const storeItems = Array.isArray(metadata.store_items) ? metadata.store_items : [];
+
   return {
     contributionId,
     title,
@@ -150,6 +156,8 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
     receiptMessage,
     receiptLogoUrl,
     deadline,
+    isStore,
+    storeItems,
   };
 }
 
@@ -311,6 +319,8 @@ export default async function EventsFinancePage({
         receiptSubject: metadata.receiptSubject,
         receiptMessage: metadata.receiptMessage,
         receiptLogoUrl: metadata.receiptLogoUrl,
+        isStore: false,
+        storeItems: [] as any[],
         charged: 0,
         collected: 0,
         remaining: 0,
@@ -318,6 +328,7 @@ export default async function EventsFinancePage({
         latestPostedAt: entry.posted_at,
         semesterLabels: [],
         participantIds: new Set<string>(),
+        participantPayables: new Set<number>(),
         semesterIds: new Set<string>(),
       };
 
@@ -325,6 +336,9 @@ export default async function EventsFinancePage({
       existing.collected += Math.abs(amount);
     } else {
       existing.charged += amount;
+      if (entry.occupant_id) {
+        existing.participantPayables.add(amount);
+      }
     }
     existing.remaining += amount;
 
@@ -359,6 +373,12 @@ export default async function EventsFinancePage({
     if (!existing.receiptLogoUrl && metadata.receiptLogoUrl) {
       existing.receiptLogoUrl = metadata.receiptLogoUrl;
     }
+    if (metadata.isStore) {
+      existing.isStore = true;
+    }
+    if (metadata.storeItems.length > 0 && existing.storeItems.length === 0) {
+      existing.storeItems = metadata.storeItems;
+    }
 
     groupMap.set(metadata.contributionId, existing);
   }
@@ -381,10 +401,13 @@ export default async function EventsFinancePage({
         receiptSubject: group.receiptSubject,
         receiptMessage: group.receiptMessage,
         receiptLogoUrl: group.receiptLogoUrl,
+        isStore: group.isStore,
+        storeItems: group.storeItems,
         charged: group.charged,
         collected: group.collected,
         remaining: group.remaining,
         participantCount: group.participantIds.size,
+        participantPayables: group.participantPayables,
         latestPostedAt: group.latestPostedAt,
         semesterLabels,
       } as ContributionGroup;
@@ -404,7 +427,7 @@ export default async function EventsFinancePage({
   const totalRemaining = contributionGroups.reduce((sum, group) => sum + Math.max(0, group.remaining), 0);
 
   const payableContributionOptions = contributionGroups
-    .filter((group) => group.remaining > 0)
+    .filter((group) => group.remaining > 0 || group.isStore)
     .map((group) => ({
       id: group.id,
       title: group.title,
@@ -413,7 +436,19 @@ export default async function EventsFinancePage({
       receiptSubject: group.receiptSubject,
       receiptMessage: group.receiptMessage,
       receiptLogoUrl: group.receiptLogoUrl,
+      isStore: group.isStore,
+      storeItems: group.storeItems,
     }));
+
+  const occupantRemainingMap: Record<string, number> = {};
+  for (const entry of typedEntries) {
+    if (!entry.occupant_id) continue;
+    const metadata = parseContributionFromMetadata(entry, entry.event_id ? eventById.get(entry.event_id) ?? null : null);
+    const amount = Number(entry.amount_pesos ?? 0);
+    const key = `${entry.occupant_id}:${metadata.contributionId}`;
+    const delta = (amount < 0 || entry.entry_type === "payment") ? -Math.abs(amount) : amount;
+    occupantRemainingMap[key] = (occupantRemainingMap[key] ?? 0) + delta;
+  }
 
   return (
     <div className="space-y-6">
@@ -428,9 +463,12 @@ export default async function EventsFinancePage({
               <p className="text-xs text-muted-foreground mt-1">Active semester: {activeSemester.label}</p>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {!isReadOnlyView ? (
               <>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/treasurer/settings/receipt">Global Receipt Settings</Link>
+                </Button>
                 <ContributionBatchDialog
                   dormId={activeDormId}
                   events={Array.from(eventById.entries()).map(([id, title]) => ({ id, title }))}
@@ -441,12 +479,7 @@ export default async function EventsFinancePage({
             ) : (
               <Badge variant="outline">Selected semesters are view-only</Badge>
             )}
-            <Button asChild variant="outline" size="sm">
-              <Link href="/treasurer/finance">Finance</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/treasurer/contribution-expenses">Expenses</Link>
-            </Button>
+
             <ExportXlsxDialog
               report="event-contributions"
               title="Export Event Contributions"
@@ -532,6 +565,7 @@ export default async function EventsFinancePage({
                     fullName: occupant.full_name ?? "Unnamed",
                     studentId: occupant.student_id ?? null,
                   }))}
+                  occupantContributionRemaining={occupantRemainingMap}
                   triggerVariant="outline"
                   triggerClassName="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border-rose-200 shadow-sm transition-colors"
                 />
@@ -607,7 +641,7 @@ export default async function EventsFinancePage({
               <TableHead className="text-right font-semibold text-foreground">Charged</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Collected</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Remaining</TableHead>
-              <TableHead className="text-right font-semibold text-foreground">Participants</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Payable/Occupant</TableHead>
               <TableHead className="font-semibold text-foreground">Semesters</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
             </TableRow>
@@ -629,7 +663,13 @@ export default async function EventsFinancePage({
                 <TableCell className={`text-right ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
                   ₱{contribution.remaining.toFixed(2)}
                 </TableCell>
-                <TableCell className="text-right">{contribution.participantCount}</TableCell>
+                <TableCell className="text-right">
+                  {contribution.participantCount === 0
+                    ? "—"
+                    : contribution.participantPayables.size === 1
+                      ? `₱${Array.from(contribution.participantPayables)[0].toFixed(2)}`
+                      : "Varies"}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {contribution.semesterLabels.length > 0

@@ -139,13 +139,7 @@ export default async function TreasurerContributionExpensesPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link href="/treasurer/finance">Finance</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/treasurer/contributions">Back to Contributions</Link>
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <SubmitExpenseDialog
             dormId={dormId}
             defaultCategory="contributions"

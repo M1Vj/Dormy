@@ -133,10 +133,8 @@ export default async function TreasurerContributionExpenseGroupPage({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link href="/treasurer/finance">Finance</Link>
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+
           <Button asChild variant="outline">
             <Link href="/treasurer/contribution-expenses">Back to Groups</Link>
           </Button>
