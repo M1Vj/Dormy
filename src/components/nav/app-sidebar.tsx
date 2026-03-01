@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
@@ -11,6 +10,7 @@ import {
   DoorOpen,
   FileText,
   Home,
+  Loader2,
   Receipt,
   Shield,
   Users,
@@ -98,6 +98,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
   if (role === "treasurer") {
     const treasurerItems: MenuItem[] = [
       { title: "Home", url: "/treasurer/home", icon: Home, color: "text-sky-500" },
+      { title: "Occupants", url: "/treasurer/occupants", icon: Users, color: "text-emerald-500" },
       { title: "Finance", url: "/treasurer/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Contributions", url: "/treasurer/contributions", icon: Calendar, color: "text-orange-500" },
       { title: "Contribution Expenses", url: "/treasurer/contribution-expenses", icon: Receipt, color: "text-emerald-500" },
@@ -130,12 +131,33 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { role } = useAuth();
   const { activeDorm } = useDorm();
   const { isMobile, setOpenMobile } = useSidebar();
   const showTreasurerMaintenance = activeDorm?.treasurer_maintenance_access === true;
+  const [isPending, startTransition] = useTransition();
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
   const menuItems = useMemo(() => getMenuItems(role, showTreasurerMaintenance), [role, showTreasurerMaintenance]);
+
+  const handleNav = useCallback(
+    (e: React.MouseEvent, url: string) => {
+      e.preventDefault();
+      if (isMobile) setOpenMobile(false);
+
+      const resolvedPath = url.split("?")[0];
+      // Skip if already on the target route
+      if (pathname === resolvedPath || pathname.startsWith(`${resolvedPath}/`)) return;
+
+      setPendingUrl(url);
+      startTransition(() => {
+        router.push(url);
+        setPendingUrl(null);
+      });
+    },
+    [isMobile, pathname, router, setOpenMobile, startTransition]
+  );
 
   return (
     <Sidebar>
@@ -150,19 +172,22 @@ export function AppSidebar() {
                 const resolvedUrl = item.url;
                 const resolvedPath = resolvedUrl.split("?")[0];
                 const isActive = pathname === resolvedPath || (resolvedPath !== "/" && pathname.startsWith(`${resolvedPath}/`));
+                const isItemPending = isPending && pendingUrl === resolvedUrl;
 
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link
+                      <a
                         href={resolvedUrl}
-                        onClick={() => {
-                          if (isMobile) setOpenMobile(false);
-                        }}
+                        onClick={(e) => handleNav(e, resolvedUrl)}
                       >
-                        <item.icon className={isActive ? "text-primary" : item.color} />
+                        {isItemPending ? (
+                          <Loader2 className="animate-spin text-primary" />
+                        ) : (
+                          <item.icon className={isActive ? "text-primary" : item.color} />
+                        )}
                         <span>{item.title}</span>
-                      </Link>
+                      </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -174,3 +199,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
