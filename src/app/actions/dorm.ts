@@ -22,9 +22,15 @@ const dormSchema = z.object({
 });
 
 const createAdminClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null;
+  }
+
   return createSupabaseAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     {
       auth: {
         persistSession: false,
@@ -60,7 +66,7 @@ export async function getAllDorms() {
     return [];
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   // Fetch columns individually to avoid complete failure if some are missing.
   // Actually, Supabase .select() fails if ANY column is missing.
   // We'll fetch the core ones first, then try to augment if they exist (though that's overkill).
@@ -120,7 +126,7 @@ export async function createDorm(formData: FormData) {
     return { error: "You do not have permission to create dorms." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { data: dorm, error } = await adminClient
     .from("dorms")
     .insert({
@@ -222,7 +228,7 @@ export async function updateDorm(dormId: string, formData: FormData) {
     }
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { error } = await adminClient
     .from("dorms")
     .update({
@@ -315,7 +321,7 @@ export async function updateDormAttributes(dormId: string, updates: Record<strin
   const currentAttributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes : {};
   const newAttributes = { ...currentAttributes, ...updates };
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { error } = await adminClient
     .from("dorms")
     .update({ attributes: newAttributes })
@@ -391,7 +397,7 @@ export async function toggleTreasurerMaintenanceAccess(dormId: string, enabled: 
     return { error: "You do not have permission to update dorm settings." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { data: updatedDorm, error } = await adminClient
     .from("dorms")
     .update({ treasurer_maintenance_access: enabled })
@@ -497,7 +503,7 @@ export async function toggleFinanceHistoricalEditOverride(dormId: string, enable
     finance_non_current_semester_override: enabled,
   };
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { error } = await adminClient
     .from("dorms")
     .update({ attributes: nextAttributes })
@@ -538,7 +544,7 @@ export async function getDormPersonnel(dormId: string) {
     .eq("role", "admin")
     .limit(1);
 
-  const client = adminMembership?.length ? createAdminClient() : supabase;
+  const client = adminMembership?.length ? createAdminClient() ?? supabase : supabase;
 
   // Try with faculty_profiles join first, fall back without it
   let personnel: any[] | null = null;
@@ -616,7 +622,7 @@ export async function assignDormPersonnel(dormId: string, userId: string, role: 
     return { error: "You do not have permission to assign personnel." };
   }
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
 
   // First, remove existing role if any (since there should only be one active Adviser/SA usually, or at least we want to ensure we're replacing the intended one)
   // For simplicity, we just upsert or handle replacement logic here.
@@ -692,7 +698,7 @@ export async function getDorm(dormId: string) {
     .eq("role", "admin")
     .limit(1);
 
-  const client = adminMembership?.length ? createAdminClient() : supabase;
+  const client = adminMembership?.length ? createAdminClient() ?? supabase : supabase;
 
   const { data, error } = await client
     .from("dorms")
@@ -708,7 +714,7 @@ export async function findUserByEmail(email: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: "Supabase not configured." };
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const normalizedEmail = email.toLowerCase().trim();
 
   // Look up the user via auth.admin (email lives in auth.users, not profiles)
@@ -793,7 +799,7 @@ export async function updateGlobalReceiptTemplate(dormId: string, template: any)
     ...template,
   };
 
-  const adminClient = createAdminClient();
+  const adminClient = createAdminClient() ?? supabase;
   const { error } = await adminClient
     .from("dorms")
     .update({ attributes })
