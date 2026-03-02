@@ -1,20 +1,25 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 test.use({ storageState: "playwright/.auth/admin.json" });
 
+async function expectAdminHome(page: Page) {
+  await expect(page).toHaveURL(/\/admin\/home/);
+  await expect(page.getByRole("heading", { level: 1, name: "System Overview" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Semester management" }).first()).toBeVisible();
+}
+
 test.describe("Admin Dashboard", () => {
-  test("should load admin home with admin-only controls", async ({ page }) => {
+  test("should load admin home with global controls", async ({ page }) => {
     await page.goto("/admin/home");
-    await expect(page.getByRole("heading", { name: "Admin Home" })).toBeVisible();
-    await expect(page.getByText("Administrative Control")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open clearance" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Semester management" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "System Overview" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Semester management" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Manage dormitories" }).first()).toBeVisible();
   });
 
-  test("should load clearance view", async ({ page }) => {
-    await page.goto("/admin/clearance");
-    await expect(page.getByRole("heading", { name: "Clearance" })).toBeVisible();
-    await expect(page.getByText("Occupant Clearance List")).toBeVisible();
+  test("should load dorm management view", async ({ page }) => {
+    await page.goto("/admin/dorms");
+    await expect(page.getByRole("heading", { level: 1, name: "Dorms" }).first()).toBeVisible();
+    await expect(page.getByText("All dorms", { exact: true }).first()).toBeVisible();
   });
 });
 
@@ -37,15 +42,13 @@ test.describe("Admin Fines Management", () => {
 test.describe("Admin Finance Restriction", () => {
   test("should redirect finance route to admin home", async ({ page }) => {
     await page.goto("/admin/finance");
-    await expect(page).toHaveURL(/\/admin\/home/);
-    await expect(page.getByRole("heading", { name: "Admin Home" })).toBeVisible();
+    await expectAdminHome(page);
   });
 });
 
 test.describe("Admin Reporting Restriction", () => {
   test("should keep reporting out of admin routes", async ({ page }) => {
     await page.goto("/admin/reporting");
-    await expect(page).toHaveURL(/\/admin\/home/);
-    await expect(page.getByText("Administrative Control")).toBeVisible();
+    await expectAdminHome(page);
   });
 });

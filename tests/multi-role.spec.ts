@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * Multi-role RBAC tests.
@@ -12,14 +12,17 @@ import { test, expect } from "@playwright/test";
  * .maybeSingle() was used on queries that return multiple rows.
  */
 
+async function expectAdminHome(page: Page) {
+  await expect(page).toHaveURL(/\/admin\/home/);
+  await expect(page.getByRole("heading", { name: "System Overview" })).toBeVisible();
+}
+
 test.describe("Multi-role RBAC Access", () => {
-  // Login fresh each test to ensure the cookie state is correct
   test.use({ storageState: "playwright/.auth/admin.json" });
 
   test("should redirect admin finance maintenance page to home", async ({ page }) => {
     await page.goto("/admin/finance/maintenance");
-    await expect(page).toHaveURL(/\/admin\/home/);
-    await expect(page.getByRole("heading", { name: "Admin Home" })).toBeVisible();
+    await expectAdminHome(page);
   });
 
   test("should access admin fines page without errors", async ({ page }) => {
@@ -27,27 +30,30 @@ test.describe("Multi-role RBAC Access", () => {
     await expect(page.getByRole("heading", { name: "Fines" })).toBeVisible();
   });
 
-  test("should redirect admin finance events page to home", async ({ page }) => {
-    await page.goto("/admin/finance/events");
-    await expect(page).toHaveURL(/\/admin\/home/);
-    await expect(page.getByText("Administrative Control")).toBeVisible();
+  test("should redirect admin reporting page to home", async ({ page }) => {
+    await page.goto("/admin/reporting");
+    await expectAdminHome(page);
   });
 
-  test("should access admin occupants page without errors", async ({ page }) => {
-    await page.goto("/admin/occupants");
-    await expect(page.getByRole("heading", { name: "Occupants" })).toBeVisible();
+  test("should access admin dorm list page without errors", async ({ page }) => {
+    await page.goto("/admin/dorms");
+    await expect(page.getByRole("heading", { name: "Dorms" })).toBeVisible();
   });
 
   test("should redirect admin finance expenses page to home", async ({ page }) => {
     await page.goto("/admin/finance/expenses");
-    await expect(page).toHaveURL(/\/admin\/home/);
-    await expect(page.getByRole("heading", { name: "Admin Home" })).toBeVisible();
+    await expectAdminHome(page);
   });
 
   test("should access admin rooms page without errors", async ({ page }) => {
     await page.goto("/admin/rooms");
     await expect(page.getByRole("heading", { name: "Rooms" })).toBeVisible();
   });
+
+});
+
+test.describe("Occupant Route Access", () => {
+  test.use({ storageState: "playwright/.auth/occupant.json" });
 
   test("should access occupant committees page without errors", async ({ page }) => {
     await page.goto("/occupant/committees");

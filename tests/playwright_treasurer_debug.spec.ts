@@ -1,16 +1,18 @@
-import { test, expect } from '@playwright/test';
+import { test } from "@playwright/test";
+
+test.skip(!!process.env.CI, "Debug-only diagnostic spec. Skipped in CI.");
 
 test.use({ storageState: { cookies: [], origins: [] } }); // Clean slate
 
-test('Treasurer Global 404 Check', async ({ page }) => {
-  await page.goto('http://localhost:3000/login');
+test("Treasurer Global 404 Check", async ({ page }) => {
+  await page.goto("/login");
   
-  await page.fill('input[name="email"]', 'treasurer@dormy.local');
-  await page.fill('input[name="password"]', 'DormyPass123!');
+  await page.fill('input[name="email"]', "treasurer@dormy.local");
+  await page.fill('input[name="password"]', "DormyPass123!");
   await page.click('button[type="submit"]');
   
-  await page.waitForURL('**/treasurer/home');
-  await page.goto('http://localhost:3000/treasurer/contributions');
+  await page.waitForURL("**/treasurer/home");
+  await page.goto("/treasurer/contributions");
 
   // Wait for Manage buttons to appear
   await page.waitForSelector('text=Manage', { timeout: 10000 });
