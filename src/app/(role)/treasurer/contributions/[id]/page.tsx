@@ -443,9 +443,10 @@ export default async function EventDetailsPage({
           <ExportXlsxDialog
             report="event-contributions"
             title="Export Contribution Report"
-            description="Download this contribution with participant balances and payment entries."
+            description="Download all records for this contribution, including payment history."
             triggerLabel="Export Contribution"
             defaultDormId={dormId}
+            includeDateRange={false}
             defaultParams={{ contribution_id: contributionId }}
           />
         </div>
