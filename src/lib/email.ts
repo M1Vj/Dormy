@@ -1,6 +1,7 @@
 import "server-only";
 
 import nodemailer from "nodemailer";
+import { formatDateTimeInAppTimeZone } from "@/lib/datetime";
 
 type SendEmailOptions = {
   to: string;
@@ -263,7 +264,7 @@ export function renderPaymentReceiptEmail(input: {
   const paidAt = new Date(input.paidAtIso);
   const paidAtLabel = Number.isNaN(paidAt.getTime())
     ? input.paidAtIso
-    : paidAt.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+    : formatDateTimeInAppTimeZone(paidAt);
 
   const messageHtml = input.customMessage?.trim()
     ? textToHtml(input.customMessage)
@@ -398,7 +399,7 @@ export function renderContributionBatchReceiptEmail(input: {
   const paidAt = new Date(input.paidAtIso);
   const paidAtLabel = Number.isNaN(paidAt.getTime())
     ? input.paidAtIso
-    : paidAt.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+    : formatDateTimeInAppTimeZone(paidAt);
 
   const safeRows = input.contributions.filter((item) => item.amountPesos > 0);
   const greeting = input.recipientName?.trim()
