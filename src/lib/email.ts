@@ -1,6 +1,7 @@
 import "server-only";
 
 import nodemailer from "nodemailer";
+import { formatDateTimeInAppTimeZone } from "@/lib/datetime";
 
 type SendEmailOptions = {
   to: string;
@@ -263,7 +264,7 @@ export function renderPaymentReceiptEmail(input: {
   const paidAt = new Date(input.paidAtIso);
   const paidAtLabel = Number.isNaN(paidAt.getTime())
     ? input.paidAtIso
-    : paidAt.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+    : formatDateTimeInAppTimeZone(paidAt);
 
   const messageHtml = input.customMessage?.trim()
     ? textToHtml(input.customMessage)
@@ -398,7 +399,7 @@ export function renderContributionBatchReceiptEmail(input: {
   const paidAt = new Date(input.paidAtIso);
   const paidAtLabel = Number.isNaN(paidAt.getTime())
     ? input.paidAtIso
-    : paidAt.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+    : formatDateTimeInAppTimeZone(paidAt);
 
   const safeRows = input.contributions.filter((item) => item.amountPesos > 0);
   const greeting = input.recipientName?.trim()
@@ -531,6 +532,221 @@ export function renderContributionBatchReceiptEmail(input: {
   return {
     subject,
     html: renderShell({ title: "Dorm Treasurer E-Receipt", bodyHtml }),
+    text,
+  };
+}
+
+export function renderContributionPayableReminderEmail(input: {
+  recipientName: string | null;
+  contributions: Array<{
+    title: string;
+    amountPesos: number;
+    deadlineIso?: string | null;
+  }>;
+  totalAmountPesos: number;
+  treasurerNameOverride?: string | null;
+}) {
+  const subject = "Contribution payment reminder";
+  const greeting = input.recipientName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const rows = input.contributions.filter((item) => item.amountPesos > 0);
+  const tableHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Deadline</th>
+          <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((item) => {
+            const deadlineDate = item.deadlineIso ? new Date(item.deadlineIso) : null;
+            const deadlineLabel =
+              deadlineDate && !Number.isNaN(deadlineDate.getTime())
+                ? formatDateTimeInAppTimeZone(deadlineDate)
+                : "Not set";
+            return `
+              <tr>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">${escapeHtml(item.title)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#475569;">${escapeHtml(deadlineLabel)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:600; color:#0f172a;">${normalizePesos(item.amountPesos)}</td>
+              </tr>
+            `.trim();
+          })
+          .join("")}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="padding:12px 0 0 0; color:#334155; font-weight:700;">Total Remaining</td>
+          <td style="padding:12px 0 0 0;"></td>
+          <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(input.totalAmountPesos)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">This is a reminder about your remaining contribution balance.</p>`,
+    tableHtml,
+    `<p style="margin:14px 0 0 0;">Please coordinate with the treasurer to settle your payable.</p>`,
+    renderSignatureHtml(null, input.treasurerNameOverride),
+  ].join("");
+
+  const text = [
+    input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
+    "This is a reminder about your remaining contribution balance.",
+    "",
+    ...rows.map((item) => {
+      const deadlineDate = item.deadlineIso ? new Date(item.deadlineIso) : null;
+      const deadlineLabel =
+        deadlineDate && !Number.isNaN(deadlineDate.getTime())
+          ? formatDateTimeInAppTimeZone(deadlineDate)
+          : "Not set";
+      return `${item.title}: ${normalizePesos(item.amountPesos)} (Deadline: ${deadlineLabel})`;
+    }),
+    `Total Remaining: ${normalizePesos(input.totalAmountPesos)}`,
+    "",
+    "Please coordinate with the treasurer to settle your payable.",
+  ].join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Contribution Payable Reminder", bodyHtml }),
+    text,
+  };
+}
+
+export function renderContributionReminderDispatchReportEmail(input: {
+  actorName: string | null;
+  targetCount: number;
+  sentCount: number;
+  skippedCount: number;
+  failedCount: number;
+  details: Array<{
+    occupantName: string;
+    recipientEmail: string | null;
+    status: "sent" | "skipped" | "failed";
+    reason?: string | null;
+  }>;
+  generatedAtIso: string;
+}) {
+  const subject = "Contribution reminder delivery report";
+  const generatedAt = new Date(input.generatedAtIso);
+  const generatedAtLabel = Number.isNaN(generatedAt.getTime())
+    ? input.generatedAtIso
+    : formatDateTimeInAppTimeZone(generatedAt);
+
+  const greeting = input.actorName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.actorName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const summaryHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <tbody>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:160px;">Generated</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(generatedAtLabel)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Targets</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${input.targetCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Sent</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#166534; font-weight:600;">${input.sentCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Skipped</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#92400e; font-weight:600;">${input.skippedCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Failed</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#991b1b; font-weight:600;">${input.failedCount}</td>
+        </tr>
+      </tbody>
+    </table>
+  `.trim();
+
+  const detailsRows = input.details
+    .map((detail) => {
+      const statusLabel =
+        detail.status === "sent"
+          ? "Sent"
+          : detail.status === "failed"
+            ? "Failed"
+            : "Skipped";
+      return `
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a;">${escapeHtml(detail.occupantName)}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569;">${detail.recipientEmail ? escapeHtml(detail.recipientEmail) : "—"}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a;">${statusLabel}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569;">${detail.reason ? escapeHtml(detail.reason) : "—"}</td>
+        </tr>
+      `.trim();
+    })
+    .join("");
+
+  const detailsHtml = `
+    <div style="margin-top:18px;">
+      <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Delivery Details</div>
+      <table role="presentation" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Occupant</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Email</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Status</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${detailsRows || `
+            <tr>
+              <td colspan="4" style="padding:10px 0; color:#64748b;">No details recorded.</td>
+            </tr>
+          `.trim()}
+        </tbody>
+      </table>
+    </div>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">Here is the latest delivery result for contribution payable reminder emails.</p>`,
+    summaryHtml,
+    detailsHtml,
+  ].join("");
+
+  const text = [
+    input.actorName?.trim() ? `Hi ${input.actorName.trim()},` : "Hi,",
+    "Here is the latest delivery result for contribution payable reminder emails.",
+    `Generated: ${generatedAtLabel}`,
+    `Targets: ${input.targetCount}`,
+    `Sent: ${input.sentCount}`,
+    `Skipped: ${input.skippedCount}`,
+    `Failed: ${input.failedCount}`,
+    "",
+    "Details:",
+    ...input.details.map((detail) => {
+      const statusLabel =
+        detail.status === "sent"
+          ? "Sent"
+          : detail.status === "failed"
+            ? "Failed"
+            : "Skipped";
+      return `- ${detail.occupantName} | ${detail.recipientEmail ?? "—"} | ${statusLabel}${
+        detail.reason ? ` | ${detail.reason}` : ""
+      }`;
+    }),
+  ].join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Reminder Delivery Report", bodyHtml }),
     text,
   };
 }

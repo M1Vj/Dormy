@@ -10,8 +10,9 @@ import type { AppRole } from "@/lib/roles";
 export default async function ApplicationsPage({
   searchParams,
 }: {
-  searchParams?: { status?: string };
+  searchParams?: Promise<{ status?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return (
@@ -60,7 +61,7 @@ export default async function ApplicationsPage({
 
   const applications = await getDormApplicationsForActiveDorm(
     dormId,
-    searchParams?.status ?? null
+    resolvedSearchParams?.status ?? null
   );
 
   const dormName = dorms.find((dorm) => dorm.id === dormId)?.name ?? "Dorm";

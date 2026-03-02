@@ -4,7 +4,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarCheck2, Loader2, Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { CalendarCheck2, Loader2, Plus, X } from "lucide-react";
 
 import {
   previewContributionBatchPaymentEmail,
@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { OccupantCombobox } from "@/components/finance/occupant-combobox";
 import {
   Dialog,
   DialogContent,
@@ -31,16 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+  calculateCartSubtotal,
+  formatChoiceLabel,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 
 type ContributionOption = {
   id: string;
@@ -76,7 +72,13 @@ type BatchPaymentPayload = {
   receipt_message: string | null;
   receipt_signature: string | null;
   receipt_logo_url: string | null;
-  cart_items?: any[];
+  cart_items?: Array<{
+    contribution_id: string;
+    item_id: string;
+    quantity: number;
+    options: Array<{ name: string; value: string; price_adjustment?: number }>;
+    subtotal: number;
+  }>;
 };
 
 function nowLocalDateTimeValue() {
@@ -103,7 +105,6 @@ export function ContributionBatchPaymentDialog({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [openOccupantCombobox, setOpenOccupantCombobox] = useState(false);
   const [occupantId, setOccupantIdRaw] = useState<string>("");
 
   /** When occupant changes, reset contribution selections since remaining amounts change per-occupant */
@@ -282,7 +283,30 @@ export function ContributionBatchPaymentDialog({
       receipt_message: null,
       receipt_signature: null,
       receipt_logo_url: null,
-      cart_items: hasAnyStoreContributions ? Object.values(storeCartItems).flat() : undefined,
+      cart_items: hasAnyStoreContributions
+        ? Object.entries(storeCartItems).flatMap(([contributionId, items]) =>
+            (items ?? [])
+              .filter((item) => typeof item?.item_id === "string" && item.item_id.trim().length > 0)
+              .map((item) => ({
+                contribution_id: contributionId,
+                item_id: String(item.item_id),
+                quantity: Math.max(1, Number(item.quantity ?? 1)),
+                options: Array.isArray(item.options)
+                  ? item.options
+                      .map((option: any) => ({
+                        name: String(option?.name ?? "").trim(),
+                        value: String(option?.value ?? "").trim(),
+                        price_adjustment:
+                          typeof option?.price_adjustment === "number"
+                            ? option.price_adjustment
+                            : undefined,
+                      }))
+                      .filter((option: { name: string; value: string }) => option.value.length > 0)
+                  : [],
+                subtotal: Math.max(0, Number(item.subtotal ?? 0)),
+              }))
+          )
+        : undefined,
     };
 
     return payload;
@@ -388,57 +412,13 @@ export function ContributionBatchPaymentDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 flex flex-col">
                 <Label>Occupant</Label>
-                <Popover open={openOccupantCombobox} onOpenChange={setOpenOccupantCombobox}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openOccupantCombobox}
-                      className="justify-between w-full font-normal shadow-sm"
-                    >
-                      {occupantId
-                        ? (() => {
-                          const occ = occupants.find((o) => o.id === occupantId);
-                          return occ ? `${occ.fullName}${occ.studentId ? ` (${occ.studentId})` : ""}` : "Select occupant...";
-                        })()
-                        : "Select occupant..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search occupant..." />
-                      <CommandList>
-                        <CommandEmpty>No occupant found.</CommandEmpty>
-                        <CommandGroup>
-                          {occupants.map((occupant) => (
-                            <CommandItem
-                              key={occupant.id}
-                              value={`${occupant.fullName} ${occupant.studentId || ""}`}
-                              onSelect={() => {
-                                setOccupantId(occupant.id);
-                                setOpenOccupantCombobox(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  occupantId === occupant.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {occupant.fullName}
-                              {occupant.studentId ? (
-                                <span className="ml-1 text-muted-foreground text-xs">
-                                  ({occupant.studentId})
-                                </span>
-                              ) : null}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <OccupantCombobox
+                  occupants={occupants}
+                  value={occupantId}
+                  onValueChange={setOccupantId}
+                  placeholder="Select occupant..."
+                  className="shadow-sm"
+                />
               </div>
 
               <div className="space-y-2">
@@ -495,7 +475,14 @@ export function ContributionBatchPaymentDialog({
             {/* Store Cart Builder — per selected store contribution */}
             {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore).map((contribution) => {
               const cartForContribution = storeCartItems[contribution.id] || [];
-              const items = contribution.storeItems || [];
+              const items = normalizeStoreItems(contribution.storeItems || []);
+              const computeSubtotal = (itemId: string, quantity: number, options: unknown) =>
+                calculateCartSubtotal({
+                  item: items.find((item) => item.id === itemId),
+                  quantity,
+                  options,
+                  fallbackSubtotal: 0,
+                });
 
               const addCartItem = () => {
                 const newItem = { id: crypto.randomUUID(), item_id: "", quantity: 1, options: [], subtotal: 0 };
@@ -556,7 +543,9 @@ export function ContributionBatchPaymentDialog({
                   ) : (
                     <div className="space-y-3">
                       {cartForContribution.map((cartItem: any, cartIdx: number) => {
-                        const selectedStoreItem = items.find((i: any) => i.id === cartItem.item_id);
+                        const selectedStoreItem = items.find((i) => i.id === cartItem.item_id);
+                        const selectedOptions = selectedStoreItem?.options ?? [];
+                        const currentQty = Math.max(1, Number(cartItem.quantity || 1));
                         return (
                           <div key={cartItem.id} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
                             <Button
@@ -573,19 +562,32 @@ export function ContributionBatchPaymentDialog({
                                 <Label className="text-xs font-semibold">Item</Label>
                                 <Select
                                   onValueChange={(val) => {
-                                    const sItem = items.find((i: any) => i.id === val);
+                                    const sItem = items.find((i) => i.id === val);
                                     if (sItem) {
-                                      const defaultOpts = (sItem.options || []).map((o: any) => ({
-                                        name: o.name,
-                                        value: o.choices[0] || "",
-                                      }));
+                                      const defaultOpts = (sItem.options || [])
+                                        .map((o) => {
+                                          const firstChoice = o.choices[0];
+                                          if (!firstChoice?.label) {
+                                            return null;
+                                          }
+                                          return {
+                                            name: o.name,
+                                            value: firstChoice.label,
+                                            price_adjustment: firstChoice.priceAdjustment ?? 0,
+                                          };
+                                        })
+                                        .filter((option): option is { name: string; value: string; price_adjustment: number } => Boolean(option));
                                       updateCartItem(cartIdx, {
                                         item_id: val,
                                         options: defaultOpts,
-                                        subtotal: sItem.price * (cartItem.quantity || 1),
+                                        subtotal: computeSubtotal(val, currentQty, defaultOpts),
                                       });
                                     } else {
-                                      updateCartItem(cartIdx, { item_id: val });
+                                      updateCartItem(cartIdx, {
+                                        item_id: val,
+                                        options: [],
+                                        subtotal: 0,
+                                      });
                                     }
                                   }}
                                   value={cartItem.item_id}
@@ -594,9 +596,9 @@ export function ContributionBatchPaymentDialog({
                                     <SelectValue placeholder="Select item" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {items.map((si: any) => (
+                                    {items.map((si) => (
                                       <SelectItem key={si.id} value={si.id}>
-                                        {si.name} (₱{si.price})
+                                        {si.name} (₱{si.price.toFixed(2)})
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -613,23 +615,42 @@ export function ContributionBatchPaymentDialog({
                                     const qty = parseInt(e.target.value) || 1;
                                     updateCartItem(cartIdx, {
                                       quantity: qty,
-                                      subtotal: selectedStoreItem ? selectedStoreItem.price * qty : cartItem.subtotal,
+                                      subtotal: computeSubtotal(
+                                        cartItem.item_id,
+                                        qty,
+                                        cartItem.options || []
+                                      ),
                                     });
                                   }}
                                 />
                               </div>
                             </div>
 
-                            {selectedStoreItem?.options?.length > 0 && (
+                            {selectedOptions.length > 0 && (
                               <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                                {selectedStoreItem.options.map((opt: any, optIndex: number) => (
+                                {selectedOptions.map((opt, optIndex) => (
                                   <div key={opt.name} className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">{opt.name}</Label>
                                     <Select
                                       onValueChange={(val) => {
                                         const newOpts = [...(cartItem.options || [])];
-                                        newOpts[optIndex] = { name: opt.name, value: val };
-                                        updateCartItem(cartIdx, { options: newOpts });
+                                        const selectedChoice = opt.choices.find(
+                                          (choice: { label: string; priceAdjustment: number }) =>
+                                            choice.label === val
+                                        );
+                                        newOpts[optIndex] = {
+                                          name: opt.name,
+                                          value: val,
+                                          price_adjustment: selectedChoice?.priceAdjustment ?? 0,
+                                        };
+                                        updateCartItem(cartIdx, {
+                                          options: newOpts,
+                                          subtotal: computeSubtotal(
+                                            cartItem.item_id,
+                                            currentQty,
+                                            newOpts
+                                          ),
+                                        });
                                       }}
                                       value={cartItem.options?.[optIndex]?.value || ""}
                                     >
@@ -637,9 +658,9 @@ export function ContributionBatchPaymentDialog({
                                         <SelectValue placeholder={`Select ${opt.name}`} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {opt.choices.map((choice: string) => (
-                                          <SelectItem key={choice} value={choice}>
-                                            {choice}
+                                        {opt.choices.map((choice: { label: string; priceAdjustment: number }) => (
+                                          <SelectItem key={choice.label} value={choice.label}>
+                                            {formatChoiceLabel(choice)}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

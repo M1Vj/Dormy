@@ -36,6 +36,7 @@ export function ExportXlsxDialog({
   defaultDormId,
   dormOptions = [],
   includeDormSelector = false,
+  includeDateRange = true,
   defaultParams = {},
   selectFields = [],
 }: {
@@ -51,6 +52,7 @@ export function ExportXlsxDialog({
   defaultDormId: string;
   dormOptions?: ExportDormOption[];
   includeDormSelector?: boolean;
+  includeDateRange?: boolean;
   defaultParams?: Record<string, string>;
   selectFields?: ExportSelectField[];
 }) {
@@ -79,10 +81,10 @@ export function ExportXlsxDialog({
 
     const query = new URLSearchParams();
 
-    if (startDate) {
+    if (includeDateRange && startDate) {
       query.set("start", startDate);
     }
-    if (endDate) {
+    if (includeDateRange && endDate) {
       query.set("end", endDate);
     }
     if (canChooseDorm && dormId) {
@@ -121,26 +123,28 @@ export function ExportXlsxDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="export_start_date">Start date</Label>
-              <Input
-                id="export_start_date"
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-              />
+          {includeDateRange ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="export_start_date">Start date</Label>
+                <Input
+                  id="export_start_date"
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="export_end_date">End date</Label>
+                <Input
+                  id="export_end_date"
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="export_end_date">End date</Label>
-              <Input
-                id="export_end_date"
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-              />
-            </div>
-          </div>
+          ) : null}
 
           {canChooseDorm ? (
             <div className="space-y-1.5">

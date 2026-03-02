@@ -3,7 +3,7 @@
 
 import { usePathname } from "next/navigation";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -45,11 +45,17 @@ import {
   recordTransaction,
 } from "@/app/actions/finance";
 import { draftPaymentReceiptEmail } from "@/app/actions/email";
+import {
+  calculateCartSubtotal,
+  formatChoiceLabel,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 import { LedgerCategory } from "@/lib/types/finance";
 
 const cartItemOptionSchema = z.object({
   name: z.string(),
   value: z.string(),
+  price_adjustment: z.number().optional(),
 });
 
 const cartItemSchema = z.object({
@@ -115,14 +121,26 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
     name: "cartItems",
   });
 
+  const normalizedStoreItems = useMemo(() => normalizeStoreItems(storeItems), [storeItems]);
   const cartValues = form.watch("cartItems") || [];
 
-  useEffect(() => {
-    const total = cartValues.reduce((acc: number, item: any) => acc + (item.subtotal || 0), 0);
-    if (form.getValues("amount") !== total) {
-      form.setValue("amount", total, { shouldValidate: true, shouldDirty: true });
+  const syncAmountFromCart = (source: any[]) => {
+    const total = source.reduce(
+      (acc: number, item: any) => acc + Math.max(0, Number(item?.subtotal ?? 0)),
+      0
+    );
+    const normalizedTotal = Number(total.toFixed(2));
+    if (Number(form.getValues("amount") || 0) !== normalizedTotal) {
+      form.setValue("amount", normalizedTotal, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
     }
-  }, [cartValues, form]);
+  };
+
+  useEffect(() => {
+    syncAmountFromCart(cartValues);
+  }, [cartValues]);
 
   return (
     <div className="space-y-4 rounded-xl border p-4 bg-muted/10">
@@ -147,7 +165,9 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
         <div className="space-y-4">
           {fields.map((field, index) => {
             const currentItemVal = cartValues[index];
-            const selectedStoreItem = storeItems.find((i) => i.id === currentItemVal?.item_id);
+            const selectedStoreItem = normalizedStoreItems.find((i) => i.id === currentItemVal?.item_id);
+            const selectedOptions = selectedStoreItem?.options ?? [];
+            const currentQty = Math.max(1, Number(currentItemVal?.quantity || 1));
 
             return (
               <div key={field.id} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-4">
@@ -171,14 +191,46 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
                         <Select
                           onValueChange={(val) => {
                             field.onChange(val);
-                            const sItem = storeItems.find((i) => i.id === val);
+                            const sItem = normalizedStoreItems.find((i) => i.id === val);
                             if (sItem) {
-                              const defaultOpts = (sItem.options || []).map((o: any) => ({
-                                name: o.name,
-                                value: o.choices[0] || "",
-                              }));
-                              form.setValue(`cartItems.${index}.options`, defaultOpts);
-                              form.setValue(`cartItems.${index}.subtotal`, sItem.price * (currentItemVal?.quantity || 1));
+                              const defaultOpts = (sItem.options || [])
+                                .map((o) => {
+                                  const firstChoice = o.choices[0];
+                                  if (!firstChoice?.label) {
+                                    return null;
+                                  }
+                                  return {
+                                    name: o.name,
+                                    value: firstChoice.label,
+                                    price_adjustment: firstChoice.priceAdjustment ?? 0,
+                                  };
+                                })
+                                .filter((option): option is { name: string; value: string; price_adjustment: number } => Boolean(option));
+                              const subtotal = calculateCartSubtotal({
+                                item: sItem,
+                                quantity: currentQty,
+                                options: defaultOpts,
+                                fallbackSubtotal: 0,
+                              });
+                              form.setValue(`cartItems.${index}.options`, defaultOpts, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                              form.setValue(`cartItems.${index}.subtotal`, subtotal, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                              syncAmountFromCart(form.getValues("cartItems") || []);
+                            } else {
+                              form.setValue(`cartItems.${index}.options`, [], {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                              form.setValue(`cartItems.${index}.subtotal`, 0, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                              syncAmountFromCart(form.getValues("cartItems") || []);
                             }
                           }}
                           value={field.value}
@@ -189,9 +241,9 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {storeItems.map((si) => (
+                            {normalizedStoreItems.map((si) => (
                               <SelectItem key={si.id} value={si.id}>
-                                {si.name} (₱{si.price})
+                                {si.name} (₱{si.price.toFixed(2)})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -216,7 +268,17 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
                               const qty = parseInt(e.target.value) || 1;
                               field.onChange(qty);
                               if (selectedStoreItem) {
-                                form.setValue(`cartItems.${index}.subtotal`, selectedStoreItem.price * qty);
+                                const subtotal = calculateCartSubtotal({
+                                  item: selectedStoreItem,
+                                  quantity: qty,
+                                  options: currentItemVal?.options || [],
+                                  fallbackSubtotal: currentItemVal?.subtotal || 0,
+                                });
+                                form.setValue(`cartItems.${index}.subtotal`, subtotal, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                syncAmountFromCart(form.getValues("cartItems") || []);
                               }
                             }}
                           />
@@ -226,9 +288,9 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
                   />
                 </div>
 
-                {selectedStoreItem?.options?.length > 0 && (
+                {selectedOptions.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                    {selectedStoreItem.options.map((opt: any, optIndex: number) => (
+                    {selectedOptions.map((opt, optIndex: number) => (
                       <FormField
                         key={opt.name}
                         control={form.control}
@@ -236,16 +298,48 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-xs text-muted-foreground">{opt.name}</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <Select
+                              onValueChange={(selectedValue) => {
+                                field.onChange(selectedValue);
+                                const selectedChoice = opt.choices.find(
+                                  (choice: { label: string; priceAdjustment: number }) =>
+                                    choice.label === selectedValue
+                                );
+                                const nextOptions = Array.isArray(currentItemVal?.options)
+                                  ? [...currentItemVal.options]
+                                  : [];
+                                nextOptions[optIndex] = {
+                                  name: opt.name,
+                                  value: selectedValue,
+                                  price_adjustment: selectedChoice?.priceAdjustment ?? 0,
+                                };
+                                form.setValue(`cartItems.${index}.options`, nextOptions, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                const subtotal = calculateCartSubtotal({
+                                  item: selectedStoreItem,
+                                  quantity: currentQty,
+                                  options: nextOptions,
+                                  fallbackSubtotal: currentItemVal?.subtotal || 0,
+                                });
+                                form.setValue(`cartItems.${index}.subtotal`, subtotal, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                syncAmountFromCart(form.getValues("cartItems") || []);
+                              }}
+                              value={field.value || ""}
+                            >
                               <FormControl>
                                 <SelectTrigger className="h-8 text-xs">
                                   <SelectValue placeholder={`Select ${opt.name}`} />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {opt.choices.map((choice: string) => (
-                                  <SelectItem key={choice} value={choice}>
-                                    {choice}
+                                {opt.choices.map((choice: { label: string; priceAdjustment: number }) => (
+                                  <SelectItem key={choice.label} value={choice.label}>
+                                    {formatChoiceLabel(choice)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -299,18 +393,20 @@ export function PaymentDialog({
   } | null>(null);
   const isContribution = category === "contributions";
 
+  const defaultFormValues: PaymentFormValues = {
+    amount: 0,
+    method: "cash",
+    note: "",
+    sendReceiptEmail: true,
+    receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
+    receiptMessage: "",
+    receiptSignature: isContribution ? "Global contribution signature" : "Dormy Admin",
+    cartItems: [],
+  };
+
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      amount: 0,
-      method: "cash",
-      note: "",
-      sendReceiptEmail: true,
-      receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
-      receiptMessage: "",
-      receiptSignature: isContribution ? "Global contribution signature" : "Dormy Admin",
-      cartItems: [],
-    },
+    defaultValues: defaultFormValues,
   });
 
   const sendReceiptEmail = form.watch("sendReceiptEmail");
@@ -405,7 +501,7 @@ export function PaymentDialog({
       setPendingPayload(null);
       setEmailPreview(null);
       setOpen(false);
-      form.reset();
+      form.reset(defaultFormValues);
     } catch {
       toast.error("Failed to record payment");
     } finally {
@@ -465,9 +561,21 @@ export function PaymentDialog({
     await submitPayment(pendingPayload);
   }
 
+  function handlePaymentDialogOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setConfirmOpen(false);
+      setOverpaymentConfirmOpen(false);
+      setPendingFormValues(null);
+      setPendingPayload(null);
+      setEmailPreview(null);
+      form.reset(defaultFormValues);
+    }
+  }
+
   if (metadata?.is_store && !pathname?.startsWith("/treasurer")) {
     return (
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handlePaymentDialogOpenChange}>
         <DialogTrigger asChild>
           <div className="inline-block w-full">
             {trigger || (
@@ -499,7 +607,7 @@ export function PaymentDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handlePaymentDialogOpenChange}>
         <DialogTrigger asChild>
           <div className="inline-block w-full">
             {trigger || (
