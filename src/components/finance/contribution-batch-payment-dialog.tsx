@@ -76,7 +76,13 @@ type BatchPaymentPayload = {
   receipt_message: string | null;
   receipt_signature: string | null;
   receipt_logo_url: string | null;
-  cart_items?: any[];
+  cart_items?: Array<{
+    contribution_id: string;
+    item_id: string;
+    quantity: number;
+    options: Array<{ name: string; value: string }>;
+    subtotal: number;
+  }>;
 };
 
 function nowLocalDateTimeValue() {
@@ -282,7 +288,26 @@ export function ContributionBatchPaymentDialog({
       receipt_message: null,
       receipt_signature: null,
       receipt_logo_url: null,
-      cart_items: hasAnyStoreContributions ? Object.values(storeCartItems).flat() : undefined,
+      cart_items: hasAnyStoreContributions
+        ? Object.entries(storeCartItems).flatMap(([contributionId, items]) =>
+            (items ?? [])
+              .filter((item) => typeof item?.item_id === "string" && item.item_id.trim().length > 0)
+              .map((item) => ({
+                contribution_id: contributionId,
+                item_id: String(item.item_id),
+                quantity: Math.max(1, Number(item.quantity ?? 1)),
+                options: Array.isArray(item.options)
+                  ? item.options
+                      .map((option: any) => ({
+                        name: String(option?.name ?? "").trim(),
+                        value: String(option?.value ?? "").trim(),
+                      }))
+                      .filter((option: { name: string; value: string }) => option.value.length > 0)
+                  : [],
+                subtotal: Math.max(0, Number(item.subtotal ?? 0)),
+              }))
+          )
+        : undefined,
     };
 
     return payload;

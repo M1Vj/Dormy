@@ -8,6 +8,7 @@ import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { ContributionBatchPaymentDialog } from "@/components/finance/contribution-batch-payment-dialog";
+import { ContributionListFilters } from "@/components/finance/contribution-list-filters";
 import {
   Table,
   TableBody,
@@ -19,7 +20,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 type SearchParams = {
   search?: string | string[];
@@ -220,9 +220,11 @@ export default async function EventsFinancePage({
   const activeSemesterId = semesterResult.semesterId;
   const activeSemester = await getActiveSemester(activeDormId, supabase);
 
+  const dormOptionsPromise = canFilterDorm ? getUserDorms() : Promise.resolve([]);
+
   const [semesterRows, dormOptions, { data: occupants }, { data: dormConfig }] = await Promise.all([
     listDormSemesters(activeDormId, supabase),
-    getUserDorms(),
+    dormOptionsPromise,
     supabase
       .from("occupants")
       .select("id, full_name, student_id")
@@ -492,35 +494,12 @@ export default async function EventsFinancePage({
         </div>
 
         <div className="flex w-full flex-col gap-2 rounded-lg border border-muted bg-muted/20 p-3 sm:flex-row sm:items-center">
-          <form className="flex w-full flex-col gap-2 sm:flex-row sm:items-center" method="GET">
-            <Input
-              name="search"
-              placeholder="Search contribution..."
-              defaultValue={search}
-              className="h-9 w-full bg-background sm:w-60"
-            />
-            <select
-              name="semester"
-              defaultValue={selectedSemesterIds[0]}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm md:w-60"
-            >
-              {semesters.map((semester) => (
-                <option key={semester.id} value={semester.id}>
-                  {semester.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <Button type="submit" variant="secondary" size="sm" className="h-9">
-                Apply
-              </Button>
-              {search || semesterIdsFromParams.length > 0 ? (
-                <Button asChild type="button" variant="ghost" size="sm" className="h-9">
-                  <Link href="/treasurer/contributions">Reset</Link>
-                </Button>
-              ) : null}
-            </div>
-          </form>
+          <ContributionListFilters
+            defaultSemesterId={activeSemesterId}
+            initialSearch={search}
+            initialSemesterId={selectedSemesterIds[0]}
+            semesters={semesters.map((semester) => ({ id: semester.id, label: semester.label }))}
+          />
         </div>
       </div>
 
