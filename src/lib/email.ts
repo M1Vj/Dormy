@@ -536,6 +536,91 @@ export function renderContributionBatchReceiptEmail(input: {
   };
 }
 
+export function renderContributionPayableReminderEmail(input: {
+  recipientName: string | null;
+  contributions: Array<{
+    title: string;
+    amountPesos: number;
+    deadlineIso?: string | null;
+  }>;
+  totalAmountPesos: number;
+  treasurerNameOverride?: string | null;
+}) {
+  const subject = "Contribution payment reminder";
+  const greeting = input.recipientName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const rows = input.contributions.filter((item) => item.amountPesos > 0);
+  const tableHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Deadline</th>
+          <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((item) => {
+            const deadlineDate = item.deadlineIso ? new Date(item.deadlineIso) : null;
+            const deadlineLabel =
+              deadlineDate && !Number.isNaN(deadlineDate.getTime())
+                ? formatDateTimeInAppTimeZone(deadlineDate)
+                : "Not set";
+            return `
+              <tr>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">${escapeHtml(item.title)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#475569;">${escapeHtml(deadlineLabel)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:600; color:#0f172a;">${normalizePesos(item.amountPesos)}</td>
+              </tr>
+            `.trim();
+          })
+          .join("")}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="padding:12px 0 0 0; color:#334155; font-weight:700;">Total Remaining</td>
+          <td style="padding:12px 0 0 0;"></td>
+          <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(input.totalAmountPesos)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">This is a reminder about your remaining contribution balance.</p>`,
+    tableHtml,
+    `<p style="margin:14px 0 0 0;">Please coordinate with the treasurer to settle your payable.</p>`,
+    renderSignatureHtml(null, input.treasurerNameOverride),
+  ].join("");
+
+  const text = [
+    input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
+    "This is a reminder about your remaining contribution balance.",
+    "",
+    ...rows.map((item) => {
+      const deadlineDate = item.deadlineIso ? new Date(item.deadlineIso) : null;
+      const deadlineLabel =
+        deadlineDate && !Number.isNaN(deadlineDate.getTime())
+          ? formatDateTimeInAppTimeZone(deadlineDate)
+          : "Not set";
+      return `${item.title}: ${normalizePesos(item.amountPesos)} (Deadline: ${deadlineLabel})`;
+    }),
+    `Total Remaining: ${normalizePesos(input.totalAmountPesos)}`,
+    "",
+    "Please coordinate with the treasurer to settle your payable.",
+  ].join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Contribution Payable Reminder", bodyHtml }),
+    text,
+  };
+}
+
 export function renderAccountWelcomeEmail(input: {
   recipientEmail: string;
   recipientName: string | null;

@@ -12,6 +12,11 @@ import {
   toIsoDate,
   workbookToBuffer,
 } from "@/lib/export/xlsx";
+import {
+  formatCartItemSpecs,
+  normalizeAndPriceCartItems,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 
 type ReportKey =
   | "fines-ledger"
@@ -737,6 +742,20 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     amountPaid: number;
     method: string;
     note: string;
+    storeDetails: string;
+  }> = [];
+  const storeOrderRows: Array<{
+    datePaid: string;
+    paidFor: string;
+    occupantName: string;
+    studentId: string;
+    itemName: string;
+    specs: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    method: string;
+    note: string;
   }> = [];
 
   const entryRows = filteredRows.map((item) => ({
@@ -765,6 +784,39 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
 
     if (item.amount < 0 || item.row.entry_type === "payment") {
       summary.collected += Math.abs(item.amount);
+      const metadata =
+        item.row.metadata && typeof item.row.metadata === "object"
+          ? (item.row.metadata as Record<string, unknown>)
+          : {};
+      const storeItems = normalizeStoreItems(metadata.store_items);
+      const cartItems = normalizeAndPriceCartItems(metadata.cart_items, storeItems);
+      const storeDetails = cartItems
+        .map((cartItem) => {
+          const storeItem = storeItems.find((entry) => entry.id === cartItem.item_id);
+          const itemName = storeItem?.name ?? "Item";
+          const specs = formatCartItemSpecs(cartItem.options);
+          const quantity = Math.max(1, Number(cartItem.quantity ?? 1));
+          const subtotal = Math.max(0, Number(cartItem.subtotal ?? 0));
+          const unitPrice = quantity > 0 ? Number((subtotal / quantity).toFixed(2)) : subtotal;
+
+          storeOrderRows.push({
+            datePaid: formatTimestamp(item.row.posted_at),
+            paidFor: item.contributionTitle,
+            occupantName: item.occupantName,
+            studentId: item.studentId,
+            itemName,
+            specs: specs || "",
+            quantity,
+            unitPrice,
+            subtotal,
+            method: item.row.method ?? "",
+            note: item.row.note ?? "",
+          });
+
+          return `${quantity}x ${itemName}${specs ? ` (${specs})` : ""}`;
+        })
+        .join(" | ");
+
       paymentRows.push({
         paidFor: item.contributionTitle,
         occupantName: item.occupantName,
@@ -773,6 +825,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         amountPaid: formatPeso(Math.abs(item.amount)),
         method: item.row.method ?? "",
         note: item.row.note ?? "",
+        storeDetails,
       });
     } else {
       summary.charged += item.amount;
@@ -861,6 +914,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
       "Student ID": row.studentId,
       "Paid For": row.paidFor,
       "Amount Paid (₱)": row.amountPaid,
+      "Store Item Specs": row.storeDetails,
       "Method": row.method,
       "Note": row.note,
     })),
@@ -870,10 +924,43 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
       "Student ID",
       "Paid For",
       "Amount Paid (₱)",
+      "Store Item Specs",
       "Method",
       "Note",
     ]
   );
+  if (storeOrderRows.length > 0) {
+    appendSheet(
+      workbook,
+      "Store Orders",
+      storeOrderRows.map((row) => ({
+        "Date & Time Paid": row.datePaid,
+        "Paid For": row.paidFor,
+        "Name": row.occupantName,
+        "Student ID": row.studentId,
+        "Item": row.itemName,
+        "Specs / Choices": row.specs,
+        "Qty": row.quantity,
+        "Unit Price (₱)": formatPeso(row.unitPrice),
+        "Subtotal (₱)": formatPeso(row.subtotal),
+        "Method": row.method,
+        "Note": row.note,
+      })),
+      [
+        "Date & Time Paid",
+        "Paid For",
+        "Name",
+        "Student ID",
+        "Item",
+        "Specs / Choices",
+        "Qty",
+        "Unit Price (₱)",
+        "Subtotal (₱)",
+        "Method",
+        "Note",
+      ]
+    );
+  }
   if (!requestedContributionId) {
     appendSheet(workbook, "Entries", entryRows, [
       "Contribution",

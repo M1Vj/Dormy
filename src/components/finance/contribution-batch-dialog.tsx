@@ -98,7 +98,7 @@ function StoreItemField({ index, form, onRemove }: { index: number; form: any; o
             variant="ghost"
             size="sm"
             className="h-6 text-xs px-2"
-            onClick={() => appendOption({ name: "", choices: "" })}
+            onClick={() => appendOption({ name: "", choices: "", choicePrices: "" })}
           >
             <Plus className="h-3 w-3 mr-1" /> Add Option
           </Button>
@@ -109,7 +109,7 @@ function StoreItemField({ index, form, onRemove }: { index: number; form: any; o
         )}
 
         {optionFields.map((optField, optIndex) => (
-          <div key={optField.id} className="grid grid-cols-[100px_1fr_24px] gap-2 items-start">
+          <div key={optField.id} className="grid grid-cols-[100px_1fr_1fr_24px] gap-2 items-start">
             <FormField
               control={form.control}
               name={`storeItems.${index}.options.${optIndex}.name`}
@@ -128,6 +128,22 @@ function StoreItemField({ index, form, onRemove }: { index: number; form: any; o
                 <FormItem className="space-y-1">
                   <FormControl>
                     <Input className="h-7 text-xs" placeholder="Comma separated: S, M, L, XL" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name={`storeItems.${index}.options.${optIndex}.choicePrices`}
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormControl>
+                    <Input
+                      className="h-7 text-xs"
+                      placeholder="Optional: XL=50, XXL=100"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
                   </FormControl>
                 </FormItem>
               )}
@@ -151,6 +167,7 @@ function StoreItemField({ index, form, onRemove }: { index: number; form: any; o
 const storeOptionSchema = z.object({
   name: z.string().trim().min(1, "Option name is required (e.g., Size)"),
   choices: z.string().trim().min(1, "Comma-separated choices required"),
+  choicePrices: z.string().trim().optional(),
 });
 
 const storeItemSchema = z.object({
@@ -172,6 +189,25 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+function parseChoicePriceMap(raw: string | undefined) {
+  const parsed = new Map<string, number>();
+  if (!raw || raw.trim().length === 0) {
+    return parsed;
+  }
+
+  for (const entry of raw.split(",")) {
+    const [rawChoice, rawPrice] = entry.split("=");
+    const choice = (rawChoice ?? "").trim();
+    const price = Number((rawPrice ?? "").trim());
+    if (!choice || !Number.isFinite(price)) {
+      continue;
+    }
+    parsed.set(choice.toLowerCase(), Number(price.toFixed(2)));
+  }
+
+  return parsed;
+}
 
 export function ContributionBatchDialog({
   dormId,
@@ -226,15 +262,28 @@ export function ContributionBatchDialog({
         deadlineIso = parsed.toISOString();
       }
 
-      // Convert comma-separated string back to array for the backend
       const formattedStoreItems = values.storeItems?.map((item) => ({
         id: crypto.randomUUID(),
         name: item.name,
         price: item.price,
-        options: item.options.map((opt) => ({
-          name: opt.name,
-          choices: opt.choices.split(",").map((c) => c.trim()).filter((c) => c.length > 0),
-        })).filter(opt => opt.choices.length > 0),
+        options: item.options
+          .map((opt) => {
+            const choicePriceMap = parseChoicePriceMap(opt.choicePrices);
+            const choices = opt.choices
+              .split(",")
+              .map((c) => c.trim())
+              .filter((c) => c.length > 0)
+              .map((label) => ({
+                label,
+                price_adjustment: choicePriceMap.get(label.toLowerCase()) ?? 0,
+              }));
+
+            return {
+              name: opt.name,
+              choices,
+            };
+          })
+          .filter((opt) => opt.choices.length > 0),
       })) || [];
 
       const response = await createContributionBatch(dormId, {

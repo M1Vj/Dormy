@@ -40,6 +40,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  calculateCartSubtotal,
+  formatChoiceLabel,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 import { cn } from "@/lib/utils";
 
 type ContributionOption = {
@@ -80,7 +85,7 @@ type BatchPaymentPayload = {
     contribution_id: string;
     item_id: string;
     quantity: number;
-    options: Array<{ name: string; value: string }>;
+    options: Array<{ name: string; value: string; price_adjustment?: number }>;
     subtotal: number;
   }>;
 };
@@ -301,6 +306,10 @@ export function ContributionBatchPaymentDialog({
                       .map((option: any) => ({
                         name: String(option?.name ?? "").trim(),
                         value: String(option?.value ?? "").trim(),
+                        price_adjustment:
+                          typeof option?.price_adjustment === "number"
+                            ? option.price_adjustment
+                            : undefined,
                       }))
                       .filter((option: { name: string; value: string }) => option.value.length > 0)
                   : [],
@@ -520,7 +529,14 @@ export function ContributionBatchPaymentDialog({
             {/* Store Cart Builder — per selected store contribution */}
             {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore).map((contribution) => {
               const cartForContribution = storeCartItems[contribution.id] || [];
-              const items = contribution.storeItems || [];
+              const items = normalizeStoreItems(contribution.storeItems || []);
+              const computeSubtotal = (itemId: string, quantity: number, options: unknown) =>
+                calculateCartSubtotal({
+                  item: items.find((item) => item.id === itemId),
+                  quantity,
+                  options,
+                  fallbackSubtotal: 0,
+                });
 
               const addCartItem = () => {
                 const newItem = { id: crypto.randomUUID(), item_id: "", quantity: 1, options: [], subtotal: 0 };
@@ -581,7 +597,9 @@ export function ContributionBatchPaymentDialog({
                   ) : (
                     <div className="space-y-3">
                       {cartForContribution.map((cartItem: any, cartIdx: number) => {
-                        const selectedStoreItem = items.find((i: any) => i.id === cartItem.item_id);
+                        const selectedStoreItem = items.find((i) => i.id === cartItem.item_id);
+                        const selectedOptions = selectedStoreItem?.options ?? [];
+                        const currentQty = Math.max(1, Number(cartItem.quantity || 1));
                         return (
                           <div key={cartItem.id} className="relative rounded-lg border bg-background p-4 shadow-sm space-y-3">
                             <Button
@@ -598,19 +616,32 @@ export function ContributionBatchPaymentDialog({
                                 <Label className="text-xs font-semibold">Item</Label>
                                 <Select
                                   onValueChange={(val) => {
-                                    const sItem = items.find((i: any) => i.id === val);
+                                    const sItem = items.find((i) => i.id === val);
                                     if (sItem) {
-                                      const defaultOpts = (sItem.options || []).map((o: any) => ({
-                                        name: o.name,
-                                        value: o.choices[0] || "",
-                                      }));
+                                      const defaultOpts = (sItem.options || [])
+                                        .map((o) => {
+                                          const firstChoice = o.choices[0];
+                                          if (!firstChoice?.label) {
+                                            return null;
+                                          }
+                                          return {
+                                            name: o.name,
+                                            value: firstChoice.label,
+                                            price_adjustment: firstChoice.priceAdjustment ?? 0,
+                                          };
+                                        })
+                                        .filter((option): option is { name: string; value: string; price_adjustment: number } => Boolean(option));
                                       updateCartItem(cartIdx, {
                                         item_id: val,
                                         options: defaultOpts,
-                                        subtotal: sItem.price * (cartItem.quantity || 1),
+                                        subtotal: computeSubtotal(val, currentQty, defaultOpts),
                                       });
                                     } else {
-                                      updateCartItem(cartIdx, { item_id: val });
+                                      updateCartItem(cartIdx, {
+                                        item_id: val,
+                                        options: [],
+                                        subtotal: 0,
+                                      });
                                     }
                                   }}
                                   value={cartItem.item_id}
@@ -619,9 +650,9 @@ export function ContributionBatchPaymentDialog({
                                     <SelectValue placeholder="Select item" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {items.map((si: any) => (
+                                    {items.map((si) => (
                                       <SelectItem key={si.id} value={si.id}>
-                                        {si.name} (₱{si.price})
+                                        {si.name} (₱{si.price.toFixed(2)})
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -638,23 +669,42 @@ export function ContributionBatchPaymentDialog({
                                     const qty = parseInt(e.target.value) || 1;
                                     updateCartItem(cartIdx, {
                                       quantity: qty,
-                                      subtotal: selectedStoreItem ? selectedStoreItem.price * qty : cartItem.subtotal,
+                                      subtotal: computeSubtotal(
+                                        cartItem.item_id,
+                                        qty,
+                                        cartItem.options || []
+                                      ),
                                     });
                                   }}
                                 />
                               </div>
                             </div>
 
-                            {selectedStoreItem?.options?.length > 0 && (
+                            {selectedOptions.length > 0 && (
                               <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-                                {selectedStoreItem.options.map((opt: any, optIndex: number) => (
+                                {selectedOptions.map((opt, optIndex) => (
                                   <div key={opt.name} className="space-y-1">
                                     <Label className="text-xs text-muted-foreground">{opt.name}</Label>
                                     <Select
                                       onValueChange={(val) => {
                                         const newOpts = [...(cartItem.options || [])];
-                                        newOpts[optIndex] = { name: opt.name, value: val };
-                                        updateCartItem(cartIdx, { options: newOpts });
+                                        const selectedChoice = opt.choices.find(
+                                          (choice: { label: string; priceAdjustment: number }) =>
+                                            choice.label === val
+                                        );
+                                        newOpts[optIndex] = {
+                                          name: opt.name,
+                                          value: val,
+                                          price_adjustment: selectedChoice?.priceAdjustment ?? 0,
+                                        };
+                                        updateCartItem(cartIdx, {
+                                          options: newOpts,
+                                          subtotal: computeSubtotal(
+                                            cartItem.item_id,
+                                            currentQty,
+                                            newOpts
+                                          ),
+                                        });
                                       }}
                                       value={cartItem.options?.[optIndex]?.value || ""}
                                     >
@@ -662,9 +712,9 @@ export function ContributionBatchPaymentDialog({
                                         <SelectValue placeholder={`Select ${opt.name}`} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {opt.choices.map((choice: string) => (
-                                          <SelectItem key={choice} value={choice}>
-                                            {choice}
+                                        {opt.choices.map((choice: { label: string; priceAdjustment: number }) => (
+                                          <SelectItem key={choice.label} value={choice.label}>
+                                            {formatChoiceLabel(choice)}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
