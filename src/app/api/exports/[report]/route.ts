@@ -643,12 +643,14 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     .is("voided_at", null)
     .order("posted_at", { ascending: false });
 
-  query = applyTimestampRange(
-    query,
-    "posted_at",
-    context.rangeStartIso,
-    context.rangeEndIso
-  );
+  if (!requestedContributionId) {
+    query = applyTimestampRange(
+      query,
+      "posted_at",
+      context.rangeStartIso,
+      context.rangeEndIso
+    );
+  }
 
   const { data, error } = await query;
   if (error) {
@@ -724,12 +726,11 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
       payable: number;
       paid: number;
       balance: number;
-      lastDatePaid: string;
     }
   >();
 
   const paymentRows: Array<{
-    contribution: string;
+    paidFor: string;
     occupantName: string;
     studentId: string;
     datePaid: string;
@@ -765,7 +766,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     if (item.amount < 0 || item.row.entry_type === "payment") {
       summary.collected += Math.abs(item.amount);
       paymentRows.push({
-        contribution: item.contributionTitle,
+        paidFor: item.contributionTitle,
         occupantName: item.occupantName,
         studentId: item.studentId,
         datePaid: formatTimestamp(item.row.posted_at),
@@ -793,12 +794,10 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         payable: 0,
         paid: 0,
         balance: 0,
-        lastDatePaid: "",
       };
 
     if (item.amount < 0 || item.row.entry_type === "payment") {
       person.paid += Math.abs(item.amount);
-      person.lastDatePaid = formatTimestamp(item.row.posted_at);
     } else {
       person.payable += item.amount;
     }
@@ -833,7 +832,6 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
       "Total Payable (₱)": formatPeso(row.payable),
       "Total Paid (₱)": formatPeso(row.paid),
       "Balance (₱)": formatPeso(row.balance),
-      "Last Date Paid": row.lastDatePaid,
     }));
 
   const workbook = buildWorkbook();
@@ -853,52 +851,58 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     "Total Payable (₱)",
     "Total Paid (₱)",
     "Balance (₱)",
-    "Last Date Paid",
   ]);
   appendSheet(
     workbook,
     "Payments",
     paymentRows.map((row) => ({
-      "Contribution": row.contribution,
+      "Date & Time Paid": row.datePaid,
       "Name": row.occupantName,
       "Student ID": row.studentId,
-      "Date Paid": row.datePaid,
+      "Paid For": row.paidFor,
       "Amount Paid (₱)": row.amountPaid,
       "Method": row.method,
       "Note": row.note,
     })),
     [
-      "Contribution",
+      "Date & Time Paid",
       "Name",
       "Student ID",
-      "Date Paid",
+      "Paid For",
       "Amount Paid (₱)",
       "Method",
       "Note",
     ]
   );
-  appendSheet(workbook, "Entries", entryRows, [
-    "Contribution",
-    "Linked Event",
-    "Name",
-    "Student ID",
-    "Date",
-    "Type",
-    "Amount (₱)",
-    "Method",
-    "Note",
-  ]);
-  appendMetadataSheet(workbook, [
+  if (!requestedContributionId) {
+    appendSheet(workbook, "Entries", entryRows, [
+      "Contribution",
+      "Linked Event",
+      "Name",
+      "Student ID",
+      "Date",
+      "Type",
+      "Amount (₱)",
+      "Method",
+      "Note",
+    ]);
+  }
+  const metadataRows = [
     { key: "Report", value: "Event Contributions" },
     { key: "Dorm", value: context.dormName },
     {
       key: "Contribution filter",
       value: requestedContributionId ?? "All contributions",
     },
-    { key: "Date start", value: context.rangeStartRaw ?? "(none)" },
-    { key: "Date end", value: context.rangeEndRaw ?? "(none)" },
     { key: "Generated at", value: new Date().toISOString() },
-  ]);
+  ];
+  if (!requestedContributionId) {
+    metadataRows.splice(3, 0,
+      { key: "Date start", value: context.rangeStartRaw ?? "(none)" },
+      { key: "Date end", value: context.rangeEndRaw ?? "(none)" }
+    );
+  }
+  appendMetadataSheet(workbook, metadataRows);
 
   const fileName = requestedContributionId
     ? `contribution-${context.dormSlug}-${todaySuffix()}.xlsx`
