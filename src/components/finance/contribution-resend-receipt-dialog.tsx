@@ -5,6 +5,7 @@ import { Mail } from "lucide-react";
 import { toast } from "sonner";
 
 import { resendContributionReceipt } from "@/app/actions/finance";
+import { OccupantCombobox } from "@/components/finance/occupant-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -18,13 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 
 type OccupantOption = {
   id: string;
@@ -144,19 +138,7 @@ export function ContributionResendReceiptDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Occupant</Label>
-            <Select value={occupantId} onValueChange={setOccupantId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select occupant" />
-              </SelectTrigger>
-              <SelectContent>
-                {occupants.map((occupant) => (
-                  <SelectItem key={occupant.id} value={occupant.id}>
-                    {occupant.fullName}
-                    {occupant.studentId ? ` (${occupant.studentId})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <OccupantCombobox occupants={occupants} value={occupantId} onValueChange={setOccupantId} />
           </div>
 
           <div className="space-y-2">

@@ -4,7 +4,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarCheck2, Loader2, Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { CalendarCheck2, Loader2, Plus, X } from "lucide-react";
 
 import {
   previewContributionBatchPaymentEmail,
@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { OccupantCombobox } from "@/components/finance/occupant-combobox";
 import {
   Dialog,
   DialogContent,
@@ -31,21 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   calculateCartSubtotal,
   formatChoiceLabel,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
-import { cn } from "@/lib/utils";
 
 type ContributionOption = {
   id: string;
@@ -114,7 +105,6 @@ export function ContributionBatchPaymentDialog({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [openOccupantCombobox, setOpenOccupantCombobox] = useState(false);
   const [occupantId, setOccupantIdRaw] = useState<string>("");
 
   /** When occupant changes, reset contribution selections since remaining amounts change per-occupant */
@@ -422,57 +412,13 @@ export function ContributionBatchPaymentDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 flex flex-col">
                 <Label>Occupant</Label>
-                <Popover open={openOccupantCombobox} onOpenChange={setOpenOccupantCombobox}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openOccupantCombobox}
-                      className="justify-between w-full font-normal shadow-sm"
-                    >
-                      {occupantId
-                        ? (() => {
-                          const occ = occupants.find((o) => o.id === occupantId);
-                          return occ ? `${occ.fullName}${occ.studentId ? ` (${occ.studentId})` : ""}` : "Select occupant...";
-                        })()
-                        : "Select occupant..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search occupant..." />
-                      <CommandList>
-                        <CommandEmpty>No occupant found.</CommandEmpty>
-                        <CommandGroup>
-                          {occupants.map((occupant) => (
-                            <CommandItem
-                              key={occupant.id}
-                              value={`${occupant.fullName} ${occupant.studentId || ""}`}
-                              onSelect={() => {
-                                setOccupantId(occupant.id);
-                                setOpenOccupantCombobox(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  occupantId === occupant.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {occupant.fullName}
-                              {occupant.studentId ? (
-                                <span className="ml-1 text-muted-foreground text-xs">
-                                  ({occupant.studentId})
-                                </span>
-                              ) : null}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <OccupantCombobox
+                  occupants={occupants}
+                  value={occupantId}
+                  onValueChange={setOccupantId}
+                  placeholder="Select occupant..."
+                  className="shadow-sm"
+                />
               </div>
 
               <div className="space-y-2">
