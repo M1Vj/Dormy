@@ -8,6 +8,13 @@ import { TREASURER_MANUAL_EXPENSE_MARKER } from "@/lib/finance/constants";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { optimizeImage } from "@/lib/images";
+import {
+  type CartItem,
+  type StoreItem,
+  formatSelectedOption,
+  normalizeAndPriceCartItems,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
@@ -39,9 +46,17 @@ const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
   contributions: ["admin", "treasurer"],
 };
 
+const storeChoiceSchema = z.union([
+  z.string().trim().min(1, "Choice cannot be empty"),
+  z.object({
+    label: z.string().trim().min(1, "Choice label cannot be empty"),
+    price_adjustment: z.number().finite().optional(),
+  }),
+]);
+
 const storeOptionSchema = z.object({
   name: z.string().trim().min(1, "Option name is required (e.g., Size)"),
-  choices: z.array(z.string().trim().min(1, "Choice cannot be empty")).min(1, "At least one choice is required"),
+  choices: z.array(storeChoiceSchema).min(1, "At least one choice is required"),
 });
 
 const storeItemSchema = z.object({
@@ -49,6 +64,20 @@ const storeItemSchema = z.object({
   name: z.string().trim().min(1, "Item name is required"),
   price: z.number().min(0, "Price must be positive"),
   options: z.array(storeOptionSchema).default([]),
+});
+
+const storeCartItemOptionSchema = z.object({
+  name: z.string().trim().max(120).optional(),
+  value: z.string().trim().max(120),
+  price_adjustment: z.number().finite().optional(),
+});
+
+const storeCartItemSchema = z.object({
+  contribution_id: z.string().uuid(),
+  item_id: z.string().uuid(),
+  quantity: z.number().int().positive(),
+  options: z.array(storeCartItemOptionSchema).default([]),
+  subtotal: z.number().min(0),
 });
 
 const contributionBatchSchema = z.object({
@@ -77,6 +106,17 @@ const contributionBatchPaymentSchema = z.object({
   receipt_message: z.string().trim().max(2000).optional().nullable(),
   receipt_signature: z.string().trim().max(3000).optional().nullable(),
   receipt_logo_url: z.string().url().optional().nullable(),
+  cart_items: z.array(storeCartItemSchema).optional(),
+});
+
+const resendContributionReceiptSchema = z.object({
+  contribution_ids: z.array(z.string().uuid()).min(1),
+  occupant_id: z.string().uuid(),
+  receipt_email_override: z.string().email().optional().nullable(),
+});
+
+const contributionReminderSchema = z.object({
+  semester_ids: z.array(z.string().uuid()).optional(),
 });
 
 const contributionReceiptSignatureSchema = z.object({
@@ -142,8 +182,8 @@ type ContributionMetadata = {
   contribution_receipt_subject: string | null;
   contribution_receipt_message: string | null;
   contribution_receipt_logo_url: string | null;
-  store_items: Array<{ id: string; name: string; price: number; options: Array<{ name: string; choices: string[] }> }>;
-  cart_items: Array<{ item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }>;
+  store_items: StoreItem[];
+  cart_items: CartItem[];
 };
 
 function asMetadataRecord(value: unknown): Record<string, unknown> {
@@ -178,6 +218,9 @@ function parseContributionMetadata(
   const subjectRaw = metadata.contribution_receipt_subject;
   const messageRaw = metadata.contribution_receipt_message;
   const logoRaw = metadata.contribution_receipt_logo_url;
+
+  const store_items = normalizeStoreItems(metadata.store_items);
+  const cart_items = normalizeAndPriceCartItems(metadata.cart_items, store_items);
 
   return {
     contribution_id:
@@ -216,9 +259,133 @@ function parseContributionMetadata(
       typeof logoRaw === "string" && logoRaw.trim().length > 0
         ? logoRaw.trim()
         : null,
-    store_items: Array.isArray(metadata.store_items) ? (metadata.store_items as ContributionMetadata["store_items"]) : [],
-    cart_items: Array.isArray(metadata.cart_items) ? (metadata.cart_items as ContributionMetadata["cart_items"]) : [],
+    store_items,
+    cart_items,
   };
+}
+
+function normalizeOrderOptionLabel(option: unknown) {
+  if (typeof option === "string") {
+    const value = option.trim();
+    return value.length > 0 ? value : null;
+  }
+  if (!option || typeof option !== "object") {
+    return null;
+  }
+
+  const record = option as Record<string, unknown>;
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+  const value = typeof record.value === "string" ? record.value.trim() : "";
+  const priceAdjustment =
+    typeof record.price_adjustment === "number"
+      ? record.price_adjustment
+      : typeof record.priceAdjustment === "number"
+        ? record.priceAdjustment
+        : 0;
+
+  if (!value) {
+    return null;
+  }
+  return formatSelectedOption({
+    name,
+    value,
+    price_adjustment: priceAdjustment,
+  });
+}
+
+function normalizeCartItemsForContribution(
+  cartItems: unknown,
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  return normalizeAndPriceCartItems(
+    cartItems,
+    Array.isArray(storeItems) ? storeItems : []
+  );
+}
+
+function sumCartSubtotal(
+  cartItems: ContributionMetadata["cart_items"] | undefined,
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    return 0;
+  }
+
+  const normalized = normalizeCartItemsForContribution(cartItems, storeItems);
+  return Number(
+    normalized
+      .reduce((sum, item) => sum + Math.max(0, Number(item.subtotal ?? 0)), 0)
+      .toFixed(2)
+  );
+}
+
+function buildOrderItemsFromCart(
+  cartItems: ContributionMetadata["cart_items"] | undefined,
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    return undefined;
+  }
+
+  const catalog = Array.isArray(storeItems) ? storeItems : [];
+  const normalizedCartItems = normalizeCartItemsForContribution(cartItems, catalog);
+  const rows = normalizedCartItems
+    .map((cartItem) => {
+      const catalogItem = catalog.find((item) => item.id === cartItem.item_id);
+      const fallbackItem = cartItem as unknown as { item?: { name?: string } };
+      const options = Array.isArray(cartItem.options)
+        ? cartItem.options
+            .map(normalizeOrderOptionLabel)
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      return {
+        itemName: catalogItem?.name ?? fallbackItem.item?.name ?? "Item",
+        options,
+        quantity: Math.max(1, Number(cartItem.quantity ?? 1)),
+        subtotal: Math.max(0, Number(cartItem.subtotal ?? 0)),
+      };
+    })
+    .filter((item) => item.quantity > 0);
+
+  return rows.length > 0 ? rows : undefined;
+}
+
+function mapInputCartItemsByContribution(
+  inputItems: z.infer<typeof storeCartItemSchema>[] | undefined,
+  storeItemsByContribution: Map<string, ContributionMetadata["store_items"]> = new Map()
+) {
+  const mapped = new Map<string, ContributionMetadata["cart_items"]>();
+  if (!Array.isArray(inputItems) || inputItems.length === 0) {
+    return mapped;
+  }
+
+  for (const item of inputItems) {
+    const normalized = normalizeCartItemsForContribution(
+      [
+        {
+          item_id: item.item_id,
+          quantity: Math.max(1, Number(item.quantity ?? 1)),
+          options: (item.options ?? []).map((option) => ({
+            name: typeof option.name === "string" ? option.name.trim() : "",
+            value: option.value.trim(),
+            price_adjustment: option.price_adjustment,
+          })),
+          subtotal: Math.max(0, Number(item.subtotal ?? 0)),
+        },
+      ],
+      storeItemsByContribution.get(item.contribution_id) ?? []
+    )[0];
+
+    if (!normalized) {
+      continue;
+    }
+    const list = mapped.get(item.contribution_id) ?? [];
+    list.push(normalized);
+    mapped.set(item.contribution_id, list);
+  }
+
+  return mapped;
 }
 
 export async function createTreasurerFinanceManualEntry(
@@ -397,9 +564,36 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   }
 
   // Calculate signed amount based on entry type
-  const finalAmount = tx.entry_type === 'payment'
+  let finalAmount = tx.entry_type === 'payment'
     ? -Math.abs(tx.amount)
     : Math.abs(tx.amount);
+
+  const metadataRecord =
+    tx.metadata && typeof tx.metadata === "object"
+      ? (tx.metadata as Record<string, unknown>)
+      : {};
+  let metadataForInsert: Record<string, unknown> = metadataRecord;
+
+  if (
+    tx.entry_type === "payment" &&
+    tx.category === "contributions" &&
+    metadataRecord.is_store === true
+  ) {
+    const storeItems = normalizeStoreItems(metadataRecord.store_items);
+    const cartItems = normalizeAndPriceCartItems(metadataRecord.cart_items, storeItems);
+    const computedTotal = sumCartSubtotal(cartItems, storeItems);
+
+    metadataForInsert = {
+      ...metadataRecord,
+      is_store: true,
+      store_items: storeItems,
+      cart_items: cartItems,
+    };
+
+    if (computedTotal > 0) {
+      finalAmount = -Math.abs(computedTotal);
+    }
+  }
 
   // Ensure we have the active semester for this transaction
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
@@ -424,10 +618,14 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   if (
     tx.entry_type === "payment" &&
     tx.category === "contributions" &&
-    tx.metadata?.is_store === true &&
-    Array.isArray(tx.metadata?.cart_items) &&
-    tx.metadata?.contribution_id
+    metadataForInsert.is_store === true &&
+    typeof metadataForInsert.contribution_id === "string" &&
+    metadataForInsert.contribution_id.trim().length > 0
   ) {
+    const storeItems = normalizeStoreItems(metadataForInsert.store_items);
+    const cartItems = normalizeAndPriceCartItems(metadataForInsert.cart_items, storeItems);
+    const computedTotal = sumCartSubtotal(cartItems, storeItems);
+
     const { data: chargeEntries } = await writeClient
       .from("ledger_entries")
       .select("id, metadata, amount_pesos")
@@ -439,15 +637,17 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
 
     const chargeEntry = chargeEntries?.find((e) => {
       const meta = typeof e.metadata === "object" && e.metadata !== null ? (e.metadata as Record<string, unknown>) : {};
-      return meta.contribution_id === tx.metadata!.contribution_id;
+      return meta.contribution_id === metadataForInsert.contribution_id;
     });
 
     if (chargeEntry) {
       // The exact total for this cart replaces the previous original charge of 0.
-      const newChargeAmount = Math.abs(tx.amount);
+      const newChargeAmount = computedTotal > 0 ? computedTotal : Math.abs(finalAmount);
       const updatedMetadata = {
         ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null ? chargeEntry.metadata : {}),
-        cart_items: tx.metadata.cart_items,
+        is_store: true,
+        store_items: storeItems,
+        cart_items: cartItems,
       };
 
       const { error: updateError } = await writeClient
@@ -474,7 +674,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     amount_pesos: finalAmount,
     method: tx.method,
     note: tx.note,
-    metadata: tx.metadata || {},
+    metadata: metadataForInsert,
     event_id: tx.event_id,
     fine_id: tx.fine_id,
     created_by: user.id
@@ -564,7 +764,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         eventTitle = event?.title?.trim() || null;
       }
 
-      let mergedMetadata = tx.metadata ?? {};
+      let mergedMetadata = metadataForInsert;
       if (tx.category === "contributions" && mergedMetadata.contribution_id) {
         const { data: origEntry } = await supabase
           .from("ledger_entries")
@@ -612,25 +812,10 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         globalTemplate.logo_url || globalTemplate.logoUrl ||
         null;
 
-      let orderItems;
-      if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
-        const catalogItems = contributionMetadata.store_items ?? [];
-        orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
-          let options: string[] = [];
-
-          if (Array.isArray(cartItem.options)) {
-            options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
-          }
-
-          const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
-          return {
-            itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
-            options,
-            quantity: cartItem.quantity ?? 1,
-            subtotal: cartItem.subtotal ?? 0,
-          };
-        });
-      }
+      const orderItems = buildOrderItemsFromCart(
+        contributionMetadata?.cart_items,
+        contributionMetadata?.store_items
+      );
 
       const rendered = renderPaymentReceiptEmail({
         treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
@@ -817,25 +1002,10 @@ export async function previewTransactionReceiptEmail(
     globalTemplate.logo_url || globalTemplate.logoUrl ||
     null;
 
-  let orderItems;
-  if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
-    const catalogItems = contributionMetadata.store_items ?? [];
-    orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
-      let options: string[] = [];
-
-      if (Array.isArray(cartItem.options)) {
-        options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
-      }
-
-      const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
-      return {
-        itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
-        options,
-        quantity: cartItem.quantity ?? 1,
-        subtotal: cartItem.subtotal ?? 0,
-      };
-    });
-  }
+  const orderItems = buildOrderItemsFromCart(
+    contributionMetadata?.cart_items,
+    contributionMetadata?.store_items
+  );
 
   const { renderPaymentReceiptEmail } = await import("@/lib/email");
   const rendered = renderPaymentReceiptEmail({
@@ -1042,7 +1212,10 @@ export async function createContributionBatch(
       id: string;
       name: string;
       price: number;
-      options: { name: string; choices: string[] }[];
+      options: {
+        name: string;
+        choices: Array<string | { label: string; price_adjustment?: number }>;
+      }[];
     }[];
   }
 ) {
@@ -1396,9 +1569,24 @@ export async function recordContributionBatchPayment(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const storeItemsByContribution = new Map(
+    contributionRows.map((row) => [row.contributionId, row.storeItems] as const)
+  );
+  const inputCartItemsByContribution = mapInputCartItemsByContribution(
+    input.cart_items,
+    storeItemsByContribution
+  );
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
-    dueByContribution.set(row.contributionId, Math.max(0, row.outstanding));
+    const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+    const effectiveCartItems =
+      suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+    const storeSubtotal =
+      row.storeItems.length > 0 ? sumCartSubtotal(effectiveCartItems, row.storeItems) : 0;
+    dueByContribution.set(
+      row.contributionId,
+      storeSubtotal > 0 ? storeSubtotal : Math.max(0, row.outstanding)
+    );
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
@@ -1423,10 +1611,20 @@ export async function recordContributionBatchPayment(
   }
 
   const allocRows = contributionRows
-    .map((row) => ({
-      ...row,
-      allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
-    }))
+    .map((row) => {
+      const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+      const effectiveCartItems =
+        suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+      const normalizedCartItems = normalizeCartItemsForContribution(
+        effectiveCartItems,
+        row.storeItems
+      );
+      return {
+        ...row,
+        cartItems: normalizedCartItems,
+        allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
+      };
+    })
     .filter((row) => row.allocation > 0);
 
   if (!allocRows.length) {
@@ -1483,6 +1681,63 @@ export async function recordContributionBatchPayment(
       }
     ) as typeof supabase;
   }
+
+  const storeRowsToUpdate = allocRows.filter(
+    (row) => row.storeItems.length > 0 && row.cartItems.length > 0
+  );
+
+  if (storeRowsToUpdate.length > 0) {
+    const { data: chargeEntries, error: chargeLookupError } = await writeClient
+      .from("ledger_entries")
+      .select("id, metadata")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", input.occupant_id)
+      .eq("entry_type", "charge")
+      .eq("ledger", "contributions")
+      .is("voided_at", null);
+
+    if (chargeLookupError) {
+      return { error: chargeLookupError.message };
+    }
+
+    for (const row of storeRowsToUpdate) {
+      const chargeEntry = (chargeEntries ?? []).find((entry) => {
+        const metadata =
+          typeof entry.metadata === "object" && entry.metadata !== null
+            ? (entry.metadata as Record<string, unknown>)
+            : {};
+        return metadata.contribution_id === row.contributionId;
+      });
+
+      if (!chargeEntry) {
+        continue;
+      }
+
+      const updatedMetadata = {
+        ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null
+          ? chargeEntry.metadata
+          : {}),
+        is_store: true,
+        store_items: row.storeItems,
+        cart_items: row.cartItems,
+      };
+
+      const chargeAmount =
+        sumCartSubtotal(row.cartItems, row.storeItems) || Math.abs(row.allocation);
+      const { error: updateError } = await writeClient
+        .from("ledger_entries")
+        .update({
+          amount_pesos: chargeAmount,
+          metadata: updatedMetadata,
+        })
+        .eq("id", chargeEntry.id);
+
+      if (updateError) {
+        return { error: updateError.message };
+      }
+    }
+  }
+
   const { error: insertError } = await writeClient.from("ledger_entries").insert(
     allocRows.map((row) => ({
       dorm_id: dormId,
@@ -1505,6 +1760,9 @@ export async function recordContributionBatchPayment(
         contribution_receipt_subject: row.receiptSubject,
         contribution_receipt_message: row.receiptMessage,
         contribution_receipt_logo_url: row.receiptLogoUrl,
+        is_store: row.storeItems.length > 0,
+        store_items: row.storeItems,
+        cart_items: row.cartItems,
         payment_batch_id: batchPaymentId,
         payment_allocation_pesos: row.allocation,
       },
@@ -1576,23 +1834,10 @@ export async function recordContributionBatchPayment(
           paidAtIso: input.paid_at_iso,
           method: input.method,
           contributions: allocRows.map((row) => {
-            let orderItems;
-            if (row.cartItems && Array.isArray(row.cartItems)) {
-              orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
-                const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
-                const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
-                return {
-                  itemName: catalogItem?.name ?? "Item",
-                  options,
-                  quantity: ci.quantity ?? 1,
-                  subtotal: ci.subtotal ?? 0,
-                };
-              });
-            }
             return {
               title: row.title,
               amountPesos: row.allocation,
-              orderItems,
+              orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
             };
           }),
           totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
@@ -1629,6 +1874,654 @@ export async function recordContributionBatchPayment(
     success: true,
     paidCount: allocRows.length,
     totalPaid: allocRows.reduce((sum, row) => sum + row.allocation, 0),
+  };
+}
+
+export async function resendContributionReceipt(
+  dormId: string,
+  payload: z.infer<typeof resendContributionReceiptSchema>
+) {
+  const parsed = resendContributionReceiptSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid resend request." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  if (membershipError || !memberships?.length) {
+    return { error: "Forbidden" };
+  }
+
+  if (!memberships.some((membership) => new Set(["admin", "treasurer"]).has(membership.role))) {
+    return { error: "Only admins and treasurers can resend contribution receipts." };
+  }
+
+  const selectedContributionIds = Array.from(new Set(input.contribution_ids));
+  const selectedContributionIdSet = new Set(selectedContributionIds);
+
+  const { data: paymentEntries, error: paymentLookupError } = await supabase
+    .from("ledger_entries")
+    .select("id, event_id, amount_pesos, method, posted_at, metadata")
+    .eq("dorm_id", dormId)
+    .eq("ledger", "contributions")
+    .eq("entry_type", "payment")
+    .eq("occupant_id", input.occupant_id)
+    .is("voided_at", null)
+    .order("posted_at", { ascending: false });
+
+  if (paymentLookupError) {
+    return { error: paymentLookupError.message };
+  }
+
+  const latestEntryByContribution = new Map<
+    string,
+    {
+      id: string;
+      event_id: string | null;
+      amount_pesos: number | string | null;
+      method: string | null;
+      posted_at: string;
+      metadata: unknown;
+    }
+  >();
+
+  for (const entry of paymentEntries ?? []) {
+    const contributionMetadata = parseContributionMetadata(entry.metadata, {
+      eventId: entry.event_id,
+      note: null,
+    });
+
+    if (!selectedContributionIdSet.has(contributionMetadata.contribution_id)) {
+      continue;
+    }
+
+    const amountPesos = Math.abs(Number(entry.amount_pesos ?? 0));
+    if (!(amountPesos > 0)) {
+      continue;
+    }
+
+    if (!latestEntryByContribution.has(contributionMetadata.contribution_id)) {
+      latestEntryByContribution.set(contributionMetadata.contribution_id, entry);
+    }
+  }
+
+  const matchedEntries = selectedContributionIds
+    .map((contributionId) => {
+      const entry = latestEntryByContribution.get(contributionId);
+      if (!entry) {
+        return null;
+      }
+      const contributionMetadata = parseContributionMetadata(entry.metadata, {
+        eventId: entry.event_id,
+        note: null,
+      });
+      return {
+        entry,
+        contributionMetadata,
+        amountPesos: Math.abs(Number(entry.amount_pesos ?? 0)),
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        entry: {
+          id: string;
+          event_id: string | null;
+          amount_pesos: number | string | null;
+          method: string | null;
+          posted_at: string;
+          metadata: unknown;
+        };
+        contributionMetadata: ContributionMetadata;
+        amountPesos: number;
+      } => Boolean(item)
+    );
+
+  if (matchedEntries.length === 0) {
+    return { error: "No recorded payment found for the selected contributions." };
+  }
+
+  const { data: occupant, error: occupantError } = await supabase
+    .from("occupants")
+    .select("id, user_id, full_name, contact_email")
+    .eq("dorm_id", dormId)
+    .eq("id", input.occupant_id)
+    .maybeSingle();
+
+  if (occupantError) {
+    return { error: occupantError.message };
+  }
+
+  if (!occupant) {
+    return { error: "Occupant not found for receipt resend." };
+  }
+
+  let recipientEmail = input.receipt_email_override?.trim() || occupant.contact_email?.trim() || "";
+  if (!recipientEmail && occupant.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    const { data: authUserResult } = await adminClient.auth.admin.getUserById(occupant.user_id);
+    recipientEmail = authUserResult.user?.email?.trim() || "";
+  }
+
+  if (!recipientEmail) {
+    return { error: "No recipient email found for this occupant." };
+  }
+
+  const { data: dormRow } = await supabase
+    .from("dorms")
+    .select("attributes")
+    .eq("id", dormId)
+    .single();
+
+  const dormAttributes =
+    typeof dormRow?.attributes === "object" && dormRow.attributes !== null
+      ? (dormRow.attributes as Record<string, unknown>)
+      : {};
+  const globalTemplateRaw =
+    typeof dormAttributes.global_receipt_template === "object" &&
+    dormAttributes.global_receipt_template !== null
+      ? (dormAttributes.global_receipt_template as Record<string, unknown>)
+      : {};
+
+  const globalSubject =
+    typeof globalTemplateRaw.subject === "string" && globalTemplateRaw.subject.trim().length > 0
+      ? globalTemplateRaw.subject.trim()
+      : null;
+  const globalMessage =
+    typeof globalTemplateRaw.message === "string" && globalTemplateRaw.message.trim().length > 0
+      ? globalTemplateRaw.message.trim()
+      : null;
+  const globalSignature =
+    typeof globalTemplateRaw.signature === "string" && globalTemplateRaw.signature.trim().length > 0
+      ? globalTemplateRaw.signature.trim()
+      : null;
+  const logoCandidate = globalTemplateRaw.logo_url ?? globalTemplateRaw.logoUrl;
+  const globalLogoUrl =
+    typeof logoCandidate === "string" && logoCandidate.trim().length > 0
+      ? logoCandidate.trim()
+      : null;
+
+  const resolvedSubject =
+    matchedEntries
+      .map((item) => item.contributionMetadata.contribution_receipt_subject)
+      .find((value): value is string => Boolean(value)) || globalSubject;
+  const resolvedMessage =
+    matchedEntries
+      .map((item) => item.contributionMetadata.contribution_receipt_message)
+      .find((value): value is string => Boolean(value)) || globalMessage;
+  const resolvedSignature =
+    matchedEntries
+      .map((item) => item.contributionMetadata.contribution_receipt_signature)
+      .find((value): value is string => Boolean(value)) || globalSignature;
+  const resolvedLogoUrl =
+    matchedEntries
+      .map((item) => item.contributionMetadata.contribution_receipt_logo_url)
+      .find((value): value is string => Boolean(value)) || globalLogoUrl;
+
+  const paidAtIso =
+    matchedEntries
+      .map((item) => item.entry.posted_at)
+      .sort((a, b) => (a > b ? -1 : 1))[0] || new Date().toISOString();
+  const methodValues = Array.from(
+    new Set(
+      matchedEntries
+        .map((item) => item.entry.method?.trim() || "")
+        .filter((value) => value.length > 0)
+    )
+  );
+  const resolvedMethod = methodValues.length === 1 ? methodValues[0] : null;
+  const totalAmountPesos = Number(
+    matchedEntries.reduce((sum, item) => sum + item.amountPesos, 0).toFixed(2)
+  );
+
+  const { sendEmail, renderContributionBatchReceiptEmail } = await import("@/lib/email");
+  const rendered = renderContributionBatchReceiptEmail({
+    treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
+    recipientName: occupant.full_name ?? null,
+    paidAtIso,
+    method: resolvedMethod,
+    contributions: matchedEntries.map((item) => ({
+      title: item.contributionMetadata.contribution_title,
+      amountPesos: item.amountPesos,
+      orderItems: buildOrderItemsFromCart(
+        item.contributionMetadata.cart_items,
+        item.contributionMetadata.store_items
+      ),
+    })),
+    totalAmountPesos,
+    customMessage: resolvedMessage,
+    subjectOverride: resolvedSubject,
+    signatureOverride: resolvedSignature,
+    logoUrl: resolvedLogoUrl,
+  });
+
+  const emailResult = await sendEmail({
+    to: recipientEmail,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+  });
+
+  if (!emailResult.success) {
+    return { error: emailResult.error || "Failed to send receipt email." };
+  }
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.contribution_receipt_resent",
+      entityType: "ledger_entry",
+      entityId: matchedEntries[0]?.entry.id ?? null,
+      metadata: {
+        occupant_id: input.occupant_id,
+        contribution_ids: selectedContributionIds,
+        payment_entry_ids: matchedEntries.map((item) => item.entry.id),
+        recipient_email: recipientEmail,
+        amount_pesos: totalAmountPesos,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for contribution receipt resend:", auditError);
+  }
+
+  return {
+    success: true,
+    recipient_email: recipientEmail,
+  };
+}
+
+export async function sendContributionPayableReminders(
+  dormId: string,
+  payload?: z.infer<typeof contributionReminderSchema>
+) {
+  const parsed = contributionReminderSchema.safeParse(payload ?? {});
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid reminder request." };
+  }
+
+  const input = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    throw new Error("Supabase is not configured for this environment.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  if (membershipError || !memberships?.length) {
+    return { error: "Forbidden" };
+  }
+
+  if (!memberships.some((membership) => new Set(["admin", "treasurer"]).has(membership.role))) {
+    return { error: "Only admins and treasurers can send contribution reminders." };
+  }
+
+  const {
+    sendEmail,
+    renderContributionPayableReminderEmail,
+    renderContributionReminderDispatchReportEmail,
+  } = await import("@/lib/email");
+  const actorEmail = user.email?.trim() || "";
+  const actorName =
+    typeof user.user_metadata?.full_name === "string" &&
+    user.user_metadata.full_name.trim().length > 0
+      ? user.user_metadata.full_name.trim()
+      : user.email || null;
+
+  const sendDispatchReport = async (input: {
+    targetCount: number;
+    sentCount: number;
+    skippedCount: number;
+    failedCount: number;
+    details: Array<{
+      occupantName: string;
+      recipientEmail: string | null;
+      status: "sent" | "skipped" | "failed";
+      reason?: string | null;
+    }>;
+  }) => {
+    if (!actorEmail) {
+      return;
+    }
+
+    try {
+      const rendered = renderContributionReminderDispatchReportEmail({
+        actorName,
+        targetCount: input.targetCount,
+        sentCount: input.sentCount,
+        skippedCount: input.skippedCount,
+        failedCount: input.failedCount,
+        details: input.details,
+        generatedAtIso: new Date().toISOString(),
+      });
+
+      const reportResult = await sendEmail({
+        to: actorEmail,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+
+      if (!reportResult.success) {
+        console.warn("Failed to send contribution reminder report email:", reportResult.error);
+      }
+    } catch (reportError) {
+      console.error("Contribution reminder report email error:", reportError);
+    }
+  };
+
+  let entriesQuery = supabase
+    .from("ledger_entries")
+    .select("occupant_id, event_id, entry_type, amount_pesos, metadata, semester_id")
+    .eq("dorm_id", dormId)
+    .eq("ledger", "contributions")
+    .is("voided_at", null);
+
+  if (input.semester_ids && input.semester_ids.length > 0) {
+    entriesQuery = entriesQuery.in("semester_id", input.semester_ids);
+  }
+
+  const { data: rawEntries, error: entriesError } = await entriesQuery;
+  if (entriesError) {
+    return { error: entriesError.message };
+  }
+
+  const outstandingByOccupant = new Map<
+    string,
+    Map<
+      string,
+      {
+        title: string;
+        deadline: string | null;
+        outstanding: number;
+      }
+    >
+  >();
+
+  for (const row of rawEntries ?? []) {
+    if (!row.occupant_id) {
+      continue;
+    }
+
+    const metadata = asMetadataRecord(row.metadata);
+    if (metadata.finance_manual_inflow === true) {
+      continue;
+    }
+
+    const contributionMetadata = parseContributionMetadata(row.metadata, {
+      eventId: row.event_id,
+      note: null,
+    });
+    const contributionId = contributionMetadata.contribution_id;
+
+    const occupantMap = outstandingByOccupant.get(row.occupant_id) ?? new Map();
+    const existing =
+      occupantMap.get(contributionId) ?? {
+        title: contributionMetadata.contribution_title,
+        deadline: contributionMetadata.payable_deadline,
+        outstanding: 0,
+      };
+
+    const amount = Number(row.amount_pesos ?? 0);
+    if (row.entry_type === "payment" || amount < 0) {
+      existing.outstanding -= Math.abs(amount);
+    } else {
+      existing.outstanding += amount;
+    }
+
+    if (!existing.title && contributionMetadata.contribution_title) {
+      existing.title = contributionMetadata.contribution_title;
+    }
+    if (!existing.deadline && contributionMetadata.payable_deadline) {
+      existing.deadline = contributionMetadata.payable_deadline;
+    }
+
+    occupantMap.set(contributionId, existing);
+    outstandingByOccupant.set(row.occupant_id, occupantMap);
+  }
+
+  const reminderPayloadByOccupant = new Map<
+    string,
+    {
+      contributions: Array<{
+        title: string;
+        amountPesos: number;
+        deadlineIso: string | null;
+      }>;
+      totalAmountPesos: number;
+    }
+  >();
+
+  for (const [occupantId, contributionMap] of outstandingByOccupant.entries()) {
+    const contributions = Array.from(contributionMap.values())
+      .filter((item) => item.outstanding > 0.009)
+      .map((item) => ({
+        title: item.title,
+        amountPesos: Number(item.outstanding.toFixed(2)),
+        deadlineIso: item.deadline,
+      }))
+      .sort((a, b) => (a.title < b.title ? -1 : 1));
+
+    if (!contributions.length) {
+      continue;
+    }
+
+    const totalAmountPesos = Number(
+      contributions.reduce((sum, item) => sum + item.amountPesos, 0).toFixed(2)
+    );
+    reminderPayloadByOccupant.set(occupantId, { contributions, totalAmountPesos });
+  }
+
+  if (reminderPayloadByOccupant.size === 0) {
+    await sendDispatchReport({
+      targetCount: 0,
+      sentCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      details: [
+        {
+          occupantName: "All occupants",
+          recipientEmail: null,
+          status: "skipped",
+          reason: "No remaining payable contributions for the selected semesters.",
+        },
+      ],
+    });
+
+    return {
+      success: true,
+      sent_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      target_count: 0,
+    };
+  }
+
+  const occupantIds = Array.from(reminderPayloadByOccupant.keys());
+  const { data: occupantRows, error: occupantsError } = await supabase
+    .from("occupants")
+    .select("id, user_id, full_name, contact_email")
+    .eq("dorm_id", dormId)
+    .in("id", occupantIds);
+
+  if (occupantsError) {
+    return { error: occupantsError.message };
+  }
+
+  const occupantById = new Map(
+    (occupantRows ?? []).map((occupant) => [occupant.id, occupant] as const)
+  );
+
+  let adminClient: any = null;
+
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof adminClient;
+  }
+
+  let sentCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const deliveryDetails: Array<{
+    occupantName: string;
+    recipientEmail: string | null;
+    status: "sent" | "skipped" | "failed";
+    reason?: string | null;
+  }> = [];
+
+  for (const occupantId of occupantIds) {
+    const occupant = occupantById.get(occupantId);
+    const reminderPayload = reminderPayloadByOccupant.get(occupantId);
+    const occupantName = occupant?.full_name?.trim() || occupantId;
+    if (!occupant || !reminderPayload) {
+      skippedCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail: null,
+        status: "skipped",
+        reason: "Occupant record not found.",
+      });
+      continue;
+    }
+
+    let recipientEmail = occupant.contact_email?.trim() || "";
+    if (!recipientEmail && occupant.user_id && adminClient) {
+      const authUser = await adminClient.auth.admin.getUserById(occupant.user_id);
+      recipientEmail = authUser.data.user?.email?.trim() || "";
+    }
+
+    if (!recipientEmail) {
+      skippedCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail: null,
+        status: "skipped",
+        reason: "No recipient email found.",
+      });
+      continue;
+    }
+
+    const rendered = renderContributionPayableReminderEmail({
+      recipientName: occupant.full_name ?? null,
+      contributions: reminderPayload.contributions,
+      totalAmountPesos: reminderPayload.totalAmountPesos,
+      treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
+    });
+
+    const emailResult = await sendEmail({
+      to: recipientEmail,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+    });
+
+    if (emailResult.success) {
+      sentCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail,
+        status: "sent",
+        reason: null,
+      });
+    } else {
+      failedCount += 1;
+      const reason =
+        typeof emailResult.error === "string"
+          ? emailResult.error
+          : emailResult.error instanceof Error
+            ? emailResult.error.message
+            : "Unknown delivery error.";
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail,
+        status: "failed",
+        reason,
+      });
+      console.warn("Failed to send contribution reminder email:", emailResult.error);
+    }
+  }
+
+  await sendDispatchReport({
+    targetCount: occupantIds.length,
+    sentCount,
+    skippedCount,
+    failedCount,
+    details: deliveryDetails,
+  });
+
+  try {
+    await logAuditEvent({
+      dormId,
+      actorUserId: user.id,
+      action: "finance.contribution_reminders_sent",
+      entityType: "finance",
+      metadata: {
+        semester_ids: input.semester_ids ?? [],
+        target_count: occupantIds.length,
+        sent_count: sentCount,
+        skipped_count: skippedCount,
+        failed_count: failedCount,
+      },
+    });
+  } catch (auditError) {
+    console.error("Failed to write audit event for contribution reminders:", auditError);
+  }
+
+  return {
+    success: true,
+    sent_count: sentCount,
+    skipped_count: skippedCount,
+    failed_count: failedCount,
+    target_count: occupantIds.length,
   };
 }
 
@@ -1760,9 +2653,24 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const storeItemsByContribution = new Map(
+    contributionRows.map((row) => [row.contributionId, row.storeItems] as const)
+  );
+  const inputCartItemsByContribution = mapInputCartItemsByContribution(
+    input.cart_items,
+    storeItemsByContribution
+  );
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
-    dueByContribution.set(row.contributionId, Math.max(0, row.outstanding));
+    const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+    const effectiveCartItems =
+      suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+    const storeSubtotal =
+      row.storeItems.length > 0 ? sumCartSubtotal(effectiveCartItems, row.storeItems) : 0;
+    dueByContribution.set(
+      row.contributionId,
+      storeSubtotal > 0 ? storeSubtotal : Math.max(0, row.outstanding)
+    );
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
@@ -1785,10 +2693,20 @@ export async function previewContributionBatchPaymentEmail(
   }
 
   const allocRows = contributionRows
-    .map((row) => ({
-      ...row,
-      allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
-    }))
+    .map((row) => {
+      const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+      const effectiveCartItems =
+        suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+      const normalizedCartItems = normalizeCartItemsForContribution(
+        effectiveCartItems,
+        row.storeItems
+      );
+      return {
+        ...row,
+        cartItems: normalizedCartItems,
+        allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
+      };
+    })
     .filter((row) => row.allocation > 0);
 
   if (!allocRows.length) {
@@ -1868,23 +2786,10 @@ export async function previewContributionBatchPaymentEmail(
     paidAtIso: input.paid_at_iso,
     method: input.method,
     contributions: allocRows.map((row) => {
-      let orderItems;
-      if (row.cartItems && Array.isArray(row.cartItems)) {
-        orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
-          const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
-          const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
-          return {
-            itemName: catalogItem?.name ?? "Item",
-            options,
-            quantity: ci.quantity ?? 1,
-            subtotal: ci.subtotal ?? 0,
-          };
-        });
-      }
       return {
         title: row.title,
         amountPesos: row.allocation,
-        orderItems,
+        orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
       };
     }),
     totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),

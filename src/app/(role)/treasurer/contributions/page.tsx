@@ -8,6 +8,9 @@ import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
 import { ContributionBatchPaymentDialog } from "@/components/finance/contribution-batch-payment-dialog";
+import { ContributionResendReceiptDialog } from "@/components/finance/contribution-resend-receipt-dialog";
+import { ContributionListFilters } from "@/components/finance/contribution-list-filters";
+import { SendContributionRemindersButton } from "@/components/finance/send-contribution-reminders-button";
 import {
   Table,
   TableBody,
@@ -19,7 +22,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
 type SearchParams = {
   search?: string | string[];
@@ -220,9 +222,11 @@ export default async function EventsFinancePage({
   const activeSemesterId = semesterResult.semesterId;
   const activeSemester = await getActiveSemester(activeDormId, supabase);
 
+  const dormOptionsPromise = canFilterDorm ? getUserDorms() : Promise.resolve([]);
+
   const [semesterRows, dormOptions, { data: occupants }, { data: dormConfig }] = await Promise.all([
     listDormSemesters(activeDormId, supabase),
-    getUserDorms(),
+    dormOptionsPromise,
     supabase
       .from("occupants")
       .select("id, full_name, student_id")
@@ -441,86 +445,95 @@ export default async function EventsFinancePage({
     }));
 
   const occupantRemainingMap: Record<string, number> = {};
+  const occupantPaidMap: Record<string, number> = {};
   for (const entry of typedEntries) {
     if (!entry.occupant_id) continue;
     const metadata = parseContributionFromMetadata(entry, entry.event_id ? eventById.get(entry.event_id) ?? null : null);
     const amount = Number(entry.amount_pesos ?? 0);
     const key = `${entry.occupant_id}:${metadata.contributionId}`;
-    const delta = (amount < 0 || entry.entry_type === "payment") ? -Math.abs(amount) : amount;
+    const isPayment = amount < 0 || entry.entry_type === "payment";
+    const delta = isPayment ? -Math.abs(amount) : amount;
     occupantRemainingMap[key] = (occupantRemainingMap[key] ?? 0) + delta;
+    if (isPayment) {
+      occupantPaidMap[key] = (occupantPaidMap[key] ?? 0) + Math.abs(amount);
+    }
   }
+
+  const occupantOptions = (occupants ?? []).map((occupant) => ({
+    id: occupant.id,
+    fullName: occupant.full_name ?? "Unnamed",
+    studentId: occupant.student_id ?? null,
+  }));
+  const contributionOptions = contributionGroups.map((contribution) => ({
+    id: contribution.id,
+    title: contribution.title,
+  }));
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Contributions</h1>
-            <p className="text-sm text-muted-foreground">
-              Track contribution records, totals, and collection status.
-            </p>
-            {activeSemester ? (
-              <p className="text-xs text-muted-foreground mt-1">Active semester: {activeSemester.label}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {!isReadOnlyView ? (
-              <>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/treasurer/settings/receipt">Global Receipt Settings</Link>
-                </Button>
-                <ContributionBatchDialog
-                  dormId={activeDormId}
-                  events={Array.from(eventById.entries()).map(([id, title]) => ({ id, title }))}
-                  trigger={<Button size="sm">Add Contribution</Button>}
-                />
-                <LedgerOverwriteDialog dormId={activeDormId} />
-              </>
-            ) : (
-              <Badge variant="outline">Selected semesters are view-only</Badge>
-            )}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">Contributions</h1>
+              <p className="text-sm text-muted-foreground">
+                Track contribution records, totals, and collection status.
+              </p>
+              {activeSemester ? (
+                <p className="text-xs text-muted-foreground mt-1">Active semester: {activeSemester.label}</p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {!isReadOnlyView ? (
+                <>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/treasurer/settings/receipt">Global Receipt Settings</Link>
+                  </Button>
+                  <ContributionBatchDialog
+                    dormId={activeDormId}
+                    events={Array.from(eventById.entries()).map(([id, title]) => ({ id, title }))}
+                    trigger={<Button size="sm">Add Contribution</Button>}
+                  />
+                  <LedgerOverwriteDialog dormId={activeDormId} />
+                </>
+              ) : (
+                <Badge variant="outline">Selected semesters are view-only</Badge>
+              )}
 
-            <ExportXlsxDialog
-              report="event-contributions"
-              title="Export Event Contributions"
-              description="Download contribution summary and detailed ledger entries."
-              defaultDormId={activeDormId}
-              dormOptions={dormOptions}
-              includeDormSelector={canFilterDorm}
-            />
+              <ExportXlsxDialog
+                report="event-contributions"
+                title="Export Event Contributions"
+                description="Download contribution summary and detailed ledger entries."
+                defaultDormId={activeDormId}
+                dormOptions={dormOptions}
+                includeDormSelector={canFilterDorm}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ContributionResendReceiptDialog
+                dormId={activeDormId}
+                occupants={occupantOptions}
+                contributions={contributionOptions}
+                occupantContributionPaid={occupantPaidMap}
+              />
+              <SendContributionRemindersButton
+                dormId={activeDormId}
+                semesterIds={selectedSemesterIds}
+              />
+            </div>
           </div>
         </div>
 
         <div className="flex w-full flex-col gap-2 rounded-lg border border-muted bg-muted/20 p-3 sm:flex-row sm:items-center">
-          <form className="flex w-full flex-col gap-2 sm:flex-row sm:items-center" method="GET">
-            <Input
-              name="search"
-              placeholder="Search contribution..."
-              defaultValue={search}
-              className="h-9 w-full bg-background sm:w-60"
-            />
-            <select
-              name="semester"
-              defaultValue={selectedSemesterIds[0]}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm md:w-60"
-            >
-              {semesters.map((semester) => (
-                <option key={semester.id} value={semester.id}>
-                  {semester.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <Button type="submit" variant="secondary" size="sm" className="h-9">
-                Apply
-              </Button>
-              {search || semesterIdsFromParams.length > 0 ? (
-                <Button asChild type="button" variant="ghost" size="sm" className="h-9">
-                  <Link href="/treasurer/contributions">Reset</Link>
-                </Button>
-              ) : null}
-            </div>
-          </form>
+          <ContributionListFilters
+            defaultSemesterId={activeSemesterId}
+            initialSearch={search}
+            initialSemesterId={selectedSemesterIds[0]}
+            semesters={semesters.map((semester) => ({ id: semester.id, label: semester.label }))}
+          />
         </div>
       </div>
 
@@ -560,11 +573,7 @@ export default async function EventsFinancePage({
                 <ContributionBatchPaymentDialog
                   dormId={activeDormId}
                   contributions={payableContributionOptions}
-                  occupants={(occupants ?? []).map((occupant) => ({
-                    id: occupant.id,
-                    fullName: occupant.full_name ?? "Unnamed",
-                    studentId: occupant.student_id ?? null,
-                  }))}
+                  occupants={occupantOptions}
                   occupantContributionRemaining={occupantRemainingMap}
                   triggerVariant="outline"
                   triggerClassName="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 border-rose-200 shadow-sm transition-colors"

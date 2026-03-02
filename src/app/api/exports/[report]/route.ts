@@ -12,6 +12,11 @@ import {
   toIsoDate,
   workbookToBuffer,
 } from "@/lib/export/xlsx";
+import {
+  formatCartItemSpecs,
+  normalizeAndPriceCartItems,
+  normalizeStoreItems,
+} from "@/lib/store-pricing";
 
 type ReportKey =
   | "fines-ledger"
@@ -613,44 +618,44 @@ async function buildMaintenanceLedgerExport(context: ExportContext): Promise<Exp
 }
 
 async function buildEventContributionExport(context: ExportContext): Promise<ExportPayload> {
-  type EntryRow = {
-    posted_at: string;
-    event_title: string;
-    occupant_name: string;
-    student_id: string;
-    entry_type: string;
-    amount_pesos: number;
-    method: string;
-    note: string;
-  };
-
   type LedgerRow = {
+    id: string;
     event_id: string | null;
+    occupant_id: string | null;
     posted_at: string;
     entry_type: string;
     amount_pesos: number;
     method: string | null;
     note: string | null;
+    metadata: Record<string, unknown> | null;
     event: JoinValue<{ title: string | null }>;
     occupant: JoinValue<{ full_name: string | null; student_id: string | null }>;
   };
 
+  const requestedContributionIdRaw = context.searchParams.get("contribution_id");
+  const requestedContributionId =
+    typeof requestedContributionIdRaw === "string" && requestedContributionIdRaw.trim().length > 0
+      ? requestedContributionIdRaw.trim()
+      : null;
+
   let query = context.supabase
     .from("ledger_entries")
     .select(
-      "event_id, posted_at, entry_type, amount_pesos, method, note, event:events(title), occupant:occupants(full_name, student_id), voided_at"
+      "id, event_id, occupant_id, posted_at, entry_type, amount_pesos, method, note, metadata, event:events(title), occupant:occupants(full_name, student_id), voided_at"
     )
     .eq("dorm_id", context.dormId)
     .eq("ledger", "contributions")
     .is("voided_at", null)
     .order("posted_at", { ascending: false });
 
-  query = applyTimestampRange(
-    query,
-    "posted_at",
-    context.rangeStartIso,
-    context.rangeEndIso
-  );
+  if (!requestedContributionId) {
+    query = applyTimestampRange(
+      query,
+      "posted_at",
+      context.rangeStartIso,
+      context.rangeEndIso
+    );
+  }
 
   const { data, error } = await query;
   if (error) {
@@ -659,90 +664,339 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
 
   const rows = (data ?? []) as LedgerRow[];
 
-  const summaryByEvent = new Map<string, { event_title: string; charged: number; collected: number; balance: number }>();
-  const entryRows: EntryRow[] = [];
-
-  for (const row of rows) {
+  const parsedRows = rows.map((row) => {
     const event = firstJoin(row.event);
     const occupant = firstJoin(row.occupant);
-    const eventTitle = event?.title ?? "Unlinked event";
-    const eventKey = row.event_id ?? `unlinked-${eventTitle}`;
-    const amount = Number(row.amount_pesos);
+    const eventTitle = event?.title?.trim() || "Unlinked event";
+    const metadata =
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as Record<string, unknown>)
+        : ({} as Record<string, unknown>);
+    const contributionIdRaw =
+      metadata.contribution_id ??
+      metadata.payable_batch_id ??
+      row.event_id ??
+      row.id;
+    const contributionId =
+      typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
+        ? contributionIdRaw.trim()
+        : row.id;
+    const contributionTitleRaw =
+      metadata.contribution_title ??
+      metadata.payable_label ??
+      row.note ??
+      eventTitle;
+    const contributionTitle =
+      typeof contributionTitleRaw === "string" && contributionTitleRaw.trim().length > 0
+        ? contributionTitleRaw.trim()
+        : "Contribution";
 
+    return {
+      row,
+      amount: Number(row.amount_pesos ?? 0),
+      eventTitle,
+      contributionId,
+      contributionTitle,
+      occupantName: occupant?.full_name ?? "",
+      studentId: occupant?.student_id ?? "",
+    };
+  });
+
+  const filteredRows = requestedContributionId
+    ? parsedRows.filter((item) => item.contributionId === requestedContributionId)
+    : parsedRows;
+
+  if (requestedContributionId && filteredRows.length === 0) {
+    throw new Error("No ledger entries found for the selected contribution.");
+  }
+
+  const summaryByContribution = new Map<
+    string,
+    {
+      contribution: string;
+      linkedEvent: string;
+      charged: number;
+      collected: number;
+      balance: number;
+      participantIds: Set<string>;
+    }
+  >();
+
+  const perPerson = new Map<
+    string,
+    {
+      contribution: string;
+      occupantName: string;
+      studentId: string;
+      payable: number;
+      paid: number;
+      balance: number;
+    }
+  >();
+
+  const paymentRows: Array<{
+    paidFor: string;
+    occupantName: string;
+    studentId: string;
+    datePaid: string;
+    amountPaid: number;
+    method: string;
+    note: string;
+    storeDetails: string;
+  }> = [];
+  const storeOrderRows: Array<{
+    datePaid: string;
+    paidFor: string;
+    occupantName: string;
+    studentId: string;
+    itemName: string;
+    specs: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    method: string;
+    note: string;
+  }> = [];
+
+  const entryRows = filteredRows.map((item) => ({
+    "Contribution": item.contributionTitle,
+    "Linked Event": item.eventTitle,
+    "Name": item.occupantName,
+    "Student ID": item.studentId,
+    "Date": formatTimestamp(item.row.posted_at),
+    "Type": item.row.entry_type,
+    "Amount (₱)": formatPeso(item.amount),
+    "Method": item.row.method ?? "",
+    "Note": item.row.note ?? "",
+  }));
+
+  for (const item of filteredRows) {
     const summary =
-      summaryByEvent.get(eventKey) ??
+      summaryByContribution.get(item.contributionId) ??
       {
-        event_title: eventTitle,
+        contribution: item.contributionTitle,
+        linkedEvent: item.eventTitle,
         charged: 0,
         collected: 0,
         balance: 0,
+        participantIds: new Set<string>(),
       };
 
-    if (amount >= 0) {
-      summary.charged += amount;
-    } else {
-      summary.collected += Math.abs(amount);
-    }
-    summary.balance = summary.charged - summary.collected;
-    summaryByEvent.set(eventKey, summary);
+    if (item.amount < 0 || item.row.entry_type === "payment") {
+      summary.collected += Math.abs(item.amount);
+      const metadata =
+        item.row.metadata && typeof item.row.metadata === "object"
+          ? (item.row.metadata as Record<string, unknown>)
+          : {};
+      const storeItems = normalizeStoreItems(metadata.store_items);
+      const cartItems = normalizeAndPriceCartItems(metadata.cart_items, storeItems);
+      const storeDetails = cartItems
+        .map((cartItem) => {
+          const storeItem = storeItems.find((entry) => entry.id === cartItem.item_id);
+          const itemName = storeItem?.name ?? "Item";
+          const specs = formatCartItemSpecs(cartItem.options);
+          const quantity = Math.max(1, Number(cartItem.quantity ?? 1));
+          const subtotal = Math.max(0, Number(cartItem.subtotal ?? 0));
+          const unitPrice = quantity > 0 ? Number((subtotal / quantity).toFixed(2)) : subtotal;
 
-    entryRows.push({
-      posted_at: formatTimestamp(row.posted_at),
-      event_title: eventTitle,
-      occupant_name: occupant?.full_name ?? "",
-      student_id: occupant?.student_id ?? "",
-      entry_type: row.entry_type,
-      amount_pesos: formatPeso(amount),
-      method: row.method ?? "",
-      note: row.note ?? "",
-    });
+          storeOrderRows.push({
+            datePaid: formatTimestamp(item.row.posted_at),
+            paidFor: item.contributionTitle,
+            occupantName: item.occupantName,
+            studentId: item.studentId,
+            itemName,
+            specs: specs || "",
+            quantity,
+            unitPrice,
+            subtotal,
+            method: item.row.method ?? "",
+            note: item.row.note ?? "",
+          });
+
+          return `${quantity}x ${itemName}${specs ? ` (${specs})` : ""}`;
+        })
+        .join(" | ");
+
+      paymentRows.push({
+        paidFor: item.contributionTitle,
+        occupantName: item.occupantName,
+        studentId: item.studentId,
+        datePaid: formatTimestamp(item.row.posted_at),
+        amountPaid: formatPeso(Math.abs(item.amount)),
+        method: item.row.method ?? "",
+        note: item.row.note ?? "",
+        storeDetails,
+      });
+    } else {
+      summary.charged += item.amount;
+    }
+
+    summary.balance = summary.charged - summary.collected;
+    if (item.row.occupant_id) {
+      summary.participantIds.add(item.row.occupant_id);
+    }
+    summaryByContribution.set(item.contributionId, summary);
+
+    const personKey = `${item.contributionId}:${item.row.occupant_id ?? "unassigned"}`;
+    const person =
+      perPerson.get(personKey) ??
+      {
+        contribution: item.contributionTitle,
+        occupantName: item.occupantName,
+        studentId: item.studentId,
+        payable: 0,
+        paid: 0,
+        balance: 0,
+      };
+
+    if (item.amount < 0 || item.row.entry_type === "payment") {
+      person.paid += Math.abs(item.amount);
+    } else {
+      person.payable += item.amount;
+    }
+    person.balance = person.payable - person.paid;
+    perPerson.set(personKey, person);
   }
 
-  const summaryRows = [...summaryByEvent.values()]
-    .sort((left, right) => left.event_title.localeCompare(right.event_title))
+  const summaryRows = [...summaryByContribution.values()]
+    .sort((left, right) => left.contribution.localeCompare(right.contribution))
     .map((row) => ({
-      "Event": row.event_title,
+      "Contribution": row.contribution,
+      "Linked Event": row.linkedEvent,
       "Charged (₱)": formatPeso(row.charged),
       "Collected (₱)": formatPeso(row.collected),
+      "Balance (₱)": formatPeso(row.balance),
+      "Participants": row.participantIds.size,
+      "Status": row.balance <= 0 ? "Settled" : "Open",
+    }));
+
+  const perPersonRows = [...perPerson.values()]
+    .sort((left, right) => {
+      const byContribution = left.contribution.localeCompare(right.contribution);
+      if (byContribution !== 0) {
+        return byContribution;
+      }
+      return left.occupantName.localeCompare(right.occupantName);
+    })
+    .map((row) => ({
+      "Contribution": row.contribution,
+      "Name": row.occupantName,
+      "Student ID": row.studentId,
+      "Total Payable (₱)": formatPeso(row.payable),
+      "Total Paid (₱)": formatPeso(row.paid),
       "Balance (₱)": formatPeso(row.balance),
     }));
 
   const workbook = buildWorkbook();
-  appendSheet(workbook, "Event Summary", summaryRows, [
-    "Event",
+  appendSheet(workbook, "Contribution Summary", summaryRows, [
+    "Contribution",
+    "Linked Event",
     "Charged (₱)",
     "Collected (₱)",
     "Balance (₱)",
+    "Participants",
+    "Status",
   ]);
-  appendSheet(workbook, "Event Entries", entryRows.map(r => ({
-    "Date": r.posted_at,
-    "Event": r.event_title,
-    "Occupant": r.occupant_name,
-    "Student ID": r.student_id,
-    "Type": r.entry_type,
-    "Amount (₱)": r.amount_pesos,
-    "Method": r.method,
-    "Note": r.note,
-  })), [
-    "Date",
-    "Event",
-    "Occupant",
+  appendSheet(workbook, "Per Person", perPersonRows, [
+    "Contribution",
+    "Name",
     "Student ID",
-    "Type",
-    "Amount (₱)",
-    "Method",
-    "Note",
+    "Total Payable (₱)",
+    "Total Paid (₱)",
+    "Balance (₱)",
   ]);
-  appendMetadataSheet(workbook, [
+  appendSheet(
+    workbook,
+    "Payments",
+    paymentRows.map((row) => ({
+      "Date & Time Paid": row.datePaid,
+      "Name": row.occupantName,
+      "Student ID": row.studentId,
+      "Paid For": row.paidFor,
+      "Amount Paid (₱)": row.amountPaid,
+      "Store Item Specs": row.storeDetails,
+      "Method": row.method,
+      "Note": row.note,
+    })),
+    [
+      "Date & Time Paid",
+      "Name",
+      "Student ID",
+      "Paid For",
+      "Amount Paid (₱)",
+      "Store Item Specs",
+      "Method",
+      "Note",
+    ]
+  );
+  if (storeOrderRows.length > 0) {
+    appendSheet(
+      workbook,
+      "Store Orders",
+      storeOrderRows.map((row) => ({
+        "Date & Time Paid": row.datePaid,
+        "Paid For": row.paidFor,
+        "Name": row.occupantName,
+        "Student ID": row.studentId,
+        "Item": row.itemName,
+        "Specs / Choices": row.specs,
+        "Qty": row.quantity,
+        "Unit Price (₱)": formatPeso(row.unitPrice),
+        "Subtotal (₱)": formatPeso(row.subtotal),
+        "Method": row.method,
+        "Note": row.note,
+      })),
+      [
+        "Date & Time Paid",
+        "Paid For",
+        "Name",
+        "Student ID",
+        "Item",
+        "Specs / Choices",
+        "Qty",
+        "Unit Price (₱)",
+        "Subtotal (₱)",
+        "Method",
+        "Note",
+      ]
+    );
+  }
+  if (!requestedContributionId) {
+    appendSheet(workbook, "Entries", entryRows, [
+      "Contribution",
+      "Linked Event",
+      "Name",
+      "Student ID",
+      "Date",
+      "Type",
+      "Amount (₱)",
+      "Method",
+      "Note",
+    ]);
+  }
+  const metadataRows = [
     { key: "Report", value: "Event Contributions" },
     { key: "Dorm", value: context.dormName },
-    { key: "Date start", value: context.rangeStartRaw ?? "(none)" },
-    { key: "Date end", value: context.rangeEndRaw ?? "(none)" },
+    {
+      key: "Contribution filter",
+      value: requestedContributionId ?? "All contributions",
+    },
     { key: "Generated at", value: new Date().toISOString() },
-  ]);
+  ];
+  if (!requestedContributionId) {
+    metadataRows.splice(3, 0,
+      { key: "Date start", value: context.rangeStartRaw ?? "(none)" },
+      { key: "Date end", value: context.rangeEndRaw ?? "(none)" }
+    );
+  }
+  appendMetadataSheet(workbook, metadataRows);
+
+  const fileName = requestedContributionId
+    ? `contribution-${context.dormSlug}-${todaySuffix()}.xlsx`
+    : `event-contributions-${context.dormSlug}-${todaySuffix()}.xlsx`;
 
   return {
-    fileName: `event-contributions-${context.dormSlug}-${todaySuffix()}.xlsx`,
+    fileName,
     buffer: workbookToBuffer(workbook),
   };
 }

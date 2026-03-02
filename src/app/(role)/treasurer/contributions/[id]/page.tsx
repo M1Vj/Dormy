@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, ArrowLeft, CheckCircle, ReceiptText, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
-import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
+import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
+import { ContributionDetailsFilters } from "@/components/finance/contribution-details-filters";
 import { ContributionPayableOverrideDialog } from "@/components/finance/contribution-payable-override-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -437,17 +437,18 @@ export default async function EventDetailsPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0">
-          {!isReadOnlyView ? (
-            <>
-              <LedgerOverwriteDialog dormId={dormId} />
-              <ContributionBatchDialog
-                dormId={dormId}
-                trigger={<Button variant="outline">Create Another Contribution</Button>}
-              />
-            </>
-          ) : (
+          {!isReadOnlyView ? <LedgerOverwriteDialog dormId={dormId} /> : (
             <Badge variant="outline">View-only semester</Badge>
           )}
+          <ExportXlsxDialog
+            report="event-contributions"
+            title="Export Contribution Report"
+            description="Download all records for this contribution, including payment history."
+            triggerLabel="Export Contribution"
+            defaultDormId={dormId}
+            includeDateRange={false}
+            defaultParams={{ contribution_id: contributionId }}
+          />
         </div>
       </div>
 
@@ -508,34 +509,11 @@ export default async function EventDetailsPage({
       <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md border-muted">
         <CardHeader className="space-y-4">
           <CardTitle>Occupant payments</CardTitle>
-          <form className="grid gap-2 sm:grid-cols-[1fr_180px_auto]" method="GET">
-            <Input
-              name="search"
-              placeholder="Search occupant or ID"
-              defaultValue={search}
-              className="w-full"
-            />
-            <select
-              name="status"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              defaultValue={statusFilter}
-            >
-              <option value="">All statuses</option>
-              <option value="paid">Paid</option>
-              <option value="partial">Partial</option>
-              <option value="unpaid">Unpaid</option>
-            </select>
-            <div className="flex gap-2">
-              <Button type="submit" variant="secondary" size="sm" className="w-full">
-                Filter
-              </Button>
-              {search || statusFilter ? (
-                <Button asChild type="button" variant="ghost" size="sm" className="w-full">
-                  <Link href={`/treasurer/contributions/${contributionId}`}>Reset</Link>
-                </Button>
-              ) : null}
-            </div>
-          </form>
+          <ContributionDetailsFilters
+            contributionId={contributionId}
+            initialSearch={search}
+            initialStatus={statusFilter}
+          />
         </CardHeader>
         <CardContent>
           <div className="space-y-3 md:hidden">
@@ -687,46 +665,48 @@ export default async function EventDetailsPage({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {!isReadOnlyView ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <div>
-                            <ContributionPayableOverrideDialog
-                              key={`desktop-override-${occupant.id}`}
-                              dormId={dormId}
-                              contributionId={contributionId}
-                              occupantId={occupant.id}
-                              currentPayable={occupant.payable}
-                              variant="secondary"
-                            />
-                          </div>
-                          <div>
-                            <PaymentDialog
-                              key={`desktop-pay-${occupant.id}`}
-                              dormId={dormId}
-                              occupantId={occupant.id}
-                              category="contributions"
-                              eventTitle={contributionTitle}
-                              metadata={{
-                                contribution_id: contributionId,
-                                contribution_title: contributionTitle,
-                                contribution_details: contributionDetails,
-                                contribution_event_title: linkedEventTitle,
-                                payable_deadline: occupant.deadline,
-                                has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
-                                has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
-                                has_contribution_receipt_message: Boolean(contributionReceiptMessage),
-                                has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
-                                is_store: isStore,
-                                store_items: storeItems,
-                              }}
-                              triggerText="Record Pay"
-                              triggerVariant="outline"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">View only</span>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {!isReadOnlyView ? (
+                          <>
+                            <div>
+                              <ContributionPayableOverrideDialog
+                                key={`desktop-override-${occupant.id}`}
+                                dormId={dormId}
+                                contributionId={contributionId}
+                                occupantId={occupant.id}
+                                currentPayable={occupant.payable}
+                                variant="secondary"
+                              />
+                            </div>
+                            <div>
+                              <PaymentDialog
+                                key={`desktop-pay-${occupant.id}`}
+                                dormId={dormId}
+                                occupantId={occupant.id}
+                                category="contributions"
+                                eventTitle={contributionTitle}
+                                metadata={{
+                                  contribution_id: contributionId,
+                                  contribution_title: contributionTitle,
+                                  contribution_details: contributionDetails,
+                                  contribution_event_title: linkedEventTitle,
+                                  payable_deadline: occupant.deadline,
+                                  has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
+                                  has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
+                                  has_contribution_receipt_message: Boolean(contributionReceiptMessage),
+                                  has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                  is_store: isStore,
+                                  store_items: storeItems,
+                                }}
+                                triggerText="Record Pay"
+                                triggerVariant="outline"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">View only</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

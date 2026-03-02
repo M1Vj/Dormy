@@ -10,9 +10,10 @@ import { notFound } from "next/navigation";
 export default async function PublicContributionPage({
   params,
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
-  const result = await getPublicContributionSummaryAction(params.token);
+  const resolvedParams = await params;
+  const result = await getPublicContributionSummaryAction(resolvedParams.token);
 
   if (!result.success || !result.summary) {
     notFound();
