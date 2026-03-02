@@ -51,6 +51,19 @@ const storeItemSchema = z.object({
   options: z.array(storeOptionSchema).default([]),
 });
 
+const storeCartItemOptionSchema = z.object({
+  name: z.string().trim().max(120).optional(),
+  value: z.string().trim().max(120),
+});
+
+const storeCartItemSchema = z.object({
+  contribution_id: z.string().uuid(),
+  item_id: z.string().uuid(),
+  quantity: z.number().int().positive(),
+  options: z.array(storeCartItemOptionSchema).default([]),
+  subtotal: z.number().min(0),
+});
+
 const contributionBatchSchema = z.object({
   amount: z.number().min(0),
   title: z.string().trim().min(2).max(120),
@@ -77,6 +90,7 @@ const contributionBatchPaymentSchema = z.object({
   receipt_message: z.string().trim().max(2000).optional().nullable(),
   receipt_signature: z.string().trim().max(3000).optional().nullable(),
   receipt_logo_url: z.string().url().optional().nullable(),
+  cart_items: z.array(storeCartItemSchema).optional(),
 });
 
 const contributionReceiptSignatureSchema = z.object({
@@ -219,6 +233,97 @@ function parseContributionMetadata(
     store_items: Array.isArray(metadata.store_items) ? (metadata.store_items as ContributionMetadata["store_items"]) : [],
     cart_items: Array.isArray(metadata.cart_items) ? (metadata.cart_items as ContributionMetadata["cart_items"]) : [],
   };
+}
+
+function normalizeOrderOptionLabel(option: unknown) {
+  if (typeof option === "string") {
+    const value = option.trim();
+    return value.length > 0 ? value : null;
+  }
+  if (!option || typeof option !== "object") {
+    return null;
+  }
+
+  const record = option as Record<string, unknown>;
+  const name = typeof record.name === "string" ? record.name.trim() : "";
+  const value = typeof record.value === "string" ? record.value.trim() : "";
+
+  if (!value) {
+    return null;
+  }
+  return name ? `${name}: ${value}` : value;
+}
+
+function sumCartSubtotal(cartItems: ContributionMetadata["cart_items"] | undefined) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    return 0;
+  }
+
+  return Number(
+    cartItems
+      .reduce((sum, item) => sum + Math.max(0, Number(item.subtotal ?? 0)), 0)
+      .toFixed(2)
+  );
+}
+
+function buildOrderItemsFromCart(
+  cartItems: ContributionMetadata["cart_items"] | undefined,
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    return undefined;
+  }
+
+  const catalog = Array.isArray(storeItems) ? storeItems : [];
+  const rows = cartItems
+    .map((cartItem) => {
+      const catalogItem = catalog.find((item) => item.id === cartItem.item_id);
+      const fallbackItem = cartItem as unknown as { item?: { name?: string } };
+      const options = Array.isArray(cartItem.options)
+        ? cartItem.options
+            .map(normalizeOrderOptionLabel)
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      return {
+        itemName: catalogItem?.name ?? fallbackItem.item?.name ?? "Item",
+        options,
+        quantity: Math.max(1, Number(cartItem.quantity ?? 1)),
+        subtotal: Math.max(0, Number(cartItem.subtotal ?? 0)),
+      };
+    })
+    .filter((item) => item.quantity > 0);
+
+  return rows.length > 0 ? rows : undefined;
+}
+
+function mapInputCartItemsByContribution(
+  inputItems: z.infer<typeof storeCartItemSchema>[] | undefined
+) {
+  const mapped = new Map<string, ContributionMetadata["cart_items"]>();
+  if (!Array.isArray(inputItems) || inputItems.length === 0) {
+    return mapped;
+  }
+
+  for (const item of inputItems) {
+    const normalized = {
+      item_id: item.item_id,
+      quantity: Math.max(1, Number(item.quantity ?? 1)),
+      options: (item.options ?? [])
+        .map((option) => ({
+          name: typeof option.name === "string" ? option.name.trim() : "",
+          value: option.value.trim(),
+        }))
+        .filter((option) => option.value.length > 0),
+      subtotal: Math.max(0, Number(item.subtotal ?? 0)),
+    };
+
+    const list = mapped.get(item.contribution_id) ?? [];
+    list.push(normalized);
+    mapped.set(item.contribution_id, list);
+  }
+
+  return mapped;
 }
 
 export async function createTreasurerFinanceManualEntry(
@@ -612,25 +717,10 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         globalTemplate.logo_url || globalTemplate.logoUrl ||
         null;
 
-      let orderItems;
-      if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
-        const catalogItems = contributionMetadata.store_items ?? [];
-        orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
-          let options: string[] = [];
-
-          if (Array.isArray(cartItem.options)) {
-            options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
-          }
-
-          const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
-          return {
-            itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
-            options,
-            quantity: cartItem.quantity ?? 1,
-            subtotal: cartItem.subtotal ?? 0,
-          };
-        });
-      }
+      const orderItems = buildOrderItemsFromCart(
+        contributionMetadata?.cart_items,
+        contributionMetadata?.store_items
+      );
 
       const rendered = renderPaymentReceiptEmail({
         treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
@@ -817,25 +907,10 @@ export async function previewTransactionReceiptEmail(
     globalTemplate.logo_url || globalTemplate.logoUrl ||
     null;
 
-  let orderItems;
-  if (contributionMetadata?.cart_items && Array.isArray(contributionMetadata.cart_items)) {
-    const catalogItems = contributionMetadata.store_items ?? [];
-    orderItems = contributionMetadata.cart_items.map((cartItem: any) => {
-      let options: string[] = [];
-
-      if (Array.isArray(cartItem.options)) {
-        options = cartItem.options.filter(Boolean).map((o: any) => `${o.name}: ${o.value}`);
-      }
-
-      const catalogItem = catalogItems.find((si: { id: string; name: string }) => si.id === cartItem.item_id);
-      return {
-        itemName: catalogItem?.name ?? cartItem.item?.name ?? "Item",
-        options,
-        quantity: cartItem.quantity ?? 1,
-        subtotal: cartItem.subtotal ?? 0,
-      };
-    });
-  }
+  const orderItems = buildOrderItemsFromCart(
+    contributionMetadata?.cart_items,
+    contributionMetadata?.store_items
+  );
 
   const { renderPaymentReceiptEmail } = await import("@/lib/email");
   const rendered = renderPaymentReceiptEmail({
@@ -1396,9 +1471,18 @@ export async function recordContributionBatchPayment(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const inputCartItemsByContribution = mapInputCartItemsByContribution(input.cart_items);
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
-    dueByContribution.set(row.contributionId, Math.max(0, row.outstanding));
+    const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+    const effectiveCartItems =
+      suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+    const storeSubtotal =
+      row.storeItems.length > 0 ? sumCartSubtotal(effectiveCartItems) : 0;
+    dueByContribution.set(
+      row.contributionId,
+      storeSubtotal > 0 ? storeSubtotal : Math.max(0, row.outstanding)
+    );
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
@@ -1423,10 +1507,16 @@ export async function recordContributionBatchPayment(
   }
 
   const allocRows = contributionRows
-    .map((row) => ({
-      ...row,
-      allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
-    }))
+    .map((row) => {
+      const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+      const effectiveCartItems =
+        suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+      return {
+        ...row,
+        cartItems: effectiveCartItems,
+        allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
+      };
+    })
     .filter((row) => row.allocation > 0);
 
   if (!allocRows.length) {
@@ -1483,6 +1573,62 @@ export async function recordContributionBatchPayment(
       }
     ) as typeof supabase;
   }
+
+  const storeRowsToUpdate = allocRows.filter(
+    (row) => row.storeItems.length > 0 && row.cartItems.length > 0
+  );
+
+  if (storeRowsToUpdate.length > 0) {
+    const { data: chargeEntries, error: chargeLookupError } = await writeClient
+      .from("ledger_entries")
+      .select("id, metadata")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", input.occupant_id)
+      .eq("entry_type", "charge")
+      .eq("ledger", "contributions")
+      .is("voided_at", null);
+
+    if (chargeLookupError) {
+      return { error: chargeLookupError.message };
+    }
+
+    for (const row of storeRowsToUpdate) {
+      const chargeEntry = (chargeEntries ?? []).find((entry) => {
+        const metadata =
+          typeof entry.metadata === "object" && entry.metadata !== null
+            ? (entry.metadata as Record<string, unknown>)
+            : {};
+        return metadata.contribution_id === row.contributionId;
+      });
+
+      if (!chargeEntry) {
+        continue;
+      }
+
+      const updatedMetadata = {
+        ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null
+          ? chargeEntry.metadata
+          : {}),
+        is_store: true,
+        store_items: row.storeItems,
+        cart_items: row.cartItems,
+      };
+
+      const chargeAmount = sumCartSubtotal(row.cartItems) || Math.abs(row.allocation);
+      const { error: updateError } = await writeClient
+        .from("ledger_entries")
+        .update({
+          amount_pesos: chargeAmount,
+          metadata: updatedMetadata,
+        })
+        .eq("id", chargeEntry.id);
+
+      if (updateError) {
+        return { error: updateError.message };
+      }
+    }
+  }
+
   const { error: insertError } = await writeClient.from("ledger_entries").insert(
     allocRows.map((row) => ({
       dorm_id: dormId,
@@ -1505,6 +1651,9 @@ export async function recordContributionBatchPayment(
         contribution_receipt_subject: row.receiptSubject,
         contribution_receipt_message: row.receiptMessage,
         contribution_receipt_logo_url: row.receiptLogoUrl,
+        is_store: row.storeItems.length > 0,
+        store_items: row.storeItems,
+        cart_items: row.cartItems,
         payment_batch_id: batchPaymentId,
         payment_allocation_pesos: row.allocation,
       },
@@ -1576,23 +1725,10 @@ export async function recordContributionBatchPayment(
           paidAtIso: input.paid_at_iso,
           method: input.method,
           contributions: allocRows.map((row) => {
-            let orderItems;
-            if (row.cartItems && Array.isArray(row.cartItems)) {
-              orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
-                const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
-                const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
-                return {
-                  itemName: catalogItem?.name ?? "Item",
-                  options,
-                  quantity: ci.quantity ?? 1,
-                  subtotal: ci.subtotal ?? 0,
-                };
-              });
-            }
             return {
               title: row.title,
               amountPesos: row.allocation,
-              orderItems,
+              orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
             };
           }),
           totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
@@ -1760,9 +1896,18 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const inputCartItemsByContribution = mapInputCartItemsByContribution(input.cart_items);
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
-    dueByContribution.set(row.contributionId, Math.max(0, row.outstanding));
+    const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+    const effectiveCartItems =
+      suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+    const storeSubtotal =
+      row.storeItems.length > 0 ? sumCartSubtotal(effectiveCartItems) : 0;
+    dueByContribution.set(
+      row.contributionId,
+      storeSubtotal > 0 ? storeSubtotal : Math.max(0, row.outstanding)
+    );
   }
 
   const totalDue = Array.from(dueByContribution.values()).reduce((sum, value) => sum + value, 0);
@@ -1785,10 +1930,16 @@ export async function previewContributionBatchPaymentEmail(
   }
 
   const allocRows = contributionRows
-    .map((row) => ({
-      ...row,
-      allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
-    }))
+    .map((row) => {
+      const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
+      const effectiveCartItems =
+        suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
+      return {
+        ...row,
+        cartItems: effectiveCartItems,
+        allocation: Number((allocations.get(row.contributionId) ?? 0).toFixed(2)),
+      };
+    })
     .filter((row) => row.allocation > 0);
 
   if (!allocRows.length) {
@@ -1868,23 +2019,10 @@ export async function previewContributionBatchPaymentEmail(
     paidAtIso: input.paid_at_iso,
     method: input.method,
     contributions: allocRows.map((row) => {
-      let orderItems;
-      if (row.cartItems && Array.isArray(row.cartItems)) {
-        orderItems = row.cartItems.map((ci: { item_id: string; quantity: number; options: Array<{ name: string; value: string }>; subtotal: number }) => {
-          const catalogItem = (row.storeItems ?? []).find((si: { id: string; name: string }) => si.id === ci.item_id);
-          const options = (ci.options ?? []).map((o: { name: string; value: string }) => `${o.name}: ${o.value}`).filter(Boolean);
-          return {
-            itemName: catalogItem?.name ?? "Item",
-            options,
-            quantity: ci.quantity ?? 1,
-            subtotal: ci.subtotal ?? 0,
-          };
-        });
-      }
       return {
         title: row.title,
         amountPesos: row.allocation,
-        orderItems,
+        orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
       };
     }),
     totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
