@@ -665,46 +665,48 @@ export default async function EventDetailsPage({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {!isReadOnlyView ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <div>
-                            <ContributionPayableOverrideDialog
-                              key={`desktop-override-${occupant.id}`}
-                              dormId={dormId}
-                              contributionId={contributionId}
-                              occupantId={occupant.id}
-                              currentPayable={occupant.payable}
-                              variant="secondary"
-                            />
-                          </div>
-                          <div>
-                            <PaymentDialog
-                              key={`desktop-pay-${occupant.id}`}
-                              dormId={dormId}
-                              occupantId={occupant.id}
-                              category="contributions"
-                              eventTitle={contributionTitle}
-                              metadata={{
-                                contribution_id: contributionId,
-                                contribution_title: contributionTitle,
-                                contribution_details: contributionDetails,
-                                contribution_event_title: linkedEventTitle,
-                                payable_deadline: occupant.deadline,
-                                has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
-                                has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
-                                has_contribution_receipt_message: Boolean(contributionReceiptMessage),
-                                has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
-                                is_store: isStore,
-                                store_items: storeItems,
-                              }}
-                              triggerText="Record Pay"
-                              triggerVariant="outline"
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">View only</span>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {!isReadOnlyView ? (
+                          <>
+                            <div>
+                              <ContributionPayableOverrideDialog
+                                key={`desktop-override-${occupant.id}`}
+                                dormId={dormId}
+                                contributionId={contributionId}
+                                occupantId={occupant.id}
+                                currentPayable={occupant.payable}
+                                variant="secondary"
+                              />
+                            </div>
+                            <div>
+                              <PaymentDialog
+                                key={`desktop-pay-${occupant.id}`}
+                                dormId={dormId}
+                                occupantId={occupant.id}
+                                category="contributions"
+                                eventTitle={contributionTitle}
+                                metadata={{
+                                  contribution_id: contributionId,
+                                  contribution_title: contributionTitle,
+                                  contribution_details: contributionDetails,
+                                  contribution_event_title: linkedEventTitle,
+                                  payable_deadline: occupant.deadline,
+                                  has_contribution_receipt_signature: Boolean(contributionReceiptSignature),
+                                  has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
+                                  has_contribution_receipt_message: Boolean(contributionReceiptMessage),
+                                  has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                  is_store: isStore,
+                                  store_items: storeItems,
+                                }}
+                                triggerText="Record Pay"
+                                triggerVariant="outline"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">View only</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
