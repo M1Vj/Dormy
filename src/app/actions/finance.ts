@@ -2196,6 +2196,60 @@ export async function sendContributionPayableReminders(
     return { error: "Only admins and treasurers can send contribution reminders." };
   }
 
+  const {
+    sendEmail,
+    renderContributionPayableReminderEmail,
+    renderContributionReminderDispatchReportEmail,
+  } = await import("@/lib/email");
+  const actorEmail = user.email?.trim() || "";
+  const actorName =
+    typeof user.user_metadata?.full_name === "string" &&
+    user.user_metadata.full_name.trim().length > 0
+      ? user.user_metadata.full_name.trim()
+      : user.email || null;
+
+  const sendDispatchReport = async (input: {
+    targetCount: number;
+    sentCount: number;
+    skippedCount: number;
+    failedCount: number;
+    details: Array<{
+      occupantName: string;
+      recipientEmail: string | null;
+      status: "sent" | "skipped" | "failed";
+      reason?: string | null;
+    }>;
+  }) => {
+    if (!actorEmail) {
+      return;
+    }
+
+    try {
+      const rendered = renderContributionReminderDispatchReportEmail({
+        actorName,
+        targetCount: input.targetCount,
+        sentCount: input.sentCount,
+        skippedCount: input.skippedCount,
+        failedCount: input.failedCount,
+        details: input.details,
+        generatedAtIso: new Date().toISOString(),
+      });
+
+      const reportResult = await sendEmail({
+        to: actorEmail,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+
+      if (!reportResult.success) {
+        console.warn("Failed to send contribution reminder report email:", reportResult.error);
+      }
+    } catch (reportError) {
+      console.error("Contribution reminder report email error:", reportError);
+    }
+  };
+
   let entriesQuery = supabase
     .from("ledger_entries")
     .select("occupant_id, event_id, entry_type, amount_pesos, metadata, semester_id")
@@ -2299,6 +2353,21 @@ export async function sendContributionPayableReminders(
   }
 
   if (reminderPayloadByOccupant.size === 0) {
+    await sendDispatchReport({
+      targetCount: 0,
+      sentCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      details: [
+        {
+          occupantName: "All occupants",
+          recipientEmail: null,
+          status: "skipped",
+          reason: "No remaining payable contributions for the selected semesters.",
+        },
+      ],
+    });
+
     return {
       success: true,
       sent_count: 0,
@@ -2339,16 +2408,28 @@ export async function sendContributionPayableReminders(
     ) as typeof adminClient;
   }
 
-  const { sendEmail, renderContributionPayableReminderEmail } = await import("@/lib/email");
   let sentCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
+  const deliveryDetails: Array<{
+    occupantName: string;
+    recipientEmail: string | null;
+    status: "sent" | "skipped" | "failed";
+    reason?: string | null;
+  }> = [];
 
   for (const occupantId of occupantIds) {
     const occupant = occupantById.get(occupantId);
     const reminderPayload = reminderPayloadByOccupant.get(occupantId);
+    const occupantName = occupant?.full_name?.trim() || occupantId;
     if (!occupant || !reminderPayload) {
       skippedCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail: null,
+        status: "skipped",
+        reason: "Occupant record not found.",
+      });
       continue;
     }
 
@@ -2360,6 +2441,12 @@ export async function sendContributionPayableReminders(
 
     if (!recipientEmail) {
       skippedCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail: null,
+        status: "skipped",
+        reason: "No recipient email found.",
+      });
       continue;
     }
 
@@ -2379,11 +2466,37 @@ export async function sendContributionPayableReminders(
 
     if (emailResult.success) {
       sentCount += 1;
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail,
+        status: "sent",
+        reason: null,
+      });
     } else {
       failedCount += 1;
+      const reason =
+        typeof emailResult.error === "string"
+          ? emailResult.error
+          : emailResult.error instanceof Error
+            ? emailResult.error.message
+            : "Unknown delivery error.";
+      deliveryDetails.push({
+        occupantName,
+        recipientEmail,
+        status: "failed",
+        reason,
+      });
       console.warn("Failed to send contribution reminder email:", emailResult.error);
     }
   }
+
+  await sendDispatchReport({
+    targetCount: occupantIds.length,
+    sentCount,
+    skippedCount,
+    failedCount,
+    details: deliveryDetails,
+  });
 
   try {
     await logAuditEvent({

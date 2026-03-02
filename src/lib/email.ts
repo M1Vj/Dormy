@@ -621,6 +621,136 @@ export function renderContributionPayableReminderEmail(input: {
   };
 }
 
+export function renderContributionReminderDispatchReportEmail(input: {
+  actorName: string | null;
+  targetCount: number;
+  sentCount: number;
+  skippedCount: number;
+  failedCount: number;
+  details: Array<{
+    occupantName: string;
+    recipientEmail: string | null;
+    status: "sent" | "skipped" | "failed";
+    reason?: string | null;
+  }>;
+  generatedAtIso: string;
+}) {
+  const subject = "Contribution reminder delivery report";
+  const generatedAt = new Date(input.generatedAtIso);
+  const generatedAtLabel = Number.isNaN(generatedAt.getTime())
+    ? input.generatedAtIso
+    : formatDateTimeInAppTimeZone(generatedAt);
+
+  const greeting = input.actorName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.actorName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const summaryHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <tbody>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:160px;">Generated</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(generatedAtLabel)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Targets</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${input.targetCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Sent</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#166534; font-weight:600;">${input.sentCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Skipped</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#92400e; font-weight:600;">${input.skippedCount}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Failed</td>
+          <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#991b1b; font-weight:600;">${input.failedCount}</td>
+        </tr>
+      </tbody>
+    </table>
+  `.trim();
+
+  const detailsRows = input.details
+    .map((detail) => {
+      const statusLabel =
+        detail.status === "sent"
+          ? "Sent"
+          : detail.status === "failed"
+            ? "Failed"
+            : "Skipped";
+      return `
+        <tr>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a;">${escapeHtml(detail.occupantName)}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569;">${detail.recipientEmail ? escapeHtml(detail.recipientEmail) : "—"}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a;">${statusLabel}</td>
+          <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569;">${detail.reason ? escapeHtml(detail.reason) : "—"}</td>
+        </tr>
+      `.trim();
+    })
+    .join("");
+
+  const detailsHtml = `
+    <div style="margin-top:18px;">
+      <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Delivery Details</div>
+      <table role="presentation" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Occupant</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Email</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Status</th>
+            <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${detailsRows || `
+            <tr>
+              <td colspan="4" style="padding:10px 0; color:#64748b;">No details recorded.</td>
+            </tr>
+          `.trim()}
+        </tbody>
+      </table>
+    </div>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">Here is the latest delivery result for contribution payable reminder emails.</p>`,
+    summaryHtml,
+    detailsHtml,
+  ].join("");
+
+  const text = [
+    input.actorName?.trim() ? `Hi ${input.actorName.trim()},` : "Hi,",
+    "Here is the latest delivery result for contribution payable reminder emails.",
+    `Generated: ${generatedAtLabel}`,
+    `Targets: ${input.targetCount}`,
+    `Sent: ${input.sentCount}`,
+    `Skipped: ${input.skippedCount}`,
+    `Failed: ${input.failedCount}`,
+    "",
+    "Details:",
+    ...input.details.map((detail) => {
+      const statusLabel =
+        detail.status === "sent"
+          ? "Sent"
+          : detail.status === "failed"
+            ? "Failed"
+            : "Skipped";
+      return `- ${detail.occupantName} | ${detail.recipientEmail ?? "—"} | ${statusLabel}${
+        detail.reason ? ` | ${detail.reason}` : ""
+      }`;
+    }),
+  ].join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Reminder Delivery Report", bodyHtml }),
+    text,
+  };
+}
+
 export function renderAccountWelcomeEmail(input: {
   recipientEmail: string;
   recipientName: string | null;
