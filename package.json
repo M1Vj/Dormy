@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack && node scripts/ensure-role-manifest.mjs",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "reset:demo-passwords": "node scripts/reset-demo-passwords.mjs",
