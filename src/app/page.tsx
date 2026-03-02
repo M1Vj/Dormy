@@ -37,4 +37,5 @@ export default async function Home() {
   }
 
   redirect(`/${targetRole}/home`);
+  return <div className="hidden" aria-hidden="true" />;
 }
