@@ -236,11 +236,11 @@ export default async function TreasurerReportingPage() {
       pendingExpenses: 0,
     };
     const amount = Number(row.amount_pesos ?? 0);
-    if (amount < 0 || row.entry_type === "payment") {
-      existing.collected += Math.abs(amount);
-    } else {
-      existing.charged += amount;
-    }
+    const isPayment = amount < 0 || row.entry_type === "payment";
+    const chargeAmount = isPayment ? 0 : Math.abs(amount);
+    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+    existing.charged += chargeAmount;
+    existing.collected += paymentAmount;
     if (!existing.eventTitle && group.eventTitle) {
       existing.eventTitle = group.eventTitle;
     }

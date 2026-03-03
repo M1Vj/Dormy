@@ -32,6 +32,7 @@ type EventRow = {
 
 type LedgerEntry = {
   event_id?: string | null;
+  entry_type?: string;
   amount_pesos?: number | string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -120,7 +121,7 @@ export default async function EventsFinancePage({
         .order("starts_at", { ascending: false }),
       supabase
         .from("ledger_entries")
-        .select("id, event_id, amount_pesos, ledger, voided_at, metadata")
+        .select("id, event_id, entry_type, amount_pesos, ledger, voided_at, metadata")
         .eq("dorm_id", activeDormId)
         .eq("ledger", "contributions")
         .is("voided_at", null),
@@ -144,11 +145,13 @@ export default async function EventsFinancePage({
       const eventEntries = typedEntries.filter((entry) => entry.event_id === event.id);
       const collected = eventEntries.reduce((sum, entry) => {
         const amount = Number(entry.amount_pesos ?? 0);
-        return amount < 0 ? sum + Math.abs(amount) : sum;
+        const isPayment = entry.entry_type === "payment" || amount < 0;
+        return isPayment ? sum + Math.abs(amount) : sum;
       }, 0);
       const charged = eventEntries.reduce((sum, entry) => {
         const amount = Number(entry.amount_pesos ?? 0);
-        return amount > 0 ? sum + amount : sum;
+        const isPayment = entry.entry_type === "payment" || amount < 0;
+        return isPayment ? sum : sum + Math.abs(amount);
       }, 0);
       const deadline =
         eventEntries

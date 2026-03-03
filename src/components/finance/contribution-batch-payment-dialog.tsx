@@ -35,6 +35,7 @@ import {
 import {
   calculateCartSubtotal,
   formatChoiceLabel,
+  getStoreContributionPriceRange,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
 
@@ -87,6 +88,10 @@ function nowLocalDateTimeValue() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
+function formatPesos(value: number) {
+  return `₱${Number(value || 0).toFixed(2)}`;
+}
+
 export function ContributionBatchPaymentDialog({
   dormId,
   contributions,
@@ -135,11 +140,15 @@ export function ContributionBatchPaymentDialog({
   // Store cart state: keyed by contribution id
   const [storeCartItems, setStoreCartItems] = useState<Record<string, any[]>>({});
 
-  const storeCartTotal = useMemo(() => {
-    return Object.values(storeCartItems)
-      .flat()
-      .reduce((sum, item) => sum + (item.subtotal || 0), 0);
-  }, [storeCartItems]);
+  const sumCartSubtotals = useCallback((items: any[] | undefined) => {
+    return (items ?? []).reduce((sum, item) => sum + Math.max(0, Number(item?.subtotal ?? 0)), 0);
+  }, []);
+
+  const getStoreCartSubtotal = useCallback(
+    (contributionId: string, carts: Record<string, any[]> = storeCartItems) =>
+      Number(sumCartSubtotals(carts[contributionId]).toFixed(2)),
+    [storeCartItems, sumCartSubtotals]
+  );
 
   /** Resolve the per-occupant remaining for each contribution, falling back to total remaining if no occupant is selected */
   const getOccupantRemaining = useCallback(
@@ -156,20 +165,52 @@ export function ContributionBatchPaymentDialog({
     [contributions, selectedContributionIds]
   );
 
+  const getStoreFallbackAmount = useCallback(
+    (contribution: ContributionOption) => {
+      const remaining = occupantId
+        ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
+        : contribution.remaining;
+      if (remaining > 0) {
+        return Number(remaining.toFixed(2));
+      }
+      const storePriceRange = getStoreContributionPriceRange(contribution.storeItems || []);
+      return Number((storePriceRange?.min ?? 0).toFixed(2));
+    },
+    [occupantId, occupantContributionRemaining]
+  );
+
+  const computeAmountForSelection = useCallback(
+    (selected: ContributionOption[], carts: Record<string, any[]> = storeCartItems) => {
+      const nonStoreTotal = selected
+        .filter((contribution) => !contribution.isStore)
+        .reduce((sum, contribution) => {
+          const remaining = occupantId
+            ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
+            : contribution.remaining;
+          return sum + Math.max(0, remaining);
+        }, 0);
+
+      const storeTotal = selected
+        .filter((contribution) => contribution.isStore)
+        .reduce((sum, contribution) => {
+          const cartSubtotal = getStoreCartSubtotal(contribution.id, carts);
+          const fallbackAmount = getStoreFallbackAmount(contribution);
+          return sum + (cartSubtotal > 0 ? cartSubtotal : fallbackAmount);
+        }, 0);
+
+      return Number((nonStoreTotal + storeTotal).toFixed(2));
+    },
+    [getStoreCartSubtotal, getStoreFallbackAmount, occupantId, occupantContributionRemaining, storeCartItems]
+  );
+
   const hasAnyStoreContributions = useMemo(
     () => selectedContributions.some((c) => c.isStore),
     [selectedContributions]
   );
 
   const computedTotal = useMemo(
-    () =>
-      selectedContributions.reduce((sum, contribution) => {
-        const remaining = occupantId
-          ? (getOccupantRemaining(contribution.id) ?? 0)
-          : contribution.remaining;
-        return sum + Math.max(0, remaining);
-      }, 0),
-    [selectedContributions, occupantId, getOccupantRemaining]
+    () => computeAmountForSelection(selectedContributions),
+    [computeAmountForSelection, selectedContributions]
   );
 
   const amountDifference = useMemo(() => Number((amount - computedTotal).toFixed(2)), [amount, computedTotal]);
@@ -177,6 +218,15 @@ export function ContributionBatchPaymentDialog({
   const previewRows = useMemo(() => {
     if (!selectedContributions.length) return [] as Array<{ title: string; amount: number }>;
     const rows = selectedContributions.map((contribution) => {
+      if (contribution.isStore) {
+        const cartSubtotal = getStoreCartSubtotal(contribution.id);
+        return {
+          id: contribution.id,
+          title: contribution.title,
+          amount: cartSubtotal > 0 ? cartSubtotal : getStoreFallbackAmount(contribution),
+        };
+      }
+
       const remaining = occupantId
         ? (getOccupantRemaining(contribution.id) ?? 0)
         : contribution.remaining;
@@ -201,7 +251,7 @@ export function ContributionBatchPaymentDialog({
       }
       return { title: row.title, amount: Number((row.amount + amountDifference).toFixed(2)) };
     });
-  }, [allocationTargetId, amountDifference, selectedContributions, occupantId, getOccupantRemaining]);
+  }, [allocationTargetId, amountDifference, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
 
   const toggleContribution = (id: string, checked: boolean) => {
     const next = checked
@@ -211,15 +261,7 @@ export function ContributionBatchPaymentDialog({
     setSelectedContributionIds(next);
 
     const nextSelected = contributions.filter((contribution) => next.includes(contribution.id));
-    const nextTotal = nextSelected.reduce((sum, contribution) => {
-      // For store contributions, don't add remaining — amount comes from cart
-      if (contribution.isStore) return sum;
-      const remaining = occupantId
-        ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
-        : contribution.remaining;
-      return sum + Math.max(0, remaining);
-    }, 0);
-    setAmount(Number((nextTotal + storeCartTotal).toFixed(2)));
+    setAmount(computeAmountForSelection(nextSelected));
 
     if (!next.includes(allocationTargetId)) {
       setAllocationTargetId("");
@@ -269,6 +311,7 @@ export function ContributionBatchPaymentDialog({
     }
 
     // Use global templates for batch receipt emails
+    const selectedContributionSet = new Set(selectedContributionIds);
 
     const payload: BatchPaymentPayload = {
       occupant_id: occupantId,
@@ -284,7 +327,9 @@ export function ContributionBatchPaymentDialog({
       receipt_signature: null,
       receipt_logo_url: null,
       cart_items: hasAnyStoreContributions
-        ? Object.entries(storeCartItems).flatMap(([contributionId, items]) =>
+        ? Object.entries(storeCartItems)
+            .filter(([contributionId]) => selectedContributionSet.has(contributionId))
+            .flatMap(([contributionId, items]) =>
             (items ?? [])
               .filter((item) => typeof item?.item_id === "string" && item.item_id.trim().length > 0)
               .map((item) => ({
@@ -305,7 +350,7 @@ export function ContributionBatchPaymentDialog({
                   : [],
                 subtotal: Math.max(0, Number(item.subtotal ?? 0)),
               }))
-          )
+            )
         : undefined,
     };
 
@@ -443,6 +488,12 @@ export function ContributionBatchPaymentDialog({
                 ) : (
                   contributions.map((contribution) => {
                     const checked = selectedContributionIds.includes(contribution.id);
+                    const storePriceRange = contribution.isStore
+                      ? getStoreContributionPriceRange(contribution.storeItems || [])
+                      : null;
+                    const storeCartSubtotal = contribution.isStore
+                      ? getStoreCartSubtotal(contribution.id)
+                      : 0;
                     return (
                       <label key={contribution.id} className={`flex items-start gap-3 rounded-md border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors ${occupantId ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                         <Checkbox
@@ -454,9 +505,36 @@ export function ContributionBatchPaymentDialog({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium leading-none">{contribution.title}</p>
                           {occupantId ? (
-                            <p className="text-xs text-muted-foreground mt-1.5">
-                              Remaining: <span className="font-semibold text-foreground">₱{(getOccupantRemaining(contribution.id) ?? 0).toFixed(2)}</span>
-                            </p>
+                            contribution.isStore ? (
+                              <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                                <p>
+                                  {storePriceRange ? (
+                                    storePriceRange.min === storePriceRange.max ? (
+                                      <>
+                                        Item price: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)}</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        Price range: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)} - {formatPesos(storePriceRange.max)}</span>
+                                      </>
+                                    )
+                                  ) : (
+                                    <>
+                                      Item price: <span className="font-semibold text-foreground">{formatPesos(0)}</span>
+                                    </>
+                                  )}
+                                </p>
+                                {storeCartSubtotal > 0 ? (
+                                  <p>
+                                    Cart total: <span className="font-semibold text-foreground">{formatPesos(storeCartSubtotal)}</span>
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground mt-1.5">
+                                Remaining: <span className="font-semibold text-foreground">{formatPesos(getOccupantRemaining(contribution.id) ?? 0)}</span>
+                              </p>
+                            )
                           ) : (
                             <p className="text-xs text-muted-foreground mt-1.5">Select an occupant first</p>
                           )}
@@ -489,43 +567,21 @@ export function ContributionBatchPaymentDialog({
                 const updated = [...cartForContribution, newItem];
                 const next = { ...storeCartItems, [contribution.id]: updated };
                 setStoreCartItems(next);
-                // Recalculate amount
-                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
-                const nonStoreTotal = selectedContributions
-                  .filter((c) => !c.isStore)
-                  .reduce((s, c) => {
-                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
-                    return s + Math.max(0, rem);
-                  }, 0);
-                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+                setAmount(computeAmountForSelection(selectedContributions, next));
               };
 
               const removeCartItem = (itemIdx: number) => {
                 const updated = cartForContribution.filter((_: any, i: number) => i !== itemIdx);
                 const next = { ...storeCartItems, [contribution.id]: updated };
                 setStoreCartItems(next);
-                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
-                const nonStoreTotal = selectedContributions
-                  .filter((c) => !c.isStore)
-                  .reduce((s, c) => {
-                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
-                    return s + Math.max(0, rem);
-                  }, 0);
-                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+                setAmount(computeAmountForSelection(selectedContributions, next));
               };
 
               const updateCartItem = (itemIdx: number, patch: Partial<any>) => {
                 const updated = cartForContribution.map((ci: any, i: number) => i === itemIdx ? { ...ci, ...patch } : ci);
                 const next = { ...storeCartItems, [contribution.id]: updated };
                 setStoreCartItems(next);
-                const newTotal = Object.values(next).flat().reduce((s, i) => s + (i.subtotal || 0), 0);
-                const nonStoreTotal = selectedContributions
-                  .filter((c) => !c.isStore)
-                  .reduce((s, c) => {
-                    const rem = occupantId ? (occupantContributionRemaining?.[`${occupantId}:${c.id}`] ?? 0) : c.remaining;
-                    return s + Math.max(0, rem);
-                  }, 0);
-                setAmount(Number((nonStoreTotal + newTotal).toFixed(2)));
+                setAmount(computeAmountForSelection(selectedContributions, next));
               };
 
               return (

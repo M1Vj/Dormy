@@ -11,7 +11,9 @@ import { optimizeImage } from "@/lib/images";
 import {
   type CartItem,
   type StoreItem,
+  formatChoiceLabel,
   formatSelectedOption,
+  getStoreContributionPriceRange,
   normalizeAndPriceCartItems,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
@@ -347,6 +349,46 @@ function buildOrderItemsFromCart(
       };
     })
     .filter((item) => item.quantity > 0);
+
+  return rows.length > 0 ? rows : undefined;
+}
+
+function buildStoreSpecsFromStoreItems(
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  const items = Array.isArray(storeItems) ? storeItems : [];
+  if (items.length === 0) {
+    return undefined;
+  }
+
+  const rows = items
+    .map((item) => {
+      const optionSpecs = (item.options ?? [])
+        .map((option) => {
+          const name = option.name?.trim() ?? "";
+          const choices = (option.choices ?? [])
+            .map((choice) => formatChoiceLabel(choice))
+            .filter((choice) => choice.trim().length > 0);
+          if (!name && choices.length === 0) {
+            return "";
+          }
+          if (!name) {
+            return choices.join(" | ");
+          }
+          if (choices.length === 0) {
+            return name;
+          }
+          return `${name}: ${choices.join(" | ")}`;
+        })
+        .filter((value) => value.length > 0);
+
+      const itemName = item.name?.trim() || "Item";
+      if (optionSpecs.length === 0) {
+        return `${itemName} (Base: ₱${Number(item.price ?? 0).toFixed(2)})`;
+      }
+      return `${itemName} (${optionSpecs.join(" · ")})`;
+    })
+    .filter((value) => value.length > 0);
 
   return rows.length > 0 ? rows : undefined;
 }
@@ -1335,6 +1377,24 @@ export async function createContributionBatch(
     : null;
   const contributionTitle = parsed.data.title.trim();
   const contributionDetails = parsed.data.details?.trim() || parsed.data.description?.trim() || null;
+  const normalizedStoreItems = parsed.data.is_store
+    ? normalizeStoreItems(parsed.data.store_items ?? [])
+    : [];
+  const storePriceRange = parsed.data.is_store
+    ? getStoreContributionPriceRange(normalizedStoreItems)
+    : null;
+
+  if (parsed.data.is_store && normalizedStoreItems.length === 0) {
+    return { error: "Add at least one store item before creating a store contribution." };
+  }
+
+  if (parsed.data.is_store && (!storePriceRange || storePriceRange.max <= 0)) {
+    return { error: "Store contribution items must have a price greater than zero." };
+  }
+
+  const perOccupantAmount = parsed.data.is_store
+    ? Number((storePriceRange?.min ?? 0).toFixed(2))
+    : Math.abs(parsed.data.amount);
 
   let writeClient: typeof supabase = supabase;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -1359,7 +1419,7 @@ export async function createContributionBatch(
       entry_type: "charge",
       occupant_id: occupantId,
       event_id: parsed.data.event_id || null,
-      amount_pesos: Math.abs(parsed.data.amount),
+      amount_pesos: perOccupantAmount,
       method: "manual_charge",
       note: contributionTitle,
       metadata: {
@@ -1376,6 +1436,8 @@ export async function createContributionBatch(
         payable_label: contributionTitle,
         is_store: parsed.data.is_store,
         store_items: parsed.data.store_items,
+        store_price_min_pesos: storePriceRange?.min ?? null,
+        store_price_max_pesos: storePriceRange?.max ?? null,
       },
       created_by: user.id,
     }))
@@ -1397,7 +1459,7 @@ export async function createContributionBatch(
         event_title: eventTitle,
         contribution_title: contributionTitle,
         contribution_details: contributionDetails,
-        amount_pesos: Math.abs(parsed.data.amount),
+        amount_pesos: perOccupantAmount,
         deadline: deadlineIso,
         charged_count: targetOccupantIds.length,
         include_already_charged: parsed.data.include_already_charged,
@@ -1834,10 +1896,12 @@ export async function recordContributionBatchPayment(
           paidAtIso: input.paid_at_iso,
           method: input.method,
           contributions: allocRows.map((row) => {
+            const orderItems = buildOrderItemsFromCart(row.cartItems, row.storeItems);
             return {
               title: row.title,
               amountPesos: row.allocation,
-              orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
+              orderItems,
+              storeSpecs: !orderItems ? buildStoreSpecsFromStoreItems(row.storeItems) : undefined,
             };
           }),
           totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
@@ -2109,14 +2173,20 @@ export async function resendContributionReceipt(
     recipientName: occupant.full_name ?? null,
     paidAtIso,
     method: resolvedMethod,
-    contributions: matchedEntries.map((item) => ({
-      title: item.contributionMetadata.contribution_title,
-      amountPesos: item.amountPesos,
-      orderItems: buildOrderItemsFromCart(
+    contributions: matchedEntries.map((item) => {
+      const orderItems = buildOrderItemsFromCart(
         item.contributionMetadata.cart_items,
         item.contributionMetadata.store_items
-      ),
-    })),
+      );
+      return {
+        title: item.contributionMetadata.contribution_title,
+        amountPesos: item.amountPesos,
+        orderItems,
+        storeSpecs: !orderItems
+          ? buildStoreSpecsFromStoreItems(item.contributionMetadata.store_items)
+          : undefined,
+      };
+    }),
     totalAmountPesos,
     customMessage: resolvedMessage,
     subjectOverride: resolvedSubject,
@@ -2786,10 +2856,12 @@ export async function previewContributionBatchPaymentEmail(
     paidAtIso: input.paid_at_iso,
     method: input.method,
     contributions: allocRows.map((row) => {
+      const orderItems = buildOrderItemsFromCart(row.cartItems, row.storeItems);
       return {
         title: row.title,
         amountPesos: row.allocation,
-        orderItems: buildOrderItemsFromCart(row.cartItems, row.storeItems),
+        orderItems,
+        storeSpecs: !orderItems ? buildStoreSpecsFromStoreItems(row.storeItems) : undefined,
       };
     }),
     totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
@@ -3104,7 +3176,7 @@ export async function previewContributionReceiptTemplateEmail(
 
   const { data: rows, error: rowsError } = await supabase
     .from("ledger_entries")
-    .select("id, event_id, metadata")
+    .select("id, occupant_id, posted_at, event_id, metadata")
     .eq("dorm_id", dormId)
     .eq("ledger", "contributions")
     .is("voided_at", null);
@@ -3125,12 +3197,14 @@ export async function previewContributionReceiptTemplateEmail(
     return { error: "Contribution not found." };
   }
 
-  const normalizedMetadata = contributionRows.map((row) =>
-    parseContributionMetadata(row.metadata, {
+  const normalizedEntries = contributionRows.map((row) => ({
+    row,
+    contributionMetadata: parseContributionMetadata(row.metadata, {
       eventId: row.event_id,
       note: null,
-    })
-  );
+    }),
+  }));
+  const normalizedMetadata = normalizedEntries.map((entry) => entry.contributionMetadata);
 
   const contributionTitle =
     normalizedMetadata.find((item) => item.contribution_title.trim().length > 0)?.contribution_title ??
@@ -3186,6 +3260,41 @@ export async function previewContributionReceiptTemplateEmail(
   const resolvedLogoUrl = input.logo_url?.trim() || savedLogoUrl;
   const resolvedSignature = input.signature?.trim() || savedSignature;
 
+  const sortByLatest = <T extends { row: { posted_at: string | null } }>(entries: T[]) =>
+    [...entries].sort((left, right) => {
+      const leftTs = left.row.posted_at ?? "";
+      const rightTs = right.row.posted_at ?? "";
+      if (leftTs === rightTs) {
+        return 0;
+      }
+      return leftTs > rightTs ? -1 : 1;
+    });
+
+  const entryWithCartForOccupant = sortByLatest(
+    normalizedEntries.filter(
+      (entry) =>
+        entry.row.occupant_id === input.occupant_id &&
+        entry.contributionMetadata.cart_items.length > 0
+    )
+  )[0];
+  const latestEntryWithCart = sortByLatest(
+    normalizedEntries.filter((entry) => entry.contributionMetadata.cart_items.length > 0)
+  )[0];
+  const occupantEntry = sortByLatest(
+    normalizedEntries.filter((entry) => entry.row.occupant_id === input.occupant_id)
+  )[0];
+  const fallbackEntry = normalizedEntries[0];
+  const previewSourceEntry =
+    entryWithCartForOccupant ?? latestEntryWithCart ?? occupantEntry ?? fallbackEntry;
+  const previewStoreItems =
+    previewSourceEntry?.contributionMetadata.store_items ??
+    normalizedMetadata.find((item) => item.store_items.length > 0)?.store_items ??
+    [];
+  const previewOrderItems = buildOrderItemsFromCart(
+    previewSourceEntry?.contributionMetadata.cart_items,
+    previewStoreItems
+  );
+
   const { renderContributionBatchReceiptEmail } = await import("@/lib/email");
   const rendered = renderContributionBatchReceiptEmail({
     recipientName: occupant.full_name ?? null,
@@ -3195,6 +3304,10 @@ export async function previewContributionReceiptTemplateEmail(
       {
         title: contributionTitle,
         amountPesos: input.amount,
+        orderItems: previewOrderItems,
+        storeSpecs: !previewOrderItems
+          ? buildStoreSpecsFromStoreItems(previewStoreItems)
+          : undefined,
       },
     ],
     totalAmountPesos: input.amount,

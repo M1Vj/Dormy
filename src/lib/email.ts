@@ -387,6 +387,7 @@ export function renderContributionBatchReceiptEmail(input: {
       quantity: number;
       subtotal: number;
     }>;
+    storeSpecs?: string[];
   }>;
   totalAmountPesos: number;
   customMessage: string | null;
@@ -473,6 +474,36 @@ export function renderContributionBatchReceiptEmail(input: {
     `.trim()
     : "";
 
+  const storeSpecRows = safeRows
+    .map((item) => ({
+      title: item.title,
+      specs: (item.storeSpecs ?? []).filter((spec) => spec.trim().length > 0),
+    }))
+    .filter((item) => item.specs.length > 0);
+  const storeSpecsHtml = storeSpecRows.length > 0
+    ? `
+      <div style="margin-top:18px;">
+        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Store Item Specs</div>
+        <table role="presentation" style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Contribution</th>
+              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Specs</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${storeSpecRows.map((item) => `
+              <tr>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px;">${escapeHtml(item.title)}</td>
+                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569; font-size:13px;">${escapeHtml(item.specs.join(" · "))}</td>
+              </tr>
+            `.trim()).join("")}
+          </tbody>
+        </table>
+      </div>
+    `.trim()
+    : "";
+
   const detailsHtml = `
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:14px;">
       <tbody>
@@ -506,12 +537,16 @@ export function renderContributionBatchReceiptEmail(input: {
     messageHtml,
     lineItemsTable,
     orderDetailsHtml,
+    storeSpecsHtml,
     detailsHtml,
     renderSignatureHtml(input.signatureOverride, input.treasurerNameOverride),
   ].join("");
 
   const orderTextLines = allOrderItems.map(
     (o) => `  - ${o.quantity}x ${o.itemName}${o.options.length > 0 ? ` (${o.options.join(", ")})` : ""}: ${normalizePesos(o.subtotal)}`
+  );
+  const storeSpecTextLines = storeSpecRows.map(
+    (item) => `  - ${item.title}: ${item.specs.join(" | ")}`
   );
 
   const text = [
@@ -524,6 +559,7 @@ export function renderContributionBatchReceiptEmail(input: {
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
     ...(orderTextLines.length > 0 ? ["\nYour Order:", ...orderTextLines] : []),
+    ...(storeSpecTextLines.length > 0 ? ["\nStore Item Specs:", ...storeSpecTextLines] : []),
     renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ]
     .filter(Boolean)
