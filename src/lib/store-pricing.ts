@@ -30,6 +30,11 @@ export type CartItem = {
   subtotal: number;
 };
 
+export type PriceRange = {
+  min: number;
+  max: number;
+};
+
 function asRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -264,6 +269,47 @@ export function calculateCartSubtotal(input: {
   return round2(unitPrice * quantity);
 }
 
+export function getStoreItemUnitPriceRange(item: StoreItem | null | undefined): PriceRange {
+  if (!item) {
+    return { min: 0, max: 0 };
+  }
+
+  const basePrice = round2(Math.max(0, Number(item.price || 0)));
+  let minAdjustment = 0;
+  let maxAdjustment = 0;
+
+  for (const option of item.options || []) {
+    if (!Array.isArray(option.choices) || option.choices.length === 0) {
+      continue;
+    }
+    const adjustments = option.choices
+      .map((choice) => Number(choice.priceAdjustment || 0))
+      .filter((value) => Number.isFinite(value));
+    if (!adjustments.length) {
+      continue;
+    }
+    minAdjustment += Math.min(...adjustments);
+    maxAdjustment += Math.max(...adjustments);
+  }
+
+  const min = round2(Math.max(0, basePrice + minAdjustment));
+  const max = round2(Math.max(0, basePrice + maxAdjustment));
+  return min <= max ? { min, max } : { min: max, max: min };
+}
+
+export function getStoreContributionPriceRange(storeItemsInput: unknown): PriceRange | null {
+  const items = normalizeStoreItems(storeItemsInput);
+  if (!items.length) {
+    return null;
+  }
+
+  const ranges = items.map((item) => getStoreItemUnitPriceRange(item));
+  return {
+    min: round2(Math.min(...ranges.map((range) => range.min))),
+    max: round2(Math.max(...ranges.map((range) => range.max))),
+  };
+}
+
 export function normalizeAndPriceCartItems(
   cartItemsInput: unknown,
   storeItemsInput: unknown
@@ -361,4 +407,3 @@ export function formatCartItemSpecs(optionsInput: unknown) {
     .filter((entry) => entry.length > 0)
     .join(" · ");
 }
-

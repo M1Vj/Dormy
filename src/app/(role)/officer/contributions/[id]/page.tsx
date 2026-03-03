@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
+import { getStoreContributionPriceRange } from "@/lib/store-pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -50,6 +51,7 @@ type OccupantRow = {
 
 type EntryRow = {
   occupant_id?: string | null;
+  entry_type?: string;
   amount_pesos?: number | string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -212,7 +214,7 @@ export default async function EventDetailsPage({
       getOccupants(dormId, { status: "active" }),
       supabase
         .from("ledger_entries")
-        .select("occupant_id, amount_pesos, metadata")
+        .select("occupant_id, entry_type, amount_pesos, metadata")
         .eq("dorm_id", dormId)
         .eq("ledger", "contributions")
         .eq("event_id", eventId)
@@ -230,22 +232,37 @@ export default async function EventDetailsPage({
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const entryRows = (entries ?? []) as EntryRow[];
   const nowIso = new Date().toISOString();
+  const isStore = entryRows.map((entry) => entry.metadata?.is_store === true).find(Boolean) ?? false;
+  const storeItems = entryRows
+    .map((entry) => Array.isArray(entry.metadata?.store_items) ? entry.metadata.store_items : [])
+    .find((items) => items.length > 0) ?? [];
+  const storePriceRange = isStore ? getStoreContributionPriceRange(storeItems) : null;
+  const storeBaselineAmount = Number((storePriceRange?.min ?? 0).toFixed(2));
 
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
     const chargeEntries = occupantEntries.filter(
-      (entry) => Number(entry.amount_pesos ?? 0) > 0
+      (entry) => {
+        const amount = Number(entry.amount_pesos ?? 0);
+        return !(entry.entry_type === "payment" || amount < 0);
+      }
     );
 
     const paid = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
-      return amount < 0 ? sum + Math.abs(amount) : sum;
+      const isPayment = entry.entry_type === "payment" || amount < 0;
+      return isPayment ? sum + Math.abs(amount) : sum;
     }, 0);
 
-    const charged = occupantEntries.reduce((sum, entry) => {
+    const rawCharged = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
-      return amount > 0 ? sum + amount : sum;
+      const isPayment = entry.entry_type === "payment" || amount < 0;
+      return isPayment ? sum : sum + Math.abs(amount);
     }, 0);
+    const charged =
+      isStore && rawCharged <= 0
+        ? storeBaselineAmount
+        : Number(rawCharged.toFixed(2));
 
     let status: OccupantWithStatus["status"] = "unpaid";
     if (charged > 0 && paid >= charged) {
@@ -308,12 +325,6 @@ export default async function EventDetailsPage({
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
-
-  const isStore = entryRows.map(entry => entry.metadata?.is_store === true).find(Boolean) ?? false;
-
-  const storeItems = entryRows
-    .map(entry => Array.isArray(entry.metadata?.store_items) ? entry.metadata.store_items : [])
-    .find(items => items.length > 0) ?? [];
 
   return (
     <div className="space-y-6">

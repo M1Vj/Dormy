@@ -50,6 +50,7 @@ type OccupantRow = {
 
 type EntryRow = {
   occupant_id?: string | null;
+  entry_type?: string;
   amount_pesos?: number | string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -184,7 +185,7 @@ export default async function EventDetailsPage({
       getOccupants(dormId, { status: "active" }),
       supabase
         .from("ledger_entries")
-        .select("occupant_id, amount_pesos, metadata")
+        .select("occupant_id, entry_type, amount_pesos, metadata")
         .eq("dorm_id", dormId)
         .eq("ledger", "contributions")
         .eq("event_id", eventId)
@@ -206,17 +207,22 @@ export default async function EventDetailsPage({
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
     const chargeEntries = occupantEntries.filter(
-      (entry) => Number(entry.amount_pesos ?? 0) > 0
+      (entry) => {
+        const amount = Number(entry.amount_pesos ?? 0);
+        return !(entry.entry_type === "payment" || amount < 0);
+      }
     );
 
     const paid = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
-      return amount < 0 ? sum + Math.abs(amount) : sum;
+      const isPayment = entry.entry_type === "payment" || amount < 0;
+      return isPayment ? sum + Math.abs(amount) : sum;
     }, 0);
 
     const charged = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
-      return amount > 0 ? sum + amount : sum;
+      const isPayment = entry.entry_type === "payment" || amount < 0;
+      return isPayment ? sum : sum + Math.abs(amount);
     }, 0);
 
     let status: OccupantWithStatus["status"] = "unpaid";

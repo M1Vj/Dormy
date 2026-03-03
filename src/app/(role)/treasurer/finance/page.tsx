@@ -400,12 +400,13 @@ export default async function TreasurerFinancePage({
         semesterIds: new Set<string>(),
       };
 
-    if (amount < 0 || row.entry_type === "payment") {
-      existing.collected += Math.abs(amount);
-    } else {
-      existing.charged += amount;
-    }
-    existing.remaining += amount;
+    const isPayment = amount < 0 || row.entry_type === "payment";
+    const chargeAmount = isPayment ? 0 : Math.abs(amount);
+    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+
+    existing.charged += chargeAmount;
+    existing.collected += paymentAmount;
+    existing.remaining += chargeAmount - paymentAmount;
 
     if (!existing.eventTitle && parsed.eventTitle) {
       existing.eventTitle = parsed.eventTitle;
