@@ -162,7 +162,7 @@ export default async function FineReportsPage() {
               return (
                 <Link
                   key={report.id}
-                  href={`/fines/reports/${report.id}`}
+                  href={`/occupant/fines/reports/${report.id}`}
                   className="block rounded-lg border p-3 transition hover:bg-muted/40"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -210,7 +210,7 @@ export default async function FineReportsPage() {
                       <td className="px-3 py-2">{statusBadge(report.status)}</td>
                       <td className="px-3 py-2">
                         <Button asChild size="sm" variant="outline">
-                          <Link href={`/fines/reports/${report.id}`}>Open</Link>
+                          <Link href={`/occupant/fines/reports/${report.id}`}>Open</Link>
                         </Button>
                       </td>
                     </tr>
