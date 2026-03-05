@@ -731,6 +731,24 @@ export async function createCleaningArea(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid area input." };
   }
 
+  const normalizedName = parsed.data.name.trim().toLowerCase();
+  const { data: existingAreas, error: existingAreasError } = await supabase
+    .from("cleaning_areas")
+    .select("id, name")
+    .eq("dorm_id", viewer.dormId);
+
+  if (existingAreasError) {
+    return { error: existingAreasError.message };
+  }
+
+  const hasDuplicate = (existingAreas ?? []).some(
+    (area) => area.name.trim().toLowerCase() === normalizedName
+  );
+
+  if (hasDuplicate) {
+    return { error: "A cleaning area with this name already exists." };
+  }
+
   const { data: area, error } = await supabase
     .from("cleaning_areas")
     .insert({
@@ -785,6 +803,26 @@ export async function updateCleaningArea(formData: FormData) {
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid area input." };
+  }
+
+  const normalizedName = parsed.data.name.trim().toLowerCase();
+  const { data: existingAreas, error: existingAreasError } = await supabase
+    .from("cleaning_areas")
+    .select("id, name")
+    .eq("dorm_id", viewer.dormId);
+
+  if (existingAreasError) {
+    return { error: existingAreasError.message };
+  }
+
+  const hasDuplicate = (existingAreas ?? []).some(
+    (area) =>
+      area.id !== parsed.data.area_id &&
+      area.name.trim().toLowerCase() === normalizedName
+  );
+
+  if (hasDuplicate) {
+    return { error: "A cleaning area with this name already exists." };
   }
 
   const { error } = await supabase
