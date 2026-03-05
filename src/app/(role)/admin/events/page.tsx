@@ -51,7 +51,7 @@ export default async function EventsPage() {
         </div>
       </div>
 
-      <EventsBoard events={events} canManageEvents={context.canManageEvents} />
+      <EventsBoard events={events} canManageEvents={context.canManageEvents} basePath="/admin/events" />
     </div>
   );
 }

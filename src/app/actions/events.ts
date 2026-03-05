@@ -12,6 +12,9 @@ import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   DormRole,
+  EventAttendanceEntry,
+  EventAttendanceStatus,
+  EventAttendanceSummary,
   EventDetail,
   EventDormOption,
   EventRating,
@@ -37,6 +40,12 @@ const eventInputSchema = z.object({
   ends_at: z.string().nullable(),
   is_competition: z.boolean(),
   participating_dorm_ids: z.array(z.string().uuid()).default([]),
+});
+
+const attendanceMutationSchema = z.object({
+  event_id: z.string().uuid(),
+  occupant_id: z.string().uuid(),
+  status: z.enum(["present", "absent", "excused"]).nullable(),
 });
 
 type MembershipRow = {
@@ -82,6 +91,19 @@ type EventPhotoRow = {
   created_at: string;
 };
 
+type OccupantAttendanceRow = {
+  id: string;
+  full_name: string | null;
+  student_id: string | null;
+};
+
+type EventAttendanceRow = {
+  occupant_id: string;
+  status: EventAttendanceStatus;
+  checked_at: string | null;
+  updated_at: string;
+};
+
 type ParticipatingDormRow = {
   dorm:
   | {
@@ -116,6 +138,41 @@ function mapRatingRow(row: EventRatingRow): EventRating {
     occupant_name: occupant?.full_name ?? null,
     occupant_student_id: occupant?.student_id ?? null,
   };
+}
+
+function summarizeAttendance(entries: EventAttendanceEntry[]): EventAttendanceSummary {
+  let present = 0;
+  let absent = 0;
+  let excused = 0;
+
+  for (const entry of entries) {
+    if (entry.status === "present") {
+      present += 1;
+    } else if (entry.status === "absent") {
+      absent += 1;
+    } else if (entry.status === "excused") {
+      excused += 1;
+    }
+  }
+
+  const total = entries.length;
+  return {
+    total,
+    present,
+    absent,
+    excused,
+    unmarked: total - present - absent - excused,
+  };
+}
+
+function isMissingEventAttendanceTableError(error: {
+  code?: string | null;
+  message?: string | null;
+}) {
+  return (
+    error.code === "42P01" ||
+    String(error.message ?? "").toLowerCase().includes("event_attendance")
+  );
 }
 
 function withSummaries(
@@ -222,6 +279,26 @@ async function safeLogEventAudit(input: {
   } catch (error) {
     console.error(`Failed to write audit event for ${input.action}:`, error);
   }
+}
+
+async function getEventWriteClient(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>
+) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return supabase;
+  }
+
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  ) as typeof supabase;
 }
 
 async function requireManagerContext() {
@@ -338,6 +415,15 @@ async function requireCommitteeEventManagerContext(eventId: string) {
   return { context, committeeId: event.committee_id } as const;
 }
 
+async function requireEventAttendanceManagerContext(eventId: string) {
+  const manager = await requireManagerContext();
+  if (!("error" in manager)) {
+    return manager;
+  }
+
+  return requireCommitteeEventManagerContext(eventId);
+}
+
 async function getViewerOccupantId(dormId: string, userId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -367,10 +453,11 @@ async function syncParticipatingDorms(
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." } as const;
   }
+  const writeClient = await getEventWriteClient(supabase);
 
   const normalizedIds = [...new Set(dormIds.filter((id) => id !== hostDormId))];
 
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await writeClient
     .from("event_participating_dorms")
     .delete()
     .eq("event_id", eventId);
@@ -383,7 +470,7 @@ async function syncParticipatingDorms(
     return { success: true } as const;
   }
 
-  const { error: insertError } = await supabase
+  const { error: insertError } = await writeClient
     .from("event_participating_dorms")
     .insert(
       normalizedIds.map((dormId) => ({
@@ -664,6 +751,208 @@ export async function getEventDetail(
   };
 }
 
+export async function getEventAttendanceRoster(eventId: string): Promise<
+  | {
+    entries: EventAttendanceEntry[];
+    summary: EventAttendanceSummary;
+  }
+  | { error: string }
+> {
+  const contextResult = await requireEventAttendanceManagerContext(eventId);
+  if ("error" in contextResult) {
+    return { error: contextResult.error ?? "You do not have permission to manage event attendance." };
+  }
+
+  const context = contextResult.context;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", eventId)
+    .eq("dorm_id", context.dormId)
+    .maybeSingle();
+
+  if (eventError) {
+    return { error: eventError.message };
+  }
+
+  if (!event) {
+    return { error: "Event not found." };
+  }
+
+  const [{ data: occupants, error: occupantsError }, { data: attendance, error: attendanceError }] =
+    await Promise.all([
+      supabase
+        .from("occupants")
+        .select("id, full_name, student_id")
+        .eq("dorm_id", context.dormId)
+        .eq("status", "active")
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("event_attendance")
+        .select("occupant_id, status, checked_at, updated_at")
+        .eq("dorm_id", context.dormId)
+        .eq("event_id", eventId),
+    ]);
+
+  if (occupantsError) {
+    return { error: occupantsError.message };
+  }
+
+  if (attendanceError) {
+    if (isMissingEventAttendanceTableError(attendanceError)) {
+      return {
+        error:
+          "Database migration for event attendance is missing. Run migrations and retry.",
+      };
+    }
+    return { error: attendanceError.message };
+  }
+
+  const attendanceByOccupant = new Map<string, EventAttendanceRow>();
+  for (const row of (attendance ?? []) as EventAttendanceRow[]) {
+    attendanceByOccupant.set(row.occupant_id, row);
+  }
+
+  const entries: EventAttendanceEntry[] = ((occupants ?? []) as OccupantAttendanceRow[]).map(
+    (occupant) => {
+      const attendanceRow = attendanceByOccupant.get(occupant.id);
+      return {
+        occupant_id: occupant.id,
+        occupant_name: occupant.full_name ?? "Dorm occupant",
+        occupant_student_id: occupant.student_id ?? null,
+        status: attendanceRow?.status ?? null,
+        checked_at: attendanceRow?.checked_at ?? attendanceRow?.updated_at ?? null,
+      };
+    }
+  );
+
+  return {
+    entries,
+    summary: summarizeAttendance(entries),
+  };
+}
+
+export async function setEventAttendance(formData: FormData) {
+  const parsed = attendanceMutationSchema.safeParse({
+    event_id: formData.get("event_id"),
+    occupant_id: formData.get("occupant_id"),
+    status: String(formData.get("status") ?? "").trim() || null,
+  });
+
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? "Invalid attendance input.",
+    };
+  }
+
+  const contextResult = await requireEventAttendanceManagerContext(parsed.data.event_id);
+  if ("error" in contextResult) {
+    return { error: contextResult.error };
+  }
+
+  const context = contextResult.context;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { error: "Supabase is not configured for this environment." };
+  }
+  const writeClient = await getEventWriteClient(supabase);
+
+  const [{ data: event, error: eventError }, { data: occupant, error: occupantError }] =
+    await Promise.all([
+      supabase
+        .from("events")
+        .select("id")
+        .eq("id", parsed.data.event_id)
+        .eq("dorm_id", context.dormId)
+        .maybeSingle(),
+      supabase
+        .from("occupants")
+        .select("id")
+        .eq("id", parsed.data.occupant_id)
+        .eq("dorm_id", context.dormId)
+        .maybeSingle(),
+    ]);
+
+  if (eventError) {
+    return { error: eventError.message };
+  }
+  if (!event) {
+    return { error: "Event not found." };
+  }
+
+  if (occupantError) {
+    return { error: occupantError.message };
+  }
+  if (!occupant) {
+    return { error: "Occupant not found for this dorm." };
+  }
+
+  if (parsed.data.status) {
+    const { error: upsertError } = await writeClient.from("event_attendance").upsert(
+      {
+        dorm_id: context.dormId,
+        event_id: parsed.data.event_id,
+        occupant_id: parsed.data.occupant_id,
+        status: parsed.data.status,
+        checked_by: context.userId,
+        checked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "event_id,occupant_id" }
+    );
+
+    if (upsertError) {
+      if (isMissingEventAttendanceTableError(upsertError)) {
+        return {
+          error:
+            "Database migration for event attendance is missing. Run migrations and retry.",
+        };
+      }
+      return { error: upsertError.message };
+    }
+  } else {
+    const { error: deleteError } = await writeClient
+      .from("event_attendance")
+      .delete()
+      .eq("dorm_id", context.dormId)
+      .eq("event_id", parsed.data.event_id)
+      .eq("occupant_id", parsed.data.occupant_id);
+
+    if (deleteError) {
+      if (isMissingEventAttendanceTableError(deleteError)) {
+        return {
+          error:
+            "Database migration for event attendance is missing. Run migrations and retry.",
+        };
+      }
+      return { error: deleteError.message };
+    }
+  }
+
+  const activeRole = await getActiveRole() || "occupant";
+  revalidatePath(`/${activeRole}/events/${parsed.data.event_id}`);
+  revalidatePath(`/${activeRole}/events`);
+
+  await safeLogEventAudit({
+    dormId: context.dormId,
+    actorUserId: context.userId,
+    action: parsed.data.status ? "events.attendance_marked" : "events.attendance_cleared",
+    entityType: "event_attendance",
+    metadata: {
+      event_id: parsed.data.event_id,
+      occupant_id: parsed.data.occupant_id,
+      status: parsed.data.status,
+    },
+  });
+
+  return { success: true };
+}
+
 export async function createEvent(formData: FormData) {
   const committeeIdInput = String(formData.get("committee_id") ?? "").trim();
   const requestedCommitteeId = committeeIdInput ? committeeIdInput : null;
@@ -719,13 +1008,14 @@ export async function createEvent(formData: FormData) {
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
   }
+  const writeClient = await getEventWriteClient(supabase);
 
   const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
-  const { data: event, error } = await supabase
+  const { data: event, error } = await writeClient
     .from("events")
     .insert({
       dorm_id: context.dormId,
