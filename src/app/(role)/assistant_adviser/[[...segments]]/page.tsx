@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 
 type AssistantAdviserAliasPageProps = {
-  params: {
+  params: Promise<{
     segments?: string[];
-  };
+  }>;
 };
 
-export default function AssistantAdviserAliasPage({ params }: AssistantAdviserAliasPageProps) {
-  const nextPath = params.segments?.length ? params.segments.join("/") : "home";
+export default async function AssistantAdviserAliasPage({ params }: AssistantAdviserAliasPageProps) {
+  const resolvedParams = await params;
+  const nextPath = resolvedParams.segments?.length ? resolvedParams.segments.join("/") : "home";
   redirect(`/adviser/${nextPath}`);
 }
