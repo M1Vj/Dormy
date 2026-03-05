@@ -115,6 +115,9 @@ export default async function MaintenancePage({
   }
 
   const canFilterDorm = roles.includes("admin");
+  const canManageMaintenance = roles.some((role) =>
+    new Set(["admin", "adviser"]).has(role)
+  );
 
   const [{ data: occupants, error }, dormOptions, expensesResult] = await Promise.all([
     supabase
@@ -219,7 +222,7 @@ export default async function MaintenancePage({
             dormOptions={dormOptions}
             includeDormSelector={canFilterDorm}
           />
-          <LedgerOverwriteDialog dormId={activeDormId} />
+          {canManageMaintenance ? <LedgerOverwriteDialog dormId={activeDormId} /> : null}
         </div>
       </div>
 
@@ -285,7 +288,7 @@ export default async function MaintenancePage({
             <CardTitle className="text-sm font-medium">Operations</CardTitle>
           </CardHeader>
           <CardContent>
-            {roles.some(r => new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]).has(r)) ? (
+            {canManageMaintenance ? (
               <MaintenanceBulkChargeDialog dormId={activeDormId} />
             ) : (
               <Button variant="outline" disabled className="w-full">
@@ -315,26 +318,39 @@ export default async function MaintenancePage({
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <ChargeDialog
-                  dormId={activeDormId}
-                  occupantId={row.id}
-                  category="maintenance_fee"
-                  trigger={
-                    <Button variant="outline" size="sm" className="w-full">
+                {canManageMaintenance ? (
+                  <>
+                    <ChargeDialog
+                      dormId={activeDormId}
+                      occupantId={row.id}
+                      category="maintenance_fee"
+                      trigger={
+                        <Button variant="outline" size="sm" className="w-full">
+                          Charge
+                        </Button>
+                      }
+                    />
+                    <PaymentDialog
+                      dormId={activeDormId}
+                      occupantId={row.id}
+                      category="maintenance_fee"
+                      trigger={
+                        <Button variant="outline" size="sm" className="w-full">
+                          Pay
+                        </Button>
+                      }
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" className="w-full" disabled>
                       Charge
                     </Button>
-                  }
-                />
-                <PaymentDialog
-                  dormId={activeDormId}
-                  occupantId={row.id}
-                  category="maintenance_fee"
-                  trigger={
-                    <Button variant="outline" size="sm" className="w-full">
+                    <Button variant="outline" size="sm" className="w-full" disabled>
                       Pay
                     </Button>
-                  }
-                />
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -371,8 +387,16 @@ export default async function MaintenancePage({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <ChargeDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
-                    <PaymentDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
+                    {canManageMaintenance ? (
+                      <>
+                        <ChargeDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
+                        <PaymentDialog dormId={activeDormId} occupantId={row.id} category="maintenance_fee" />
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" disabled>
+                        Read-only
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -396,7 +420,7 @@ export default async function MaintenancePage({
               Approved expenses deducted from the maintenance fund.
             </p>
           </div>
-          {roles.some(r => new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]).has(r)) && (
+          {canManageMaintenance && (
             <MaintenanceExpenseDialog dormId={activeDormId} />
           )}
         </div>
