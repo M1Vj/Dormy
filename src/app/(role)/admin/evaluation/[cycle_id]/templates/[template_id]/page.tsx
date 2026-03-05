@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MetricsTable } from "@/components/admin/evaluation/metrics-table";
+import { TemplateStatusAction } from "@/components/admin/evaluation/template-status-action";
 import { WeightsEditor } from "@/components/admin/evaluation/weights-editor";
 
 interface Props {
@@ -125,10 +126,7 @@ export default async function TemplateTemplatePage({ params }: Props) {
               <p className="text-sm text-muted-foreground">
                 Set this template to <strong>Active</strong> to start receiving submissions.
               </p>
-              {/* Status toggle logic can go here or in a separate action */}
-              <Button variant="outline" className="w-full">
-                Mark as Active
-              </Button>
+              <TemplateStatusAction dormId={dormId} templateId={template_id} status={template.status} />
             </CardContent>
           </Card>
         </div>

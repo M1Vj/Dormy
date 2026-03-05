@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { getEvaluationCycle, getEvaluationMetrics, getEvaluationTemplate } from "@/app/actions/evaluation";
 import { MetricsTable } from "@/components/admin/evaluation/metrics-table";
+import { TemplateStatusAction } from "@/components/admin/evaluation/template-status-action";
 import { WeightsEditor } from "@/components/admin/evaluation/weights-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,9 +80,7 @@ export default async function StudentAssistantTemplatePage({ params }: Props) {
               <p className="text-sm text-muted-foreground">
                 Set this template to <strong>Active</strong> to start receiving submissions.
               </p>
-              <Button variant="outline" className="w-full">
-                Mark as Active
-              </Button>
+              <TemplateStatusAction dormId={dormId} templateId={template_id} status={template.status} />
             </CardContent>
           </Card>
         </div>

@@ -675,13 +675,39 @@ export async function updateTemplate(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) return { error: "Unauthorized" };
 
-  const { data: updated, error } = await supabase
+  const { data: membership } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", auth.user.id)
+    .maybeSingle();
+
+  if (!membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
+    return { error: "You do not have permission to update evaluation templates." };
+  }
+
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
+  const { data: updated, error } = await writeClient
     .from("evaluation_templates")
     .update(updates)
     .eq("dorm_id", dormId)
     .eq("id", templateId)
     .select("cycle_id")
-    .single();
+    .maybeSingle();
 
   if (error || !updated) {
     return { error: error?.message ?? "Failed to update evaluation template." };
@@ -703,6 +729,7 @@ export async function updateTemplate(
   const activeRole = await getActiveRole() || "occupant";
   revalidatePath(`/${activeRole}/evaluation`);
   revalidatePath(`/${activeRole}/evaluation/${updated.cycle_id}`);
+  revalidatePath(`/${activeRole}/evaluation/${updated.cycle_id}/templates/${templateId}`);
   return { success: true };
 }
 
