@@ -707,6 +707,37 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     }
   }
 
+  if (tx.entry_type === "payment") {
+    const { data: ledgerRows, error: ledgerRowsError } = await writeClient
+      .from("ledger_entries")
+      .select("amount_pesos")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", tx.occupant_id)
+      .eq("ledger", tx.category)
+      .is("voided_at", null);
+
+    if (ledgerRowsError) {
+      return { error: ledgerRowsError.message };
+    }
+
+    const outstandingBalance = Number(
+      (ledgerRows ?? [])
+        .reduce((sum, row) => sum + Number(row.amount_pesos), 0)
+        .toFixed(2)
+    );
+    const paymentAmount = Number(Math.abs(finalAmount).toFixed(2));
+
+    if (outstandingBalance <= 0.009) {
+      return { error: "No outstanding balance available for this account." };
+    }
+
+    if (paymentAmount - outstandingBalance > 0.009) {
+      return {
+        error: `Payment exceeds outstanding balance (available: ₱${outstandingBalance.toFixed(2)}).`,
+      };
+    }
+  }
+
   const { error } = await writeClient.from("ledger_entries").insert({
     dorm_id: dormId,
     semester_id: semesterId,
