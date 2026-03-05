@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
-import { Bell, CalendarDays, ClipboardList, Sparkles, Wallet } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, Wallet } from "lucide-react";
 
 import { getDormAnnouncements } from "@/app/actions/announcements";
 import { getEventsOverview } from "@/app/actions/events";
@@ -196,12 +196,6 @@ export default async function OfficerHomePage() {
           </Button>
           <Button asChild variant="secondary" size="sm">
             <Link href="/officer/cleaning">Cleaning</Link>
-          </Button>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/officer/ai">
-              <Sparkles className="mr-2 h-4 w-4" />
-              AI Workspace
-            </Link>
           </Button>
         </CardContent>
       </Card>

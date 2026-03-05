@@ -181,6 +181,14 @@ export async function middleware(req: NextRequest) {
     const rolePrefixes = ["admin", "adviser", "student_assistant", "treasurer", "officer", "occupant"];
     const matchedPrefix = rolePrefixes.find(p => pathname.startsWith(`/${p}`));
 
+    const aiBlockedPrefix = rolePrefixes.find((p) => pathMatches(pathname, `/${p}/ai`));
+    if (aiBlockedPrefix) {
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = `/${aiBlockedPrefix}/home`;
+      redirectUrl.search = "";
+      return redirect(redirectUrl, "AI pages removed from all role workspaces.");
+    }
+
     if (matchedPrefix) {
       const activeRole = req.cookies.get("dormy_active_role")?.value;
       if (activeRole && matchedPrefix !== activeRole) {
