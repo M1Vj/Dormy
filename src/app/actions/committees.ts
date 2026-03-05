@@ -197,21 +197,6 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
     return { error: "You do not have permission to manage members." };
   }
 
-  const { data: targetMembership, error: targetMembershipError } = await supabase
-    .from("dorm_memberships")
-    .select("id")
-    .eq("dorm_id", committee.dorm_id)
-    .eq("user_id", parsedInput.data.userId)
-    .maybeSingle();
-
-  if (targetMembershipError) {
-    return { error: targetMembershipError.message };
-  }
-
-  if (!targetMembership?.id) {
-    return { error: "That user is not a member of this dorm." };
-  }
-
   let writeClient: typeof supabase = supabase;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient } = await import("@supabase/supabase-js");
@@ -225,6 +210,47 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
         },
       }
     ) as typeof supabase;
+  }
+
+  const { data: targetMembership, error: targetMembershipError } = await supabase
+    .from("dorm_memberships")
+    .select("id")
+    .eq("dorm_id", committee.dorm_id)
+    .eq("user_id", parsedInput.data.userId)
+    .maybeSingle();
+
+  if (targetMembershipError) {
+    return { error: targetMembershipError.message };
+  }
+
+  if (!targetMembership?.id) {
+    const { data: targetOccupant, error: targetOccupantError } = await supabase
+      .from("occupants")
+      .select("id")
+      .eq("dorm_id", committee.dorm_id)
+      .eq("user_id", parsedInput.data.userId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (targetOccupantError) {
+      return { error: targetOccupantError.message };
+    }
+
+    if (!targetOccupant?.id) {
+      return { error: "That user is not an active occupant of this dorm." };
+    }
+
+    const { error: membershipInsertError } = await writeClient
+      .from("dorm_memberships")
+      .insert({
+        dorm_id: committee.dorm_id,
+        user_id: parsedInput.data.userId,
+        role: "occupant",
+      });
+
+    if (membershipInsertError && membershipInsertError.code !== "23505") {
+      return { error: membershipInsertError.message };
+    }
   }
 
   // Ensure a single head/co-head by demoting existing members first.
