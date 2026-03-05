@@ -15,7 +15,7 @@ import { OccupantStanding } from "@/components/dashboard/occupant-standing";
 import { Activity, ShieldCheck, UserCheck } from "lucide-react";
 import { getActiveDormId } from "@/lib/dorms";
 import { getActiveSemester } from "@/lib/semesters";
-import { getRoleLabel } from "@/lib/roles";
+import { getRoleLabel, getRoleRoute } from "@/lib/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getFineRules } from "@/app/actions/fines";
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
@@ -82,7 +82,8 @@ export default async function HomePage() {
 
   const dormId = resolvedMembership.dorm_id;
   const role = resolvedMembership.role;
-  const finesHref = `/${role}/fines`;
+  const rolePath = getRoleRoute(role);
+  const finesHref = `/${rolePath}/fines`;
 
   const { data: dorm } = await supabase
     .from("dorms")
@@ -201,7 +202,7 @@ export default async function HomePage() {
             totalCharged={stats.totalCharged}
             totalPaid={stats.totalPaid}
             pendingExpenses={pendingExpensesCount}
-            role={role}
+            role={rolePath}
           />
         </div>
 
@@ -219,7 +220,7 @@ export default async function HomePage() {
                 area: cleaningPlanForRoom.area ?? "Unassigned",
                 date: format(new Date(cleaningPlanForRoom.week_start), "MMM d")
               } : null}
-              role={role}
+              role={rolePath}
             />
           </div>
         )}
@@ -233,7 +234,7 @@ export default async function HomePage() {
                 <CardDescription>Dorm-wide updates</CardDescription>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link href={`/${role}/home/announcements`}>View all</Link>
+                <Link href={`/${rolePath}/home/announcements`}>View all</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -276,7 +277,7 @@ export default async function HomePage() {
             <CardDescription>Shared dorm updates visible to your role.</CardDescription>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link href={`/${role}/home/announcements`}>View all</Link>
+            <Link href={`/${rolePath}/home/announcements`}>View all</Link>
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -335,7 +336,7 @@ export default async function HomePage() {
               <CardDescription>From your current semester calendar.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/${role}/events`}>
+              <Link href={`/${rolePath}/events`}>
                 <CalendarDays className="mr-2 size-4 text-orange-500" />
                 Open calendar
               </Link>

@@ -15,13 +15,14 @@ import { LogOut, Settings, User } from "lucide-react"
 import { logout } from "@/app/actions/auth"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useMounted } from "@/hooks/use-mounted"
-import { getRoleLabel, getRoleSummary } from "@/lib/roles"
+import { getRoleLabel, getRoleRoute, getRoleSummary } from "@/lib/roles"
 
 export function UserNav() {
   const {
     user,
     role,
   } = useAuth()
+  const routeRole = getRoleRoute(role)
   const mounted = useMounted()
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) || "User"
@@ -76,13 +77,13 @@ export function UserNav() {
         ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href={role ? `/${role}/profile` : "/profile"}>
+          <Link href={role ? `/${routeRole}/profile` : "/profile"}>
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={role ? `/${role}/settings` : "/settings"}>
+          <Link href={role ? `/${routeRole}/settings` : "/settings"}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
           </Link>

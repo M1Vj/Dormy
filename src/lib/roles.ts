@@ -58,3 +58,9 @@ export function getRoleWeight(role: AppRole | string | null | undefined): number
 export function canManageRole(managerRole: AppRole | string, targetRole: AppRole | string): boolean {
   return getRoleWeight(managerRole) >= getRoleWeight(targetRole);
 }
+
+export function getRoleRoute(role: AppRole | string | null | undefined): string {
+  if (!role) return "occupant";
+  if (role === "assistant_adviser") return "adviser";
+  return role;
+}
