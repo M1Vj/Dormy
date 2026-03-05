@@ -90,6 +90,26 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
     () => snapshot.areas.filter((area) => area.active),
     [snapshot.areas]
   );
+  const outlineAreas = useMemo(() => {
+    const grouped = new Map<string, { key: string; label: string; ids: Set<string> }>();
+
+    for (const area of activeAreas) {
+      const label = area.name.trim();
+      const key = label.toLowerCase();
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.ids.add(area.id);
+        continue;
+      }
+      grouped.set(key, {
+        key,
+        label,
+        ids: new Set([area.id]),
+      });
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [activeAreas]);
 
   const moveWeek = (offset: number) => {
     const nextWeek = addDays(weekStart, offset * 7);
@@ -605,14 +625,14 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-3">
-                {activeAreas.map((area) => {
+                {outlineAreas.map((area) => {
                   const assignedTo = snapshot.room_plans.filter(
-                    (plan) => plan.area_id === area.id && !plan.is_rest_week
+                    (plan) => !!plan.area_id && area.ids.has(plan.area_id) && !plan.is_rest_week
                   );
                   return (
-                    <div key={area.id} className="rounded-lg border bg-muted/20 p-3 flex flex-col gap-2">
+                    <div key={area.key} className="rounded-lg border bg-muted/20 p-3 flex flex-col gap-2">
                       <div className="font-medium text-sm text-emerald-700 dark:text-emerald-400 border-b pb-1.5 border-border/50">
-                        {area.name}
+                        {area.label}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {assignedTo.length > 0 ? (
