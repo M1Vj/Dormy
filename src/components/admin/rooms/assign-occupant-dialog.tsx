@@ -5,14 +5,14 @@ import { useActionState } from "react";
 import { assignOccupant } from "@/app/actions/rooms";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export type UnassignedOccupant = {
   id: string;
@@ -62,19 +62,19 @@ export function AssignOccupantDialog({
   );
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button size="sm" variant="secondary">
           Assign occupant
         </Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Assign occupant</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Assign occupant</DialogTitle>
+          <DialogDescription>
             Select an unassigned occupant for {roomLabel}.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor={`occupant-${roomId}`}>
@@ -104,13 +104,13 @@ export function AssignOccupantDialog({
           {state.success ? (
             <p className="text-sm text-primary">Occupant assigned.</p>
           ) : null}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="submit" disabled={isPending || !hasOccupants}>
               {isPending ? "Assigning..." : "Assign occupant"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
