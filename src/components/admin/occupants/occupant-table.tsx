@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { UpdateRoleDialog } from "./update-role-dialog";
+import { OccupantFilters } from "./occupant-filters";
 import { AppRole, getRoleLabel } from "@/lib/roles";
 
 type RoomRef = {
@@ -41,13 +41,12 @@ type OccupantTableProps = {
     room?: string;
     level?: string;
   };
+  /** Override the "View" button text and path appending */
+  viewAction?: {
+    label: string;
+    hrefAppend: string;
+  };
 };
-
-const statusOptions = [
-  { value: "", label: "All statuses" },
-  { value: "active", label: "Active" },
-  { value: "left", label: "Left" },
-];
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "—";
@@ -84,16 +83,11 @@ export function OccupantTable({
   role = "admin",
   basePath: providedBasePath,
   occupantBasePath,
-  filters
+  filters,
+  viewAction
 }: OccupantTableProps) {
   const basePath = providedBasePath ?? `/${role}/occupants`;
   const detailPath = occupantBasePath ?? basePath;
-  const hasFilters =
-    Boolean(filters?.search) ||
-    Boolean(filters?.status) ||
-    Boolean(filters?.room) ||
-    Boolean(filters?.level);
-
   return (
     <Card>
       <CardHeader className="space-y-4">
@@ -107,47 +101,11 @@ export function OccupantTable({
         </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div />
-          <form className="grid w-full gap-2 sm:flex sm:flex-wrap sm:items-center" method="GET">
-            <Input
-              className="w-full sm:w-48"
-              name="search"
-              placeholder="Search name or ID"
-              defaultValue={filters?.search ?? ""}
-            />
-            <Input
-              className="w-full sm:w-36"
-              name="room"
-              placeholder="Room code"
-              defaultValue={filters?.room ?? ""}
-            />
-            <Input
-              className="w-full sm:w-28"
-              name="level"
-              placeholder="Level"
-              type="number"
-              min="0"
-              defaultValue={filters?.level ?? ""}
-            />
-            <select
-              name="status"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-40"
-              defaultValue={filters?.status ?? ""}
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <Button type="submit" size="sm" variant="secondary" className="w-full sm:w-auto">
-              Filter
-            </Button>
-            {hasFilters ? (
-              <Button asChild type="button" size="sm" variant="ghost" className="w-full sm:w-auto">
-                <Link href={basePath}>Reset</Link>
-              </Button>
-            ) : null}
-          </form>
+          <OccupantFilters
+            key={`${filters?.search ?? ""}:${filters?.room ?? ""}:${filters?.level ?? ""}:${filters?.status ?? ""}`}
+            basePath={basePath}
+            filters={filters}
+          />
         </div>
       </CardHeader>
       <CardContent>
@@ -199,8 +157,8 @@ export function OccupantTable({
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <Button asChild size="sm" variant="ghost" className="w-full">
-                      <Link href={`${detailPath}/${occupant.id}`}>
-                        View
+                      <Link href={`${detailPath}/${occupant.id}${viewAction?.hrefAppend ?? ""}`}>
+                        {viewAction?.label ?? "View"}
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="ghost" className="w-full">
@@ -301,8 +259,8 @@ export function OccupantTable({
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Button asChild size="sm" variant="ghost">
-                            <Link href={`${detailPath}/${occupant.id}`}>
-                              View
+                            <Link href={`${detailPath}/${occupant.id}${viewAction?.hrefAppend ?? ""}`}>
+                              {viewAction?.label ?? "View"}
                             </Link>
                           </Button>
                           <Button asChild size="sm" variant="ghost">
