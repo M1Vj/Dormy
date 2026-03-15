@@ -102,7 +102,7 @@ export async function createCommittee(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  // Check permission (Admin, Adviser, SA)
+  // Check permission (Admin, SA)
   const { data: membership } = await supabase
     .from("dorm_memberships")
     .select("role")
@@ -113,8 +113,8 @@ export async function createCommittee(dormId: string, formData: FormData) {
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
-    return { error: "Only admins, advisers, and student assistants can create committees." };
+  if (isOccupantMode || !membership || !["admin", "student_assistant"].includes(membership.role)) {
+    return { error: "Only admins and student assistants can create committees." };
   }
 
   const parse = committeeSchema.safeParse({
@@ -178,7 +178,7 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isAdminOrSA = membership && ["admin", "adviser", "student_assistant"].includes(membership.role);
+  const isAdminOrSA = membership && ["admin", "student_assistant"].includes(membership.role);
 
   // check if head
   const { data: userCommitteeRole } = await supabase
@@ -193,7 +193,7 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
+  if (isOccupantMode || membership?.role === "adviser" || (!isAdminOrSA && !isHead)) {
     return { error: "You do not have permission to manage members." };
   }
 
@@ -321,7 +321,7 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isAdminOrSA = membership && ["admin", "adviser", "student_assistant"].includes(membership.role);
+  const isAdminOrSA = membership && ["admin", "student_assistant"].includes(membership.role);
 
   const { data: userCommitteeRole } = await supabase
     .from("committee_members")
@@ -335,7 +335,7 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
+  if (isOccupantMode || membership?.role === "adviser" || (!isAdminOrSA && !isHead)) {
     return { error: "Permission denied." };
   }
 
@@ -392,8 +392,8 @@ export async function deleteCommittee(committeeId: string) {
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
-    return { error: "Only admins, advisers, and student assistants can delete committees." };
+  if (isOccupantMode || !membership || !["admin", "student_assistant"].includes(membership.role)) {
+    return { error: "Only admins and student assistants can delete committees." };
   }
 
   const { error } = await supabase.from("committees").delete().eq("id", committeeId);

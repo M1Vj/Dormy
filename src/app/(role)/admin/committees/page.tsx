@@ -45,7 +45,7 @@ export default async function CommitteesPage() {
 
   const canCreate = Boolean(
     !isOccupantMode &&
-    membership && new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
+    membership && new Set(["admin", "student_assistant"]).has(membership.role)
   );
 
   const { data: committees, error } = await getCommittees(dormId);

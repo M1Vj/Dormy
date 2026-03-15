@@ -318,6 +318,10 @@ async function requireCommitteeLeadContext(committeeId: string) {
     return { error: context.error } as const;
   }
 
+  if (context.role === "adviser") {
+    return { error: "Advisers can view committee events, but they cannot manage them." } as const;
+  }
+
   const parsedCommitteeId = z.string().uuid("Invalid committee id.").safeParse(committeeId);
   if (!parsedCommitteeId.success) {
     return { error: parsedCommitteeId.error.issues[0]?.message ?? "Invalid committee id." } as const;
@@ -368,6 +372,10 @@ async function requireCommitteeEventManagerContext(eventId: string) {
   const context = await getEventViewerContext();
   if ("error" in context) {
     return { error: context.error } as const;
+  }
+
+  if (context.role === "adviser") {
+    return { error: "Advisers can view committee events, but they cannot manage them." } as const;
   }
 
   const supabase = await createSupabaseServerClient();
@@ -971,6 +979,10 @@ export async function createEvent(formData: FormData) {
 
   let committeeId: string | null = null;
   if (requestedCommitteeId) {
+    if (context.role === "adviser") {
+      return { error: "Advisers can view committee events, but they cannot manage them." };
+    }
+
     if ("committeeId" in contextResult && typeof contextResult.committeeId === "string") {
       committeeId = contextResult.committeeId;
     } else {
@@ -1092,6 +1104,10 @@ export async function updateEvent(formData: FormData) {
       ? contextResult.committeeId
       : null;
 
+  if (committeeId && context.role === "adviser") {
+    return { error: "Advisers can view committee events, but they cannot manage them." };
+  }
+
   const parsed = parseEventInput(formData);
   if ("error" in parsed) {
     return { error: parsed.error };
@@ -1101,6 +1117,7 @@ export async function updateEvent(formData: FormData) {
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
   }
+  const writeClient = await getEventWriteClient(supabase);
 
   const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
@@ -1123,7 +1140,7 @@ export async function updateEvent(formData: FormData) {
     return { error: "You do not have permission to manage this event." };
   }
 
-  const { error } = await supabase
+  const { error } = await writeClient
     .from("events")
     .update({
       title: parsed.data.title,
@@ -1202,6 +1219,10 @@ export async function deleteEvent(formData: FormData) {
       ? contextResult.committeeId
       : null;
 
+  if (committeeId && context.role === "adviser") {
+    return { error: "Advisers can view committee events, but they cannot manage them." };
+  }
+
   const isGlobalDeleteAllowed = DELETE_ACCESS_ROLES.has(context.role);
   const isCommitteeLead = Boolean(committeeId);
 
@@ -1213,6 +1234,7 @@ export async function deleteEvent(formData: FormData) {
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." };
   }
+  const writeClient = await getEventWriteClient(supabase);
 
   const semesterResult = await ensureActiveSemesterId(context.dormId, supabase);
   if ("error" in semesterResult) {
@@ -1247,7 +1269,7 @@ export async function deleteEvent(formData: FormData) {
       .remove(photos.map((photo) => photo.storage_path));
   }
 
-  const { error } = await supabase
+  const { error } = await writeClient
     .from("events")
     .delete()
     .eq("id", eventId)

@@ -317,6 +317,10 @@ export async function createAnnouncement(dormId: string | null, formData: FormDa
 
   const committeeId = parsed.data.committee_id ?? null;
 
+  if (committeeId && role === "adviser") {
+    return { error: "Advisers can view committee announcements, but they cannot manage them." };
+  }
+
   if (committeeId && dormId) {
     const { data: committee } = await supabase
       .from("committees")
@@ -478,6 +482,10 @@ export async function updateAnnouncement(
   const existingCommitteeId = (existing as { committee_id?: string | null }).committee_id ?? null;
   const existingVisibility = (existing as { visibility?: string | null }).visibility ?? null;
 
+  if (existingCommitteeId && membership?.role === "adviser") {
+    return { error: "Advisers can view committee announcements, but they cannot manage them." };
+  }
+
   if (!isStaff) {
     if (!existingCommitteeId) {
       return { error: "Only staff can edit dorm-wide announcements." };
@@ -533,6 +541,10 @@ export async function updateAnnouncement(
   }
 
   const committeeId = parsed.data.committee_id ?? null;
+
+  if (committeeId && membership?.role === "adviser") {
+    return { error: "Advisers can view committee announcements, but they cannot manage them." };
+  }
 
   if (committeeId) {
     const { data: committee } = await supabase
@@ -666,6 +678,10 @@ export async function deleteAnnouncement(dormId: string | null, announcementId: 
 
   const existingCommitteeId = (existing as { committee_id?: string | null }).committee_id ?? null;
   const existingVisibility = (existing as { visibility?: string | null }).visibility ?? null;
+
+  if (existingCommitteeId && membership?.role === "adviser") {
+    return { error: "Advisers can view committee announcements, but they cannot manage them." };
+  }
 
   if (!isPowerStaff) {
     if (!existingCommitteeId) {

@@ -251,10 +251,26 @@ async function requireCompetitionManager(eventId: string) {
     return { error: "Event not found." } as const;
   }
 
+  let writeSupabase: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
   return {
     context,
     event: event as EventRow,
     supabase,
+    writeSupabase,
     committeeId,
   } as const;
 }
@@ -415,7 +431,7 @@ export async function createCompetitionTeam(formData: FormData) {
     return { error: "Enable competition mode before adding teams." };
   }
 
-  const { error } = await manager.supabase.from("event_teams").insert({
+  const { error } = await manager.writeSupabase.from("event_teams").insert({
     dorm_id: manager.context.dormId,
     event_id: parsed.data.event_id,
     name: parsed.data.name,
@@ -443,7 +459,7 @@ export async function deleteCompetitionTeam(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase
+  const { error } = await manager.writeSupabase
     .from("event_teams")
     .delete()
     .eq("id", teamId)
@@ -500,7 +516,7 @@ export async function addCompetitionMember(formData: FormData) {
     payload.display_name = parsed.data.display_name;
   }
 
-  const { error } = await manager.supabase.from("event_team_members").insert(payload);
+  const { error } = await manager.writeSupabase.from("event_team_members").insert(payload);
 
   if (error) {
     return { error: error.message };
@@ -525,7 +541,7 @@ export async function removeCompetitionMember(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase
+  const { error } = await manager.writeSupabase
     .from("event_team_members")
     .delete()
     .eq("id", parsed.data.member_id)
@@ -560,7 +576,7 @@ export async function createCompetitionCategory(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase.from("event_score_categories").insert({
+  const { error } = await manager.writeSupabase.from("event_score_categories").insert({
     dorm_id: manager.context.dormId,
     event_id: parsed.data.event_id,
     name: parsed.data.name,
@@ -616,7 +632,7 @@ export async function updateCompetitionCategory(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase
+  const { error } = await manager.writeSupabase
     .from("event_score_categories")
     .update({
       name: parsed.data.name,
@@ -670,7 +686,7 @@ export async function deleteCompetitionCategory(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase
+  const { error } = await manager.writeSupabase
     .from("event_score_categories")
     .delete()
     .eq("id", parsed.data.category_id)
@@ -721,7 +737,7 @@ export async function upsertCompetitionScore(formData: FormData) {
     return { error: manager.error };
   }
 
-  let query = manager.supabase
+  let query = manager.writeSupabase
     .from("event_scores")
     .select("id")
     .eq("event_id", parsed.data.event_id)
@@ -738,7 +754,7 @@ export async function upsertCompetitionScore(formData: FormData) {
   }
 
   if (existing?.id) {
-    const { error: updateError } = await manager.supabase
+    const { error: updateError } = await manager.writeSupabase
       .from("event_scores")
       .update({
         points: parsed.data.points,
@@ -752,7 +768,7 @@ export async function upsertCompetitionScore(formData: FormData) {
       return { error: updateError.message };
     }
   } else {
-    const { error: insertError } = await manager.supabase.from("event_scores").insert({
+    const { error: insertError } = await manager.writeSupabase.from("event_scores").insert({
       dorm_id: manager.context.dormId,
       event_id: parsed.data.event_id,
       team_id: parsed.data.team_id,
@@ -806,7 +822,7 @@ export async function setCompetitionManualRank(formData: FormData) {
     return { error: manager.error };
   }
 
-  const { error } = await manager.supabase
+  const { error } = await manager.writeSupabase
     .from("event_teams")
     .update({
       manual_rank_override: parsed.data.manual_rank_override,
