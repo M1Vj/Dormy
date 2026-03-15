@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -72,8 +73,6 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
       { title: "Occupants", url: "/adviser/occupants", icon: Users, color: "text-emerald-500" },
       { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-emerald-500" },
       { title: "Finance", url: "/adviser/finance", icon: Wallet, color: "text-amber-500" },
-      { title: "Cleaning", url: "/adviser/cleaning", icon: Calendar, color: "text-lime-500" },
-      { title: "Evaluation", url: "/adviser/evaluation", icon: Shield, color: "text-cyan-500" },
       { title: "Events", url: "/adviser/events", icon: Calendar, color: "text-orange-500" },
       { title: "Reporting", url: "/adviser/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Announcements", url: "/adviser/home/announcements", icon: Bell, color: "text-blue-500" },
@@ -88,7 +87,6 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
       { title: "Fines", url: "/student_assistant/fines", icon: FileText, color: "text-rose-500" },
       { title: "Finance", url: "/student_assistant/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Cleaning", url: "/student_assistant/cleaning", icon: Calendar, color: "text-lime-500" },
-      { title: "Evaluation", url: "/student_assistant/evaluation", icon: Shield, color: "text-cyan-500" },
       { title: "Events", url: "/student_assistant/events", icon: Calendar, color: "text-orange-500" },
       { title: "Reporting", url: "/student_assistant/reporting", icon: ClipboardCheck, color: "text-pink-500" },
       { title: "Announcements", url: "/student_assistant/home/announcements", icon: Bell, color: "text-blue-500" },
@@ -147,8 +145,7 @@ export function AppSidebar() {
       if (isMobile) setOpenMobile(false);
 
       const resolvedPath = url.split("?")[0];
-      // Skip if already on the target route
-      if (pathname === resolvedPath || pathname.startsWith(`${resolvedPath}/`)) return;
+      if (pathname === resolvedPath) return;
 
       setPendingUrl(url);
       startTransition(() => {
@@ -177,7 +174,7 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <a
+                      <Link
                         href={resolvedUrl}
                         onClick={(e) => handleNav(e, resolvedUrl)}
                       >
@@ -187,7 +184,7 @@ export function AppSidebar() {
                           <item.icon className={isActive ? "text-primary" : item.color} />
                         )}
                         <span>{item.title}</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -199,4 +196,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
