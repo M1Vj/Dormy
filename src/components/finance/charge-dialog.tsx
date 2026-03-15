@@ -98,7 +98,7 @@ export function ChargeDialog({ dormId, occupantId, category, trigger }: ChargeDi
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">Record Charge</DialogTitle>
           <DialogDescription className="text-sm">
-            Add a charge to the {category === 'maintenance_fee' ? 'maintenance' : category === 'contributions' ? 'events' : 'fines'} ledger.
+            Add a charge to the {category === 'maintenance_fee' ? 'maintenance' : category === 'contributions' ? 'events' : category === 'gadgets' ? 'gadgets' : 'fines'} ledger.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

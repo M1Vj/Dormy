@@ -2,12 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getFineRules } from "@/app/actions/fines";
+import { getDormGadgetFee, getOccupantGadgetSummary } from "@/app/actions/gadgets";
 import { getOccupant } from "@/app/actions/occupants";
 import { getCommittees } from "@/app/actions/committees";
 import { IssueFineDialog } from "@/components/admin/fines/issue-fine-dialog";
+import { OccupantGadgetsCard } from "@/components/admin/occupants/occupant-gadgets-card";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { Button } from "@/components/ui/button";
-import { BackButton } from "@/components/ui/back-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -165,6 +166,10 @@ export default async function AdminOccupantProfilePage(props: {
       : `Level ${currentRoomRef.level}`;
   const assignments = (occupant.room_assignments as RoomAssignment[]) ?? [];
   const dormOptions = await getUserDorms();
+  const gadgetSummary = await getOccupantGadgetSummary(occupantDormId, occupant.id);
+  const gadgetFee = await getDormGadgetFee(occupantDormId);
+  const semesterGadgetFee =
+    "fee_pesos" in gadgetFee && typeof gadgetFee.fee_pesos === "number" ? gadgetFee.fee_pesos : 50;
 
   let committeesRaw: { id: string; dorm_id: string; name: string; description: string | null; created_at: string; members: { role: "member" | "head" | "co-head"; user_id: string; display_name: string | null; }[] }[] = [];
   if (isEditMode) {
@@ -273,6 +278,23 @@ export default async function AdminOccupantProfilePage(props: {
           )}
         </CardContent>
       </Card>
+
+      {!isEditMode && "data" in gadgetSummary ? (
+        <OccupantGadgetsCard
+          dormId={occupantDormId}
+          occupant={{
+            id: occupant.id,
+            full_name: occupant.full_name ?? "Occupant",
+            student_id: occupant.student_id ?? null,
+            current_semester_balance: gadgetSummary.data.current_semester_balance,
+            total_balance: gadgetSummary.data.total_balance,
+            gadgets: gadgetSummary.data.gadgets,
+          }}
+          canManage={!gadgetSummary.migrationRequired}
+          semesterFeePesos={semesterGadgetFee}
+          warning={gadgetSummary.warning}
+        />
+      ) : null}
 
       {!isEditMode ? (
         <Card>
