@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 type ButtonProps = React.ComponentProps<typeof Button>;
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 export type FineRuleOption = {
@@ -133,8 +133,8 @@ export function IssueFineDialog({
   const hasOccupants = occupants.length > 0;
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button
           variant={triggerVariant}
           size={triggerSize}
@@ -142,14 +142,14 @@ export function IssueFineDialog({
         >
           {triggerLabel}
         </Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Issue fine</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Issue fine</DialogTitle>
+          <DialogDescription>
             Select an occupant, then fill out the fine details.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor={`${listId}-input`}>
@@ -296,13 +296,13 @@ export function IssueFineDialog({
             <p className="text-sm text-primary">Fine issued successfully.</p>
           ) : null}
 
-          <SheetFooter>
+          <DialogFooter>
             <Button type="submit" disabled={isPending || !selectedId}>
               {isPending ? "Issuing..." : "Issue fine"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

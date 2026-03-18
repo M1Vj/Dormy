@@ -28,6 +28,8 @@ export type DashboardStats = {
   finesPaid: number;
   eventsCharged: number;
   eventsPaid: number;
+  gadgetsCharged: number;
+  gadgetsPaid: number;
   // Clearance details (per occupant)
   clearanceList: ClearanceItem[];
 };
@@ -132,6 +134,8 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
   let finesPaid = 0;
   let eventsCharged = 0;
   let eventsPaid = 0;
+  let gadgetsCharged = 0;
+  let gadgetsPaid = 0;
 
   for (const entry of entryList) {
     const amount = Number(entry.amount_pesos);
@@ -155,11 +159,13 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
       if (ledger === "maintenance_fee") maintenancePaid += absAmount;
       if (ledger === "sa_fines") finesPaid += absAmount;
       if (ledger === "contributions") eventsPaid += absAmount;
+      if (ledger === "gadgets") gadgetsPaid += absAmount;
     } else {
       totalCharged += amount;
       if (ledger === "maintenance_fee") maintenanceCharged += amount;
       if (ledger === "sa_fines") finesCharged += amount;
       if (ledger === "contributions") eventsCharged += amount;
+      if (ledger === "gadgets") gadgetsCharged += amount;
     }
   }
 
@@ -201,6 +207,8 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     finesPaid,
     eventsCharged,
     eventsPaid,
+    gadgetsCharged,
+    gadgetsPaid,
     clearanceList,
   };
 }
@@ -211,6 +219,7 @@ export type OccupantReportingData = {
     maintenance: number;
     fines: number;
     events: number;
+    gadgets: number;
   };
   totalPoints: number;
   totalFines: number;
@@ -257,6 +266,7 @@ export async function getOccupantReportingData(dormId: string, occupantId: strin
     maintenance: 0,
     fines: 0,
     events: 0,
+    gadgets: 0,
     total: 0
   };
 
@@ -265,6 +275,7 @@ export async function getOccupantReportingData(dormId: string, occupantId: strin
     if (entry.ledger === 'maintenance_fee') balances.maintenance += amount;
     if (entry.ledger === 'sa_fines') balances.fines += amount;
     if (entry.ledger === 'contributions') balances.events += amount;
+    if (entry.ledger === 'gadgets') balances.gadgets += amount;
     balances.total += amount;
   });
 

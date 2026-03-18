@@ -20,7 +20,7 @@ import {
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
-  category: z.enum(['maintenance_fee', 'sa_fines', 'contributions'] as const),
+  category: z.enum(['maintenance_fee', 'sa_fines', 'contributions', 'gadgets'] as const),
   amount: z.number().positive(),
   entry_type: z.enum(['charge', 'payment', 'adjustment', 'refund'] as const),
   method: z.string().optional(),
@@ -40,12 +40,13 @@ const transactionSchema = z.object({
 });
 
 type TransactionData = z.infer<typeof transactionSchema>;
-export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions';
+export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions' | 'gadgets';
 
 const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
   maintenance_fee: ["admin", "adviser"],
   sa_fines: ["admin", "student_assistant", "adviser"],
   contributions: ["admin", "treasurer"],
+  gadgets: ["admin", "student_assistant"],
 };
 
 const storeChoiceSchema = z.union([
@@ -707,6 +708,37 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     }
   }
 
+  if (tx.entry_type === "payment") {
+    const { data: ledgerRows, error: ledgerRowsError } = await writeClient
+      .from("ledger_entries")
+      .select("amount_pesos")
+      .eq("dorm_id", dormId)
+      .eq("occupant_id", tx.occupant_id)
+      .eq("ledger", tx.category)
+      .is("voided_at", null);
+
+    if (ledgerRowsError) {
+      return { error: ledgerRowsError.message };
+    }
+
+    const outstandingBalance = Number(
+      (ledgerRows ?? [])
+        .reduce((sum, row) => sum + Number(row.amount_pesos), 0)
+        .toFixed(2)
+    );
+    const paymentAmount = Number(Math.abs(finalAmount).toFixed(2));
+
+    if (outstandingBalance <= 0.009) {
+      return { error: "No outstanding balance available for this account." };
+    }
+
+    if (paymentAmount - outstandingBalance > 0.009) {
+      return {
+        error: `Payment exceeds outstanding balance (available: ₱${outstandingBalance.toFixed(2)}).`,
+      };
+    }
+  }
+
   const { error } = await writeClient.from("ledger_entries").insert({
     dorm_id: dormId,
     semester_id: semesterId,
@@ -792,7 +824,9 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
           ? "Maintenance"
           : tx.category === "sa_fines"
             ? "Fines"
-            : "Contributions";
+            : tx.category === "gadgets"
+              ? "Gadgets"
+              : "Contributions";
 
       let eventTitle: string | null = null;
       if (tx.event_id) {
@@ -895,6 +929,9 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
 
   revalidatePath(`/${activeRole}/finance`);
   revalidatePath(`/${activeRole}/payments`); // Occupant view
+  if (tx.category === "gadgets") {
+    revalidatePath(`/${activeRole}/finance/gadgets`);
+  }
   return { success: true };
 }
 
@@ -982,7 +1019,9 @@ export async function previewTransactionReceiptEmail(
       ? "Maintenance"
       : tx.category === "sa_fines"
         ? "Fines"
-        : "Contributions";
+        : tx.category === "gadgets"
+          ? "Gadgets"
+          : "Contributions";
 
   let eventTitle: string | null = null;
   if (tx.event_id) {
@@ -3742,6 +3781,7 @@ export async function getLedgerBalance(dormId: string, occupantId: string) {
     maintenance: 0,
     fines: 0,
     events: 0,
+    gadgets: 0,
     total: 0
   };
 
@@ -3750,6 +3790,7 @@ export async function getLedgerBalance(dormId: string, occupantId: string) {
     if (entry.ledger === 'maintenance_fee') balances.maintenance += amount;
     if (entry.ledger === 'sa_fines') balances.fines += amount;
     if (entry.ledger === 'contributions') balances.events += amount;
+    if (entry.ledger === 'gadgets') balances.gadgets += amount;
     balances.total += amount;
   });
 
@@ -3788,7 +3829,8 @@ export async function getClearanceStatus(dormId: string, occupantId: string) {
   return (
     balances.maintenance <= 0 &&
     balances.fines <= 0 &&
-    balances.events <= 0
+    balances.events <= 0 &&
+    balances.gadgets <= 0
   );
 }
 
@@ -3803,6 +3845,11 @@ export type DormFinanceOverview = {
     charged: number;
     collected: number;
     approved_expenses: number;
+    outstanding: number;
+  };
+  gadgets: {
+    charged: number;
+    collected: number;
     outstanding: number;
   };
   committee_funds: {
@@ -3878,6 +3925,8 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
   let maintenanceCollected = 0;
   let contributionsCharged = 0;
   let contributionsCollected = 0;
+  let gadgetsCharged = 0;
+  let gadgetsCollected = 0;
 
   for (const entry of ledgerEntries ?? []) {
     const amount = Number(entry.amount_pesos ?? 0);
@@ -3888,6 +3937,10 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
     if (entry.ledger === "contributions") {
       if (amount >= 0) contributionsCharged += amount;
       else contributionsCollected += Math.abs(amount);
+    }
+    if (entry.ledger === "gadgets") {
+      if (amount >= 0) gadgetsCharged += amount;
+      else gadgetsCollected += Math.abs(amount);
     }
   }
 
@@ -3917,9 +3970,10 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
 
   const maintenanceOutstanding = Math.max(0, maintenanceCharged - maintenanceCollected);
   const contributionsOutstanding = Math.max(0, contributionsCharged - contributionsCollected);
+  const gadgetsOutstanding = Math.max(0, gadgetsCharged - gadgetsCollected);
 
-  const totalCharged = maintenanceCharged + contributionsCharged;
-  const totalCollected = maintenanceCollected + contributionsCollected;
+  const totalCharged = maintenanceCharged + contributionsCharged + gadgetsCharged;
+  const totalCollected = maintenanceCollected + contributionsCollected + gadgetsCollected;
   const totalApprovedExpenses = maintenanceApprovedExpenses + contributionsApprovedExpenses;
   const totalOutstanding = Math.max(0, totalCharged - totalCollected);
 
@@ -3935,6 +3989,11 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
       collected: contributionsCollected,
       approved_expenses: contributionsApprovedExpenses,
       outstanding: contributionsOutstanding,
+    },
+    gadgets: {
+      charged: gadgetsCharged,
+      collected: gadgetsCollected,
+      outstanding: gadgetsOutstanding,
     },
     committee_funds: {
       approved_expenses: committeeApprovedExpenses,
@@ -4092,15 +4151,23 @@ export async function previewGlobalReceiptTemplateEmail(
     method: "cash",
     contributions: [
       {
+        title: "COFILANG Faction Shirt",
+        amountPesos: 350.0,
+        orderItems: [
+          {
+            itemName: "Faction Shirt",
+            options: ["Size: XL", "Color: Blue"],
+            quantity: 1,
+            subtotal: 350.0,
+          },
+        ],
+      },
+      {
         title: "Sample Contribution A",
         amountPesos: 50.0,
       },
-      {
-        title: "Sample Contribution B",
-        amountPesos: 150.0,
-      },
     ],
-    totalAmountPesos: 200.0,
+    totalAmountPesos: 400.0,
     customMessage: payload.message || null,
     subjectOverride: payload.subject || null,
     signatureOverride: payload.signature || null,

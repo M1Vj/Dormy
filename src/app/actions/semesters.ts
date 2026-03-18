@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getActiveRole } from "@/lib/roles-server";
 import { z } from "zod";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 
 import { logAuditEvent } from "@/lib/audit/log";
 import { ensureActiveSemesterId, getActiveSemester, listDormSemesterArchives, listDormSemesters } from "@/lib/semesters";
@@ -15,7 +16,23 @@ function filterDormId<T extends { eq: (col: string, val: string) => T; is: (col:
   return dormId ? query.eq("dorm_id", dormId) : query.is("dorm_id", null);
 }
 
+function excludeArchivedSemesters<T extends { neq: (col: string, val: string) => T }>(query: T): T {
+  return query.neq("status", "archived");
+}
 
+function createAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null;
+  }
+
+  return createSupabaseAdminClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
+}
 
 const semesterPlanSchema = z.object({
   school_year: z.string().trim().min(4).max(20),
@@ -179,7 +196,11 @@ export async function getSemesterWorkspace(dormId: string | null): Promise<Semes
     return { error: ensureResult.error ?? "Failed to resolve active semester." };
   }
 
-  const baseFetches: [Promise<any>, Promise<any>, Promise<any>] = [
+  const baseFetches: [
+    ReturnType<typeof getActiveSemester>,
+    ReturnType<typeof listDormSemesters>,
+    Promise<Awaited<ReturnType<typeof listDormSemesterArchives>>>
+  ] = [
     getActiveSemester(dormId, supabase),
     listDormSemesters(dormId, supabase),
     dormId ? listDormSemesterArchives(dormId, supabase) : Promise.resolve([]),
@@ -259,13 +280,18 @@ export async function createSemester(dormId: string | null, formData: FormData) 
   }
 
   const { supabase, userId } = manager;
+  const writeClient = dormId ? supabase : createAdminClient();
+  if (!writeClient) {
+    return { error: "SUPABASE_SERVICE_ROLE_KEY is required for global semester changes." };
+  }
 
   // Overlap validation
-  let overlapQuery = supabase
+  let overlapQuery = writeClient
     .from("dorm_semesters")
     .select("id")
     .or(`and(starts_on.lte.${parsed.data.ends_on},ends_on.gte.${parsed.data.starts_on})`)
     .limit(1);
+  overlapQuery = excludeArchivedSemesters(overlapQuery);
   overlapQuery = filterDormId(overlapQuery, dormId);
   const { data: overlapping } = await overlapQuery.maybeSingle();
 
@@ -273,7 +299,7 @@ export async function createSemester(dormId: string | null, formData: FormData) 
     return { error: "The selected dates overlap with an existing semester." };
   }
 
-  const { data: semester, error } = await supabase
+  const { data: semester, error } = await writeClient
     .from("dorm_semesters")
     .insert({
       dorm_id: dormId,
@@ -344,14 +370,19 @@ export async function updateSemester(dormId: string | null, formData: FormData) 
   }
 
   const { supabase, userId } = manager;
+  const writeClient = dormId ? supabase : createAdminClient();
+  if (!writeClient) {
+    return { error: "SUPABASE_SERVICE_ROLE_KEY is required for global semester changes." };
+  }
 
   // Overlap validation excluding itself
-  let overlapQuery2 = supabase
+  let overlapQuery2 = writeClient
     .from("dorm_semesters")
     .select("id")
     .neq("id", semesterId)
     .or(`and(starts_on.lte.${parsed.data.ends_on},ends_on.gte.${parsed.data.starts_on})`)
     .limit(1);
+  overlapQuery2 = excludeArchivedSemesters(overlapQuery2);
   overlapQuery2 = filterDormId(overlapQuery2, dormId);
   const { data: overlapping } = await overlapQuery2.maybeSingle();
 
@@ -359,7 +390,7 @@ export async function updateSemester(dormId: string | null, formData: FormData) 
     return { error: "The selected dates overlap with another existing semester." };
   }
 
-  let updateQuery = supabase
+  let updateQuery = writeClient
     .from("dorm_semesters")
     .update({
       school_year: parsed.data.school_year,
@@ -371,10 +402,13 @@ export async function updateSemester(dormId: string | null, formData: FormData) 
     })
     .eq("id", semesterId);
   updateQuery = filterDormId(updateQuery, dormId);
-  const { error } = await updateQuery;
+  const { data: updatedSemester, error } = await updateQuery.select("id").maybeSingle();
 
   if (error) {
     return { error: error.message ?? "Failed to update semester." };
+  }
+  if (!updatedSemester) {
+    return { error: "Failed to update semester." };
   }
 
   try {
@@ -413,20 +447,27 @@ export async function deleteSemester(dormId: string | null, formData: FormData) 
   }
 
   const { supabase, userId } = manager;
+  const writeClient = dormId ? supabase : createAdminClient();
+  if (!writeClient) {
+    return { error: "SUPABASE_SERVICE_ROLE_KEY is required for global semester changes." };
+  }
 
   // Attempt to delete. This will fail if there are foreign key constraints currently restricting it.
-  let deleteQuery = supabase
+  let deleteQuery = writeClient
     .from("dorm_semesters")
     .delete()
     .eq("id", semesterId);
   deleteQuery = filterDormId(deleteQuery, dormId);
-  const { error } = await deleteQuery;
+  const { data: deletedSemester, error } = await deleteQuery.select("id").maybeSingle();
 
   if (error) {
     if (error.code === "23503") {
       return { error: "Cannot delete this semester because it contains existing records (e.g., events, fines)." };
     }
     return { error: error.message ?? "Failed to delete semester." };
+  }
+  if (!deletedSemester) {
+    return { error: "Failed to delete semester." };
   }
 
   try {

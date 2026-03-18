@@ -71,7 +71,11 @@ function formatEventDate(start: Date | null, end: Date | null) {
   return `${format(start, "MMM d, yyyy h:mm a")} - ${format(end, "MMM d, yyyy h:mm a")}`;
 }
 
-function EventCard({ event, startsAt }: DecoratedEvent) {
+function EventCard({
+  event,
+  startsAt,
+  basePath,
+}: DecoratedEvent & { basePath: string }) {
   const endsAt = parseDate(event.ends_at);
 
   return (
@@ -112,7 +116,7 @@ function EventCard({ event, startsAt }: DecoratedEvent) {
           </div>
         </div>
         <Button asChild className="w-full justify-between">
-          <Link href={`/events/${event.id}`}>
+          <Link href={`${basePath}/${event.id}`}>
             Open event
             <ChevronRight className="size-4" />
           </Link>
@@ -125,9 +129,11 @@ function EventCard({ event, startsAt }: DecoratedEvent) {
 export function EventsBoard({
   events,
   canManageEvents,
+  basePath,
 }: {
   events: EventSummary[];
   canManageEvents: boolean;
+  basePath: string;
 }) {
   const [view, setView] = useState<ViewMode>("calendar");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("upcoming");
@@ -276,7 +282,7 @@ export function EventsBoard({
           </Card>
           <div className="grid gap-4 md:grid-cols-2">
             {featuredEvents.map(({ event, startsAt }) => (
-              <EventCard key={event.id} event={event} startsAt={startsAt} />
+              <EventCard key={event.id} event={event} startsAt={startsAt} basePath={basePath} />
             ))}
             {!featuredEvents.length ? (
               <Card className="md:col-span-2">
@@ -293,7 +299,7 @@ export function EventsBoard({
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sortedFilteredEvents.map(({ event, startsAt }) => (
-            <EventCard key={event.id} event={event} startsAt={startsAt} />
+            <EventCard key={event.id} event={event} startsAt={startsAt} basePath={basePath} />
           ))}
           {!sortedFilteredEvents.length ? (
             <Card className="md:col-span-2 xl:col-span-3">

@@ -49,6 +49,24 @@ export type EventRating = {
   occupant_student_id: string | null;
 };
 
+export type EventAttendanceStatus = "present" | "absent" | "excused";
+
+export type EventAttendanceEntry = {
+  occupant_id: string;
+  occupant_name: string;
+  occupant_student_id: string | null;
+  status: EventAttendanceStatus | null;
+  checked_at: string | null;
+};
+
+export type EventAttendanceSummary = {
+  total: number;
+  present: number;
+  absent: number;
+  excused: number;
+  unmarked: number;
+};
+
 export type EventDetail = EventSummary & {
   photos: EventPhoto[];
   ratings: EventRating[];

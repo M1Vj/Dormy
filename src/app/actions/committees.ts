@@ -57,6 +57,24 @@ type CommitteeExpenseRow = {
   status: string;
 };
 
+function mapCommitteeMemberMutationError(error: {
+  code?: string | null;
+  message?: string | null;
+}) {
+  const message = String(error.message ?? "");
+  const normalized = message.toLowerCase();
+
+  if (error.code === "42P17" || normalized.includes("infinite recursion")) {
+    return "Committee member policies are misconfigured. Run the latest database migrations and retry.";
+  }
+
+  if (normalized.includes("row-level security")) {
+    return "You do not have permission to manage committee members.";
+  }
+
+  return message || "Failed to update committee members.";
+}
+
 export type CommitteeMember = {
   role: CommitteeMemberRole;
   user_id: string;
@@ -84,7 +102,7 @@ export async function createCommittee(dormId: string, formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  // Check permission (Admin, Adviser, SA)
+  // Check permission (Admin, SA)
   const { data: membership } = await supabase
     .from("dorm_memberships")
     .select("role")
@@ -95,8 +113,8 @@ export async function createCommittee(dormId: string, formData: FormData) {
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
-    return { error: "Only admins, advisers, and student assistants can create committees." };
+  if (isOccupantMode || !membership || !["admin", "student_assistant"].includes(membership.role)) {
+    return { error: "Only admins and student assistants can create committees." };
   }
 
   const parse = committeeSchema.safeParse({
@@ -160,7 +178,7 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isAdminOrSA = membership && ["admin", "adviser", "student_assistant"].includes(membership.role);
+  const isAdminOrSA = membership && ["admin", "student_assistant"].includes(membership.role);
 
   // check if head
   const { data: userCommitteeRole } = await supabase
@@ -175,8 +193,23 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
+  if (isOccupantMode || membership?.role === "adviser" || (!isAdminOrSA && !isHead)) {
     return { error: "You do not have permission to manage members." };
+  }
+
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
   }
 
   const { data: targetMembership, error: targetMembershipError } = await supabase
@@ -191,27 +224,61 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
   }
 
   if (!targetMembership?.id) {
-    return { error: "That user is not a member of this dorm." };
+    const { data: targetOccupant, error: targetOccupantError } = await supabase
+      .from("occupants")
+      .select("id")
+      .eq("dorm_id", committee.dorm_id)
+      .eq("user_id", parsedInput.data.userId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (targetOccupantError) {
+      return { error: targetOccupantError.message };
+    }
+
+    if (!targetOccupant?.id) {
+      return { error: "That user is not an active occupant of this dorm." };
+    }
+
+    const { error: membershipInsertError } = await writeClient
+      .from("dorm_memberships")
+      .insert({
+        dorm_id: committee.dorm_id,
+        user_id: parsedInput.data.userId,
+        role: "occupant",
+      });
+
+    if (membershipInsertError && membershipInsertError.code !== "23505") {
+      return { error: membershipInsertError.message };
+    }
   }
 
   // Ensure a single head/co-head by demoting existing members first.
   if (parsedInput.data.role === "head") {
-    await supabase
+    const { error: demoteHeadError } = await writeClient
       .from("committee_members")
       .update({ role: "member" })
       .eq("committee_id", committeeId)
       .eq("role", "head");
+
+    if (demoteHeadError) {
+      return { error: mapCommitteeMemberMutationError(demoteHeadError) };
+    }
   }
 
   if (parsedInput.data.role === "co-head") {
-    await supabase
+    const { error: demoteCoHeadError } = await writeClient
       .from("committee_members")
       .update({ role: "member" })
       .eq("committee_id", committeeId)
       .eq("role", "co-head");
+
+    if (demoteCoHeadError) {
+      return { error: mapCommitteeMemberMutationError(demoteCoHeadError) };
+    }
   }
 
-  const { error } = await supabase
+  const { error } = await writeClient
     .from("committee_members")
     .upsert({
       committee_id: committeeId,
@@ -219,7 +286,7 @@ export async function addCommitteeMember(committeeId: string, userId: string, ro
       role: parsedInput.data.role,
     }, { onConflict: "committee_id,user_id" });
 
-  if (error) return { error: error.message };
+  if (error) return { error: mapCommitteeMemberMutationError(error) };
 
   const activeRole = await getActiveRole() || "occupant";
   revalidatePath(`/${activeRole}/committees/${committeeId}`);
@@ -254,7 +321,7 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isAdminOrSA = membership && ["admin", "adviser", "student_assistant"].includes(membership.role);
+  const isAdminOrSA = membership && ["admin", "student_assistant"].includes(membership.role);
 
   const { data: userCommitteeRole } = await supabase
     .from("committee_members")
@@ -268,17 +335,32 @@ export async function removeCommitteeMember(committeeId: string, userId: string)
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || (!isAdminOrSA && !isHead)) {
+  if (isOccupantMode || membership?.role === "adviser" || (!isAdminOrSA && !isHead)) {
     return { error: "Permission denied." };
   }
 
-  const { error } = await supabase
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
+  const { error } = await writeClient
     .from("committee_members")
     .delete()
     .eq("committee_id", committeeId)
     .eq("user_id", parsedInput.data);
 
-  if (error) return { error: error.message };
+  if (error) return { error: mapCommitteeMemberMutationError(error) };
 
   const activeRole = await getActiveRole() || "occupant";
   revalidatePath(`/${activeRole}/committees/${committeeId}`);
@@ -310,8 +392,8 @@ export async function deleteCommittee(committeeId: string) {
   const cookieStore = await cookies();
   const isOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
-  if (isOccupantMode || !membership || !["admin", "adviser", "student_assistant"].includes(membership.role)) {
-    return { error: "Only admins, advisers, and student assistants can delete committees." };
+  if (isOccupantMode || !membership || !["admin", "student_assistant"].includes(membership.role)) {
+    return { error: "Only admins and student assistants can delete committees." };
   }
 
   const { error } = await supabase.from("committees").delete().eq("id", committeeId);

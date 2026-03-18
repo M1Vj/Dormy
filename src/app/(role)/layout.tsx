@@ -5,6 +5,7 @@ import { ModeToggle } from "@/components/mode-toggle"
 import { HeaderRoleChip } from "@/components/nav/header-role-chip"
 import { HeaderLogo } from "@/components/nav/header-logo"
 import { RouteProgress } from "@/components/nav/route-progress"
+import { RoleSubpageBackButton } from "@/components/nav/role-subpage-back-button"
 import { UserNav } from "@/components/nav/user-nav"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { DormProvider } from "@/components/providers/dorm-provider"
@@ -42,6 +43,7 @@ export default async function AppLayout({
               </div>
             </header>
             <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              <RoleSubpageBackButton />
               {children}
             </div>
           </main>

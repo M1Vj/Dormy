@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { removeCommitteeMember } from "@/app/actions/committees";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function RemoveMemberButton({
   committeeId,
@@ -19,7 +20,12 @@ export function RemoveMemberButton({
   const handleRemove = () => {
     if (confirm("Are you sure you want to remove this member?")) {
       startTransition(async () => {
-        await removeCommitteeMember(committeeId, userId);
+        const result = await removeCommitteeMember(committeeId, userId);
+        if (result?.error) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Member removed.");
         router.refresh();
       });
     }

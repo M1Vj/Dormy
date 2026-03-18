@@ -92,6 +92,7 @@ export default async function AdminOccupantsPage({
           room: trimmedRoom,
           level: trimmedLevel,
         }}
+        viewAction={{ label: "Fines", hrefAppend: "/fines" }}
       />
     </div>
   );

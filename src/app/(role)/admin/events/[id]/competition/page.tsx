@@ -41,7 +41,7 @@ export default async function EventCompetitionPage({
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">Competition Mode</h1>
           <Button asChild variant="outline">
-            <Link href={`/events/${id}`}>Back to event</Link>
+            <Link href={`/${context.role}/events/${id}`}>Back to event</Link>
           </Button>
         </div>
         <Card>
@@ -56,7 +56,7 @@ export default async function EventCompetitionPage({
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href={`/events/${id}`}>Open event settings</Link>
+              <Link href={`/${context.role}/events/${id}`}>Open event settings</Link>
             </Button>
           </CardContent>
         </Card>
@@ -80,10 +80,10 @@ export default async function EventCompetitionPage({
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline">
-            <Link href={`/events/${id}/competition/print`}>Printable results</Link>
+            <Link href={`/${context.role}/events/${id}/competition/print`}>Printable results</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={`/events/${id}`}>Back to event</Link>
+            <Link href={`/${context.role}/events/${id}`}>Back to event</Link>
           </Button>
         </div>
       </div>

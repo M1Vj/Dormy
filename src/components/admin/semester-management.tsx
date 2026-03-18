@@ -119,13 +119,16 @@ export function SemesterManagement({
 
   const getStatusBadge = (semester: DormSemester) => {
     const today = new Date().toISOString().split("T")[0];
-    if (activeSemester?.id === semester.id) {
+    if (semester.status === "active" || activeSemester?.id === semester.id) {
       return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">Active</span>;
     }
-    if (semester.ends_on < today) {
+    if (semester.status === "archived") {
       return <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-800">Archived</span>;
     }
-    return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">Future</span>;
+    if (semester.starts_on > today) {
+      return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">Future</span>;
+    }
+    return <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Planned</span>;
   };
 
   return (

@@ -13,14 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 type RoomRef = {
@@ -143,19 +143,19 @@ function VoidFineDialog({
   );
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button size="sm" variant="destructive" className={buttonClassName}>
           Void
         </Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Void fine</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Void fine</DialogTitle>
+          <DialogDescription>
             Provide a reason before voiding this fine.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor={`void-${fineId}`}>
@@ -169,14 +169,14 @@ function VoidFineDialog({
           {state.success ? (
             <p className="text-sm text-primary">Fine voided.</p>
           ) : null}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="submit" isLoading={isPending}>
               Void fine
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

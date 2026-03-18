@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Occupant {
   id: string; // occupant id
@@ -51,10 +52,16 @@ export function AddMemberDialog({
   const router = useRouter();
 
   const handleAdd = () => {
-    if (!selectedOccupant?.user_id) return;
+    const userId = selectedOccupant?.user_id;
+    if (!userId) return;
 
     startTransition(async () => {
-      await addCommitteeMember(committeeId, selectedOccupant.user_id!, "member");
+      const result = await addCommitteeMember(committeeId, userId, "member");
+      if (result?.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Member added.");
       setOpen(false);
       setSelectedOccupant(null);
       router.refresh();

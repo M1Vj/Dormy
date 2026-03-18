@@ -51,15 +51,32 @@ export async function submitExpense(dormId: string, formData: FormData) {
     ;
   const roles = memberships?.map(m => m.role) ?? [];
 
-  const staffSubmitRoles = new Set(["admin", "treasurer", "officer", "adviser", "assistant_adviser", "student_assistant"]);
-  const isStaffSubmitter = Boolean(memberships && roles.some(r => staffSubmitRoles.has(r)));
+  const maintenanceSubmitRoles = new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]);
+  const contributionSubmitRoles = new Set(["admin", "treasurer", "officer", "student_assistant"]);
 
   if (!memberships || memberships.length === 0) {
     return { error: "No dorm membership found for this account." };
   }
 
-  if (!committeeId && !isStaffSubmitter) {
-    return { error: "Only officers and treasurer can submit dorm-wide expenses." };
+  const parsed = submitExpenseSchema.safeParse({
+    title: formData.get("title"),
+    description: formData.get("description") || undefined,
+    amount_pesos: formData.get("amount_pesos"),
+    purchased_at: formData.get("purchased_at"),
+    category: formData.get("category"),
+    expense_group_title: formData.get("expense_group_title") || undefined,
+    contribution_reference_title: formData.get("contribution_reference_title") || undefined,
+    vendor_name: formData.get("vendor_name") || undefined,
+    official_receipt_no: formData.get("official_receipt_no") || undefined,
+    quantity: formData.get("quantity") || undefined,
+    unit_cost_pesos: formData.get("unit_cost_pesos") || undefined,
+    payment_method: formData.get("payment_method") || undefined,
+    purchased_by: formData.get("purchased_by") || undefined,
+    transparency_notes: formData.get("transparency_notes") || undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid data." };
   }
 
   if (committeeId) {
@@ -97,30 +114,30 @@ export async function submitExpense(dormId: string, formData: FormData) {
       committeeMembership && new Set(["head", "co-head"]).has(committeeMembership.role)
     );
 
-    if (!isStaffSubmitter && !isCommitteeLead) {
+    const isDormWideSubmitter = roles.some((role) =>
+      (parsed.data.category === "maintenance_fee" && maintenanceSubmitRoles.has(role)) ||
+      (parsed.data.category === "contributions" && contributionSubmitRoles.has(role))
+    );
+
+    if (!isDormWideSubmitter && !isCommitteeLead) {
       return { error: "Only committee heads/co-heads can submit committee expenses." };
     }
   }
 
-  const parsed = submitExpenseSchema.safeParse({
-    title: formData.get("title"),
-    description: formData.get("description") || undefined,
-    amount_pesos: formData.get("amount_pesos"),
-    purchased_at: formData.get("purchased_at"),
-    category: formData.get("category"),
-    expense_group_title: formData.get("expense_group_title") || undefined,
-    contribution_reference_title: formData.get("contribution_reference_title") || undefined,
-    vendor_name: formData.get("vendor_name") || undefined,
-    official_receipt_no: formData.get("official_receipt_no") || undefined,
-    quantity: formData.get("quantity") || undefined,
-    unit_cost_pesos: formData.get("unit_cost_pesos") || undefined,
-    payment_method: formData.get("payment_method") || undefined,
-    purchased_by: formData.get("purchased_by") || undefined,
-    transparency_notes: formData.get("transparency_notes") || undefined,
-  });
+  if (!committeeId) {
+    const canSubmitCategory = roles.some((role) =>
+      (parsed.data.category === "maintenance_fee" && maintenanceSubmitRoles.has(role)) ||
+      (parsed.data.category === "contributions" && contributionSubmitRoles.has(role))
+    );
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid data." };
+    if (!canSubmitCategory) {
+      return {
+        error:
+          parsed.data.category === "contributions"
+            ? "Only the treasurer, student assistant, or officer can submit contribution expenses."
+            : "Only the adviser or student assistant can submit maintenance expenses.",
+      };
+    }
   }
 
   const semesterResult = await ensureActiveSemesterId(dormId, supabase);
@@ -223,6 +240,10 @@ export async function submitExpense(dormId: string, formData: FormData) {
 
   revalidatePath(`/${activeRole}/finance/expenses`);
   revalidatePath(`/${activeRole}/finance`);
+  if (parsed.data.category === "maintenance_fee") {
+    revalidatePath(`/${activeRole}/finance/maintenance`);
+    revalidatePath(`/${activeRole}/payments`);
+  }
   if (parsed.data.category === "contributions") {
     revalidatePath(`/${activeRole}/contributions`);
     revalidatePath(`/${activeRole}/contribution-expenses`);
@@ -267,11 +288,13 @@ export async function reviewExpense(
 
   if (!expense) return { error: "Expense not found." };
 
-  const canReviewAll = roles.some((r) => new Set(["admin", "treasurer"]).has(r));
+  const canReviewContribution = roles.some((r) => new Set(["admin", "treasurer"]).has(r));
   const canReviewMaintenance = roles.some((r) =>
-    new Set(["adviser", "assistant_adviser", "student_assistant"]).has(r)
+    new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]).has(r)
   );
-  const canReviewExpense = canReviewAll || (canReviewMaintenance && expense.category === "maintenance_fee");
+  const canReviewExpense =
+    (expense.category === "contributions" && canReviewContribution) ||
+    (expense.category === "maintenance_fee" && canReviewMaintenance);
 
   if (!canReviewExpense) {
     return { error: "You do not have permission to review this expense." };
@@ -314,6 +337,10 @@ export async function reviewExpense(
   const activeRole = await getActiveRole() || "occupant";
 
   revalidatePath(`/${activeRole}/finance/expenses`);
+  if (expense.category === "maintenance_fee") {
+    revalidatePath(`/${activeRole}/finance/maintenance`);
+    revalidatePath(`/${activeRole}/payments`);
+  }
   if (expense.committee_id) {
     revalidatePath(`/${activeRole}/committees/${expense.committee_id}`);
   }

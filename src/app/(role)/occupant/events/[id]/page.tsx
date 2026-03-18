@@ -125,7 +125,7 @@ export default async function EventDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           {event.is_competition ? (
             <Button asChild>
-              <Link href={`/events/${event.id}/competition`}>
+              <Link href={`/${context.role}/events/${event.id}/competition`}>
                 <Trophy className="mr-2 size-4" />
                 Competition
               </Link>

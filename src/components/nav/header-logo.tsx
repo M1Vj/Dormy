@@ -3,10 +3,11 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useAuth } from "@/components/providers/auth-provider"
+import { getRoleRoute } from "@/lib/roles"
 
 export function HeaderLogo() {
   const { role } = useAuth();
-  const safeRole = role || "occupant";
+  const safeRole = getRoleRoute(role);
 
   return (
     <Link href={`/${safeRole}/home`} className="flex items-center gap-2">

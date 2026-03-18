@@ -36,7 +36,7 @@ export function TreasurerDashboard({
             <span className="font-medium">{collectionRate.toFixed(1)}%</span>
           </div>
           <Progress value={collectionRate} className="h-2 bg-muted [&>div]:bg-emerald-500" />
-          <div className="flex gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <Button asChild size="sm" className="w-full">
               <Link href={`/${role}/contributions`}>
                 <Receipt className="mr-2 h-4 w-4" />

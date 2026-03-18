@@ -5,9 +5,11 @@ import { format, isSameDay, parseISO } from "date-fns";
 
 import {
   getEventDetail,
+  getEventAttendanceRoster,
   getEventDormOptions,
   getEventViewerContext,
 } from "@/app/actions/events";
+import { EventAttendancePanel } from "@/components/events/event-attendance-panel";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { EventFormDialog } from "@/components/events/event-form-dialog";
 import { EventPhotoManager } from "@/components/events/event-photo-manager";
@@ -92,6 +94,9 @@ export default async function EventDetailPage({
   }
 
   const dormOptions = canManage ? await getEventDormOptions() : [];
+  const attendanceResult = canManage
+    ? await getEventAttendanceRoster(event.id)
+    : null;
 
   const startsAt = parseDate(event.starts_at);
   const endsAt = parseDate(event.ends_at);
@@ -125,7 +130,7 @@ export default async function EventDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           {event.is_competition ? (
             <Button asChild>
-              <Link href={`/events/${event.id}/competition`}>
+              <Link href={`/${context.role}/events/${event.id}/competition`}>
                 <Trophy className="mr-2 size-4" />
                 Competition
               </Link>
@@ -222,6 +227,29 @@ export default async function EventDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {canManage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Attendance Checking</CardTitle>
+            <CardDescription>
+              Mark each active occupant as present, absent, or excused for this event.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {attendanceResult && "error" in attendanceResult ? (
+              <p className="text-sm text-destructive">{attendanceResult.error}</p>
+            ) : attendanceResult ? (
+              <EventAttendancePanel
+                eventId={event.id}
+                entries={attendanceResult.entries}
+                summary={attendanceResult.summary}
+                canManage={canManage}
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

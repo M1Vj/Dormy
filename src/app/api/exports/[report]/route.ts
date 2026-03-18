@@ -174,7 +174,11 @@ async function resolveContext(report: ReportKey, request: NextRequest): Promise<
     );
   }
 
-  if (requestedDormId && selectedMembership.role !== "admin") {
+  if (
+    requestedDormId &&
+    selectedMembership.role !== "admin" &&
+    requestedDormId !== activeDormId
+  ) {
     return NextResponse.json(
       { error: "Only admins can export using a custom dorm filter." },
       { status: 403 }
@@ -381,6 +385,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       maintenance_balance: number;
       fines_balance: number;
       events_balance: number;
+      gadgets_balance: number;
       total_balance: number;
     }
   >();
@@ -393,6 +398,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       maintenance_balance: 0,
       fines_balance: 0,
       events_balance: 0,
+      gadgets_balance: 0,
       total_balance: 0,
     });
   }
@@ -417,6 +423,9 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     if (entry.ledger === "contributions") {
       summary.events_balance += amount;
     }
+    if (entry.ledger === "gadgets") {
+      summary.gadgets_balance += amount;
+    }
     summary.total_balance += amount;
   }
 
@@ -429,8 +438,15 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       "Maintenance Balance": formatPeso(row.maintenance_balance),
       "Fines Balance": formatPeso(row.fines_balance),
       "Contributions Balance": formatPeso(row.events_balance),
+      "Gadgets Balance": formatPeso(row.gadgets_balance),
       "Total Balance": formatPeso(row.total_balance),
-      "Clearance Status": (row.maintenance_balance <= 0 && row.fines_balance <= 0 && row.events_balance <= 0) ? "CLEARED" : "NOT CLEARED",
+      "Clearance Status":
+        row.maintenance_balance <= 0 &&
+        row.fines_balance <= 0 &&
+        row.events_balance <= 0 &&
+        row.gadgets_balance <= 0
+          ? "CLEARED"
+          : "NOT CLEARED",
     }));
 
   const transactionRows = entries.map((entry) => {
@@ -460,7 +476,8 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     "Course",
     "Maintenance Balance",
     "Fines Balance",
-    "Events Balance",
+    "Contributions Balance",
+    "Gadgets Balance",
     "Total Balance",
     "Clearance Status",
   ]);
