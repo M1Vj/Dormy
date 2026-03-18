@@ -186,8 +186,6 @@ export default async function FinesCollectionPage({
 
   const totalCollectible = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
 
-  const activeRole = roles.includes("admin") ? "admin" : roles[0] || "occupant";
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -213,7 +211,7 @@ export default async function FinesCollectionPage({
       {/* Search & Filter row */}
       <CollectionFilters
         key={`${search}:${statusFilter}`}
-        basePath={`/${activeRole}/finance/fines`}
+        basePath="/student_assistant/finance/fines"
         search={search}
         status={statusFilter}
         placeholder="Search occupant or room..."

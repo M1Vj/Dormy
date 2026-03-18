@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, Smartphone, Wrench } from "lucide-react";
+import { AlertCircle, Receipt, Smartphone, Wrench } from "lucide-react";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -16,12 +16,12 @@ export default function StudentAssistantFinanceHubPage() {
         </Card>
       </Link>
 
-      <Link href="/student_assistant/fines" className="block rounded-xl outline-none focus:ring-2 focus:ring-primary">
+      <Link href="/student_assistant/finance/fines" className="block rounded-xl outline-none focus:ring-2 focus:ring-primary">
         <Card className="h-full transition-colors hover:bg-muted/50">
           <CardHeader>
             <AlertCircle className="mb-2 h-8 w-8 text-red-500" />
             <CardTitle>Fines</CardTitle>
-            <CardDescription>Manage penalties, view fine reports, and collection records across dorm occupants.</CardDescription>
+            <CardDescription>Collect fine payments, manage charges, and track outstanding balances across occupants.</CardDescription>
           </CardHeader>
         </Card>
       </Link>
@@ -32,6 +32,16 @@ export default function StudentAssistantFinanceHubPage() {
             <Smartphone className="mb-2 h-8 w-8 text-indigo-500" />
             <CardTitle>Gadgets</CardTitle>
             <CardDescription>Manage and review the collection loop and transactions for occupant gadgets.</CardDescription>
+          </CardHeader>
+        </Card>
+      </Link>
+
+      <Link href="/student_assistant/finance/expenses" className="block rounded-xl outline-none focus:ring-2 focus:ring-primary">
+        <Card className="h-full transition-colors hover:bg-muted/50">
+          <CardHeader>
+            <Receipt className="mb-2 h-8 w-8 text-amber-500" />
+            <CardTitle>Committee Funds</CardTitle>
+            <CardDescription>Review contribution and committee expense submissions with receipt documentation.</CardDescription>
           </CardHeader>
         </Card>
       </Link>
