@@ -6,14 +6,14 @@ import { createDorm } from "@/app/actions/dorm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const initialState = { error: "", success: false };
 
@@ -30,17 +30,17 @@ export function CreateDormDialog() {
   );
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button>Create Dorm</Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Create dorm</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create dorm</DialogTitle>
+          <DialogDescription>
             Add a new dorm and assign yourself as admin.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -111,13 +111,13 @@ export function CreateDormDialog() {
             <p className="text-sm text-primary font-medium">Dorm created successfully!</p>
           ) : null}
 
-          <SheetFooter className="pt-4">
+          <DialogFooter className="pt-4">
             <Button type="submit" isLoading={isPending} className="w-full">
               Create dorm
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

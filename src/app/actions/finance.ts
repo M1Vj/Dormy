@@ -4151,15 +4151,23 @@ export async function previewGlobalReceiptTemplateEmail(
     method: "cash",
     contributions: [
       {
+        title: "COFILANG Faction Shirt",
+        amountPesos: 350.0,
+        orderItems: [
+          {
+            itemName: "Faction Shirt",
+            options: ["Size: XL", "Color: Blue"],
+            quantity: 1,
+            subtotal: 350.0,
+          },
+        ],
+      },
+      {
         title: "Sample Contribution A",
         amountPesos: 50.0,
       },
-      {
-        title: "Sample Contribution B",
-        amountPesos: 150.0,
-      },
     ],
-    totalAmountPesos: 200.0,
+    totalAmountPesos: 400.0,
     customMessage: payload.message || null,
     subjectOverride: payload.subject || null,
     signatureOverride: payload.signature || null,
