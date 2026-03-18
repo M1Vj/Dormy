@@ -1,11 +1,8 @@
 import { redirect } from "next/navigation";
-import { format } from "date-fns";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getActiveDormId } from "@/lib/dorms";
-import { ensureActiveSemesterId } from "@/lib/semesters";
 import { getOccupants } from "@/app/actions/occupants";
-
+import { TreasurerOccupantContributionDialog } from "@/components/finance/treasurer-occupant-contribution-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -15,7 +12,128 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { getActiveDormId } from "@/lib/dorms";
+import { ensureActiveSemesterId } from "@/lib/semesters";
+import { getStoreContributionPriceRange } from "@/lib/store-pricing";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+type LedgerEntryRow = {
+  id: string;
+  occupant_id?: string | null;
+  event_id?: string | null;
+  entry_type: string;
+  amount_pesos?: number | string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+type AssignmentRef = {
+  room?: {
+    code?: string | null;
+    level?: number | null;
+  } | {
+    code?: string | null;
+    level?: number | null;
+  }[] | null;
+};
+
+type ContributionLedgerSummary = {
+  id: string;
+  title: string;
+  details: string | null;
+  eventTitle: string | null;
+  deadline: string | null;
+  isStore: boolean;
+  storeItems: unknown[];
+  payable: number;
+  paid: number;
+  remaining: number;
+};
+
+type RoomGroup = {
+  roomCode: string;
+  level: number;
+  occupants: Array<{
+    id: string;
+    fullName: string;
+    studentId: string | null;
+    payable: number;
+    unpaidContributions: ContributionLedgerSummary[];
+  }>;
+};
+
+function asFirst<T>(value?: T | T[] | null) {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+function parseDeadline(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
+function parseContributionMetadata(entry: LedgerEntryRow) {
+  const metadata = entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {};
+  const contributionIdRaw = metadata.contribution_id ?? metadata.payable_batch_id ?? entry.event_id ?? entry.id;
+
+  return {
+    contributionId:
+      typeof contributionIdRaw === "string" && contributionIdRaw.trim().length > 0
+        ? contributionIdRaw.trim()
+        : entry.id,
+    title:
+      typeof metadata.contribution_title === "string" && metadata.contribution_title.trim().length > 0
+        ? metadata.contribution_title.trim()
+        : typeof metadata.payable_label === "string" && metadata.payable_label.trim().length > 0
+          ? metadata.payable_label.trim()
+          : "Contribution",
+    details:
+      typeof metadata.contribution_details === "string" && metadata.contribution_details.trim().length > 0
+        ? metadata.contribution_details.trim()
+        : null,
+    eventTitle:
+      typeof metadata.contribution_event_title === "string" && metadata.contribution_event_title.trim().length > 0
+        ? metadata.contribution_event_title.trim()
+        : null,
+    deadline: parseDeadline(metadata.payable_deadline),
+    isStore: metadata.is_store === true,
+    storeItems: Array.isArray(metadata.store_items) ? metadata.store_items : [],
+  };
+}
+
+function normalizeUnpaidContributions(entries: Map<string, Omit<ContributionLedgerSummary, "remaining">>) {
+  return Array.from(entries.values())
+    .map((contribution) => {
+      const roundedPaid = Number(contribution.paid.toFixed(2));
+      const basePayable = Number(contribution.payable.toFixed(2));
+      const storePriceRange = contribution.isStore ? getStoreContributionPriceRange(contribution.storeItems) : null;
+      const fallbackPayable = Number((storePriceRange?.min ?? 0).toFixed(2));
+      const payable = contribution.isStore && basePayable <= 0 ? fallbackPayable : basePayable;
+      const remaining = Number((payable - roundedPaid).toFixed(2));
+
+      return {
+        ...contribution,
+        payable,
+        paid: roundedPaid,
+        remaining,
+      };
+    })
+    .filter((contribution) => contribution.remaining > 0.009)
+    .sort((a, b) => {
+      if (a.deadline && b.deadline) {
+        return a.deadline.localeCompare(b.deadline);
+      }
+      if (a.deadline) return -1;
+      if (b.deadline) return 1;
+      return a.title.localeCompare(b.title);
+    });
+}
 
 export const metadata = {
   title: "Occupants | Dormy",
@@ -44,21 +162,18 @@ export default async function TreasurerOccupantsPage() {
     redirect("/auth/sign-in");
   }
 
-  // Authorize
   const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", activeDormId)
     .eq("user_id", user.id);
 
-  const roles = memberships?.map((m) => m.role) ?? [];
-  const hasAccess = roles.some((r) => new Set(["admin", "treasurer"]).has(r));
-
+  const roles = memberships?.map((membership) => membership.role) ?? [];
+  const hasAccess = roles.some((role) => new Set(["admin", "treasurer"]).has(role));
   if (!hasAccess) {
     return <div className="p-6 text-sm text-muted-foreground">You do not have permission to view this page.</div>;
   }
 
-  // Get current semester
   const semesterResult = await ensureActiveSemesterId(activeDormId, supabase);
   if ("error" in semesterResult) {
     return (
@@ -67,65 +182,67 @@ export default async function TreasurerOccupantsPage() {
       </div>
     );
   }
-  const activeSemesterId = semesterResult.semesterId;
 
-  // Fetch active occupants
-  const activeOccupants = await getOccupants(activeDormId, { status: "active" });
-
-  // Fetch contribution ledger entries for this semester
-  const { data: ledgerEntries, error: ledgerError } = await supabase
-    .from("ledger_entries")
-    .select("occupant_id, entry_type, amount_pesos, metadata")
-    .eq("dorm_id", activeDormId)
-    .eq("semester_id", activeSemesterId)
-    .eq("ledger", "contributions")
-    .is("voided_at", null);
+  const [activeOccupants, { data: ledgerEntries, error: ledgerError }] = await Promise.all([
+    getOccupants(activeDormId, { status: "active" }),
+    supabase
+      .from("ledger_entries")
+      .select("id, occupant_id, event_id, entry_type, amount_pesos, metadata")
+      .eq("dorm_id", activeDormId)
+      .eq("semester_id", semesterResult.semesterId)
+      .eq("ledger", "contributions")
+      .is("voided_at", null),
+  ]);
 
   if (ledgerError) {
     return <div className="p-6 text-sm text-destructive">Error loading contribution payables.</div>;
   }
 
-  // Aggregate payables per occupant based on their contribution charges and payments
-  const payableMap = new Map<string, number>();
+  const occupantContributionMap = new Map<string, Map<string, Omit<ContributionLedgerSummary, "remaining">>>();
 
-  for (const entry of ledgerEntries || []) {
+  for (const entry of (ledgerEntries ?? []) as LedgerEntryRow[]) {
     if (!entry.occupant_id) continue;
 
-    // Ignore manual inflow/adjustments that do not have associated occupants (sanity check)
-    const metadata = typeof entry.metadata === "object" && entry.metadata !== null ? entry.metadata : {};
+    const metadata = entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {};
     if (metadata.finance_manual_inflow === true) continue;
 
-    const currentPayable = payableMap.get(entry.occupant_id) || 0;
+    const parsed = parseContributionMetadata(entry);
+    const byContribution = occupantContributionMap.get(entry.occupant_id) ?? new Map();
+    const existing = byContribution.get(parsed.contributionId) ?? {
+      id: parsed.contributionId,
+      title: parsed.title,
+      details: parsed.details,
+      eventTitle: parsed.eventTitle,
+      deadline: parsed.deadline,
+      isStore: parsed.isStore,
+      storeItems: parsed.storeItems,
+      payable: 0,
+      paid: 0,
+    };
+
     const amount = Number(entry.amount_pesos || 0);
-
-    // If charge, add to payable. If payment (or negative amount), subtract.
-    if (entry.entry_type === "charge" && amount > 0) {
-      payableMap.set(entry.occupant_id, currentPayable + amount);
-    } else if (entry.entry_type === "payment" || amount < 0) {
-      payableMap.set(entry.occupant_id, currentPayable - Math.abs(amount));
+    if (entry.entry_type === "payment" || amount < 0) {
+      existing.paid += Math.abs(amount);
+    } else {
+      existing.payable += Math.abs(amount);
     }
-  }
 
-  // Group occupants by room
-  type RoomGroup = {
-    roomCode: string;
-    level: number;
-    occupants: Array<{
-      id: string;
-      fullName: string;
-      studentId: string | null;
-      payable: number;
-    }>;
-  };
+    if (!existing.details && parsed.details) existing.details = parsed.details;
+    if (!existing.eventTitle && parsed.eventTitle) existing.eventTitle = parsed.eventTitle;
+    if (!existing.deadline && parsed.deadline) existing.deadline = parsed.deadline;
+    if (!existing.isStore && parsed.isStore) existing.isStore = true;
+    if (existing.storeItems.length === 0 && parsed.storeItems.length > 0) {
+      existing.storeItems = parsed.storeItems;
+    }
+
+    byContribution.set(parsed.contributionId, existing);
+    occupantContributionMap.set(entry.occupant_id, byContribution);
+  }
 
   const roomGroupsMap = new Map<string, RoomGroup>();
 
   for (const occupant of activeOccupants) {
-    const roomAssignment = occupant.current_room_assignment;
-    const room = roomAssignment?.room;
-
-    // Handle potential array or single object from Supabase relation
-    const roomData = Array.isArray(room) ? room[0] : room;
+    const roomData = asFirst((occupant.current_room_assignment as AssignmentRef | null)?.room);
     const roomCode = roomData?.code || "Unassigned";
     const roomLevel = roomData?.level || 0;
 
@@ -137,50 +254,47 @@ export default async function TreasurerOccupantsPage() {
       });
     }
 
-    const group = roomGroupsMap.get(roomCode)!;
-    const payable = Math.max(0, payableMap.get(occupant.id) || 0); // Don't show negative payables as owing
+    const unpaidContributions = normalizeUnpaidContributions(occupantContributionMap.get(occupant.id) ?? new Map());
+    const payable = unpaidContributions.reduce((sum, contribution) => sum + contribution.remaining, 0);
 
-    group.occupants.push({
+    roomGroupsMap.get(roomCode)!.occupants.push({
       id: occupant.id,
       fullName: occupant.full_name,
       studentId: occupant.student_id,
       payable,
+      unpaidContributions,
     });
   }
 
-  // Sort groups by level then room code
   const sortedRoomGroups = Array.from(roomGroupsMap.values()).sort((a, b) => {
     if (a.level !== b.level) return a.level - b.level;
     return a.roomCode.localeCompare(b.roomCode, undefined, { numeric: true });
   });
 
   return (
-    <div className="container py-6 space-y-6 max-w-7xl">
+    <div className="container max-w-7xl space-y-6 py-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Occupants</h1>
-          <p className="text-muted-foreground mt-2">
-            View occupants grouped by their assigned rooms and their remaining payable contributions for this semester.
+          <p className="mt-2 text-muted-foreground">
+            View occupants grouped by their assigned rooms and open the unpaid contribution breakdown for anyone who still has a balance this semester.
           </p>
         </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {sortedRoomGroups.map((group) => {
-          // Calculate total remaining payable for the room
-          const roomTotalPayable = group.occupants.reduce((sum, occ) => sum + occ.payable, 0);
+          const roomTotalPayable = group.occupants.reduce((sum, occupant) => sum + occupant.payable, 0);
 
           return (
             <Card key={group.roomCode} className="flex flex-col">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-muted/20 border-b">
-                <CardTitle className="text-xl font-semibold">
-                  {group.roomCode}
-                </CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b bg-muted/20 pb-2">
+                <CardTitle className="text-xl font-semibold">{group.roomCode}</CardTitle>
                 <Badge variant={roomTotalPayable > 0 ? "destructive" : "secondary"}>
                   Room Total: ₱{roomTotalPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Badge>
               </CardHeader>
-              <CardContent className="p-0 flex-1 flex flex-col pt-2 pb-4">
+              <CardContent className="flex flex-1 flex-col p-0 pb-4 pt-2">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b-0 hover:bg-transparent">
@@ -189,28 +303,42 @@ export default async function TreasurerOccupantsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {group.occupants.map((occ) => (
-                      <TableRow key={occ.id} className="border-b-0">
+                    {group.occupants.map((occupant) => (
+                      <TableRow key={occupant.id} className="border-b-0">
                         <TableCell className="py-2">
-                          <p className="font-medium text-sm leading-tight">{occ.fullName}</p>
-                          {occ.studentId && (
-                            <p className="text-xs text-muted-foreground">{occ.studentId}</p>
+                          {occupant.unpaidContributions.length > 0 ? (
+                            <TreasurerOccupantContributionDialog
+                              dormId={activeDormId}
+                              occupantId={occupant.id}
+                              occupantName={occupant.fullName}
+                              studentId={occupant.studentId}
+                              roomCode={group.roomCode === "Unassigned" ? null : group.roomCode}
+                              contributions={occupant.unpaidContributions}
+                              triggerClassName="h-auto w-full items-start justify-start px-0 py-0 text-left hover:bg-transparent hover:text-primary"
+                            />
+                          ) : (
+                            <>
+                              <p className="text-sm font-medium leading-tight">{occupant.fullName}</p>
+                              {occupant.studentId ? (
+                                <p className="text-xs text-muted-foreground">{occupant.studentId}</p>
+                              ) : null}
+                            </>
                           )}
                         </TableCell>
                         <TableCell className="py-2 text-right">
-                          <span className={`text-sm font-medium ${occ.payable > 0 ? 'text-destructive' : 'text-emerald-600'}`}>
-                            ₱{occ.payable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className={`text-sm font-medium ${occupant.payable > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                            ₱{occupant.payable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </TableCell>
                       </TableRow>
                     ))}
-                    {group.occupants.length === 0 && (
+                    {group.occupants.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={2} className="h-16 text-center text-muted-foreground">
                           No active occupants.
                         </TableCell>
                       </TableRow>
-                    )}
+                    ) : null}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -218,11 +346,11 @@ export default async function TreasurerOccupantsPage() {
           );
         })}
 
-        {sortedRoomGroups.length === 0 && (
-          <div className="col-span-full py-12 text-center text-muted-foreground border rounded-xl border-dashed">
+        {sortedRoomGroups.length === 0 ? (
+          <div className="col-span-full rounded-xl border border-dashed py-12 text-center text-muted-foreground">
             No active occupants found for this dorm.
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
