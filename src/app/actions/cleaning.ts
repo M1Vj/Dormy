@@ -343,25 +343,48 @@ async function getViewerContext() {
   return { supabase, viewer } as const;
 }
 
+async function getCleaningWriteClient(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>
+) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return supabase;
+  }
+
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  ) as typeof supabase;
+}
+
 async function getWeekByStart(dormId: string, weekStart: string, semesterId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." } as const;
   }
 
-  const { data: week, error } = await supabase
+  const { data: weekRows, error } = await supabase
     .from("cleaning_weeks")
     .select("id, dorm_id, semester_id, week_start, rest_level, created_at, updated_at")
     .eq("dorm_id", dormId)
     .eq("semester_id", semesterId)
     .eq("week_start", weekStart)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (error) {
     return { error: error.message } as const;
   }
 
-  return { week: (week as CleaningWeekRow | null) ?? null } as const;
+  const week = ((weekRows ?? [])[0] as CleaningWeekRow | undefined) ?? null;
+  return { week } as const;
 }
 
 async function ensureWeekRecord(
@@ -374,18 +397,23 @@ async function ensureWeekRecord(
   if (!supabase) {
     return { error: "Supabase is not configured for this environment." } as const;
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
-  const { data: existingWeek, error: existingError } = await supabase
+  const { data: existingWeekRows, error: existingError } = await writeClient
     .from("cleaning_weeks")
     .select("id, dorm_id, semester_id, week_start, rest_level, created_at, updated_at")
     .eq("dorm_id", dormId)
     .eq("semester_id", semesterId)
     .eq("week_start", weekStart)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (existingError) {
     return { error: existingError.message } as const;
   }
+
+  const existingWeek = ((existingWeekRows ?? [])[0] as CleaningWeekRow | undefined) ?? null;
 
   if (existingWeek) {
     if (
@@ -394,7 +422,7 @@ async function ensureWeekRecord(
       requestedRestLevel <= 3 &&
       existingWeek.rest_level !== requestedRestLevel
     ) {
-      const { data: updatedWeek, error: updateError } = await supabase
+      const { data: updatedWeek, error: updateError } = await writeClient
         .from("cleaning_weeks")
         .update({ rest_level: requestedRestLevel })
         .eq("id", existingWeek.id)
@@ -424,24 +452,24 @@ async function ensureWeekRecord(
   if (typeof requestedRestLevel === "number" && requestedRestLevel >= 1 && requestedRestLevel <= 3) {
     restLevelToUse = requestedRestLevel;
   } else {
-    const { data: previousWeek, error: previousWeekError } = await supabase
+    const { data: previousWeekRows, error: previousWeekError } = await writeClient
       .from("cleaning_weeks")
       .select("rest_level")
       .eq("dorm_id", dormId)
       .eq("semester_id", semesterId)
       .lt("week_start", weekStart)
       .order("week_start", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
     if (previousWeekError) {
       return { error: previousWeekError.message } as const;
     }
 
-    restLevelToUse = getNextRestLevel((previousWeek?.rest_level as number | null) ?? null);
+    const previousWeek = ((previousWeekRows ?? [])[0] as { rest_level: number | null } | undefined) ?? null;
+    restLevelToUse = getNextRestLevel(previousWeek?.rest_level ?? null);
   }
 
-  const { data: createdWeek, error: createError } = await supabase
+  const { data: createdWeek, error: createError } = await writeClient
     .from("cleaning_weeks")
     .insert({
       dorm_id: dormId,
@@ -651,6 +679,7 @@ export async function seedDefaultCleaningAreas() {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning areas." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const { data: areaRows, error: areaError } = await supabase
     .from("cleaning_areas")
@@ -685,7 +714,7 @@ export async function seedDefaultCleaningAreas() {
     return { success: true, inserted: 0 };
   }
 
-  const { error: insertError } = await supabase.from("cleaning_areas").insert(inserts);
+  const { error: insertError } = await writeClient.from("cleaning_areas").insert(inserts);
   if (insertError) {
     return { error: insertError.message };
   }
@@ -721,6 +750,7 @@ export async function createCleaningArea(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning areas." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = areaCreateSchema.safeParse({
     name: formData.get("name"),
@@ -731,7 +761,25 @@ export async function createCleaningArea(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid area input." };
   }
 
-  const { data: area, error } = await supabase
+  const normalizedName = parsed.data.name.trim().toLowerCase();
+  const { data: existingAreas, error: existingAreasError } = await supabase
+    .from("cleaning_areas")
+    .select("id, name")
+    .eq("dorm_id", viewer.dormId);
+
+  if (existingAreasError) {
+    return { error: existingAreasError.message };
+  }
+
+  const hasDuplicate = (existingAreas ?? []).some(
+    (area) => area.name.trim().toLowerCase() === normalizedName
+  );
+
+  if (hasDuplicate) {
+    return { error: "A cleaning area with this name already exists." };
+  }
+
+  const { data: area, error } = await writeClient
     .from("cleaning_areas")
     .insert({
       dorm_id: viewer.dormId,
@@ -775,6 +823,7 @@ export async function updateCleaningArea(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning areas." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = areaUpdateSchema.safeParse({
     area_id: formData.get("area_id"),
@@ -787,7 +836,27 @@ export async function updateCleaningArea(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid area input." };
   }
 
-  const { error } = await supabase
+  const normalizedName = parsed.data.name.trim().toLowerCase();
+  const { data: existingAreas, error: existingAreasError } = await supabase
+    .from("cleaning_areas")
+    .select("id, name")
+    .eq("dorm_id", viewer.dormId);
+
+  if (existingAreasError) {
+    return { error: existingAreasError.message };
+  }
+
+  const hasDuplicate = (existingAreas ?? []).some(
+    (area) =>
+      area.id !== parsed.data.area_id &&
+      area.name.trim().toLowerCase() === normalizedName
+  );
+
+  if (hasDuplicate) {
+    return { error: "A cleaning area with this name already exists." };
+  }
+
+  const { error } = await writeClient
     .from("cleaning_areas")
     .update({
       name: parsed.data.name,
@@ -834,6 +903,7 @@ export async function deleteCleaningArea(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning areas." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = areaDeleteSchema.safeParse({
     area_id: formData.get("area_id"),
@@ -843,7 +913,7 @@ export async function deleteCleaningArea(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid area input." };
   }
 
-  const { error: deleteAssignmentsError } = await supabase
+  const { error: deleteAssignmentsError } = await writeClient
     .from("cleaning_assignments")
     .delete()
     .eq("dorm_id", viewer.dormId)
@@ -853,7 +923,7 @@ export async function deleteCleaningArea(formData: FormData) {
     return { error: deleteAssignmentsError.message };
   }
 
-  const { error } = await supabase
+  const { error } = await writeClient
     .from("cleaning_areas")
     .delete()
     .eq("dorm_id", viewer.dormId)
@@ -957,6 +1027,7 @@ export async function setCleaningRoomAssignment(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning assignments." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = assignmentSchema.safeParse({
     week_start: formData.get("week_start"),
@@ -1036,7 +1107,7 @@ export async function setCleaningRoomAssignment(formData: FormData) {
     }
   }
 
-  const { error: deleteExistingError } = await supabase
+  const { error: deleteExistingError } = await writeClient
     .from("cleaning_assignments")
     .delete()
     .eq("dorm_id", viewer.dormId)
@@ -1048,7 +1119,7 @@ export async function setCleaningRoomAssignment(formData: FormData) {
   }
 
   if (parsed.data.area_id) {
-    const { error: insertError } = await supabase.from("cleaning_assignments").insert({
+    const { error: insertError } = await writeClient.from("cleaning_assignments").insert({
       dorm_id: viewer.dormId,
       cleaning_week_id: ensuredWeek.week.id,
       room_id: parsed.data.room_id,
@@ -1095,6 +1166,7 @@ export async function generateCleaningAssignments(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to generate cleaning assignments." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = weekInputSchema.safeParse({
     week_start: formData.get("week_start"),
@@ -1265,7 +1337,7 @@ export async function generateCleaningAssignments(formData: FormData) {
     };
   });
 
-  const { error: clearError } = await supabase
+  const { error: clearError } = await writeClient
     .from("cleaning_assignments")
     .delete()
     .eq("dorm_id", viewer.dormId)
@@ -1275,7 +1347,7 @@ export async function generateCleaningAssignments(formData: FormData) {
     return { error: clearError.message };
   }
 
-  const { error: insertError } = await supabase
+  const { error: insertError } = await writeClient
     .from("cleaning_assignments")
     .insert(assignments);
 
@@ -1317,6 +1389,7 @@ export async function createCleaningException(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning exceptions." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = exceptionCreateSchema.safeParse({
     date: formData.get("date"),
@@ -1339,7 +1412,7 @@ export async function createCleaningException(formData: FormData) {
     return { error: semesterResult.error ?? "Failed to resolve active semester." };
   }
 
-  const { data: exceptionRow, error } = await supabase
+  const { data: exceptionRow, error } = await writeClient
     .from("cleaning_exceptions")
     .upsert(
       {
@@ -1391,6 +1464,7 @@ export async function deleteCleaningException(formData: FormData) {
   if (!viewer.canManage) {
     return { error: "You do not have permission to manage cleaning exceptions." };
   }
+  const writeClient = await getCleaningWriteClient(supabase);
 
   const parsed = exceptionDeleteSchema.safeParse({
     exception_id: formData.get("exception_id"),
@@ -1400,7 +1474,7 @@ export async function deleteCleaningException(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid exception input." };
   }
 
-  const { error } = await supabase
+  const { error } = await writeClient
     .from("cleaning_exceptions")
     .delete()
     .eq("dorm_id", viewer.dormId)

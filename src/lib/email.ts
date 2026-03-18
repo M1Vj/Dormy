@@ -237,6 +237,101 @@ function renderSignatureText(
   return `\n—\n${signature}\n${namePlaceholder}\n${title}`;
 }
 
+type ReceiptOrderItem = {
+  itemName: string;
+  options: string[];
+  quantity: number;
+  subtotal: number;
+};
+
+function renderIndentedOrderItemsHtml(orderItems: ReceiptOrderItem[]) {
+  if (orderItems.length === 0) {
+    return "";
+  }
+
+  return `
+    <div style="margin-top:8px; padding-left:14px;">
+      ${orderItems
+        .map((item) => {
+          const optionsHtml = item.options.length
+            ? `<div style="margin-top:2px; padding-left:12px; color:#64748b; font-size:11px;">${escapeHtml(item.options.join(" · "))}</div>`
+            : "";
+
+          return `
+            <div style="margin-top:6px;">
+              <div style="display:flex; justify-content:space-between; gap:12px; color:#475569; font-size:12px;">
+                <span>${escapeHtml(`${item.quantity}x ${item.itemName}`)}</span>
+                <span style="white-space:nowrap; font-weight:600;">${normalizePesos(item.subtotal)}</span>
+              </div>
+              ${optionsHtml}
+            </div>
+          `.trim();
+        })
+        .join("")}
+    </div>
+  `.trim();
+}
+
+function renderIndentedSpecsHtml(specs: string[]) {
+  if (specs.length === 0) {
+    return "";
+  }
+
+  return `
+    <div style="margin-top:8px; padding-left:14px;">
+      ${specs
+        .map(
+          (spec) => `
+            <div style="margin-top:4px; color:#64748b; font-size:12px;">
+              ${escapeHtml(spec)}
+            </div>
+          `.trim()
+        )
+        .join("")}
+    </div>
+  `.trim();
+}
+
+function renderContributionLineDetailsHtml(input: {
+  orderItems?: ReceiptOrderItem[];
+  storeSpecs?: string[];
+}) {
+  const orderItems = input.orderItems ?? [];
+  if (orderItems.length > 0) {
+    return renderIndentedOrderItemsHtml(orderItems);
+  }
+
+  const storeSpecs = (input.storeSpecs ?? []).filter((spec) => spec.trim().length > 0);
+  if (storeSpecs.length > 0) {
+    return renderIndentedSpecsHtml(storeSpecs);
+  }
+
+  return "";
+}
+
+function renderContributionLineDetailsText(input: {
+  orderItems?: ReceiptOrderItem[];
+  storeSpecs?: string[];
+}) {
+  const orderItems = input.orderItems ?? [];
+  if (orderItems.length > 0) {
+    return orderItems.flatMap((item) => {
+      const lines = [`  - ${item.quantity}x ${item.itemName}: ${normalizePesos(item.subtotal)}`];
+      if (item.options.length > 0) {
+        lines.push(`    ${item.options.join(" | ")}`);
+      }
+      return lines;
+    });
+  }
+
+  const storeSpecs = (input.storeSpecs ?? []).filter((spec) => spec.trim().length > 0);
+  if (storeSpecs.length > 0) {
+    return storeSpecs.map((spec) => `  - ${spec}`);
+  }
+
+  return [];
+}
+
 export function renderPaymentReceiptEmail(input: {
   recipientName: string | null;
   amountPesos: number;
@@ -317,27 +412,8 @@ export function renderPaymentReceiptEmail(input: {
   const orderDetailsHtml = (input.orderItems ?? []).length > 0
     ? `
       <div style="margin-top:18px;">
-        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Your Order Details</div>
-        <table role="presentation" style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Item</th>
-              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Specs</th>
-              <th style="text-align:center; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Qty</th>
-              <th style="text-align:right; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(input.orderItems ?? []).map((o) => `
-              <tr>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px;">${escapeHtml(o.itemName)}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569; font-size:13px;">${o.options.length > 0 ? escapeHtml(o.options.join(" · ")) : "—"}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:center;">${o.quantity}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:right; font-weight:600;">${normalizePesos(o.subtotal)}</td>
-              </tr>
-            `.trim()).join("")}
-          </tbody>
-        </table>
+        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Ordered Items</div>
+        ${renderIndentedOrderItemsHtml(input.orderItems ?? [])}
       </div>
     `.trim()
     : "";
@@ -364,6 +440,9 @@ export function renderPaymentReceiptEmail(input: {
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
     input.note?.trim() ? `Note: ${input.note.trim()}` : "",
+    ...(input.orderItems ?? []).length > 0
+      ? ["Ordered Items:", ...renderContributionLineDetailsText({ orderItems: input.orderItems ?? [] })]
+      : [],
     renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ].filter(Boolean);
 
@@ -387,6 +466,7 @@ export function renderContributionBatchReceiptEmail(input: {
       quantity: number;
       subtotal: number;
     }>;
+    storeSpecs?: string[];
   }>;
   totalAmountPesos: number;
   customMessage: string | null;
@@ -427,7 +507,13 @@ export function renderContributionBatchReceiptEmail(input: {
       .map(
         (item) => `
               <tr>
-                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">${escapeHtml(item.title)}</td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">
+                  <div>${escapeHtml(item.title)}</div>
+                  ${renderContributionLineDetailsHtml({
+                    orderItems: item.orderItems,
+                    storeSpecs: item.storeSpecs,
+                  })}
+                </td>
                 <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
               </tr>
             `.trim()
@@ -442,36 +528,6 @@ export function renderContributionBatchReceiptEmail(input: {
       </tfoot>
     </table>
   `.trim();
-
-  // Build a per-contribution order details section (only shown for store contributions that have cart items)
-  const allOrderItems = safeRows.flatMap((item) => (item.orderItems ?? []).map(o => ({ ...o, forContribution: item.title })));
-  const orderDetailsHtml = allOrderItems.length > 0
-    ? `
-      <div style="margin-top:18px;">
-        <div style="font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">Your Order Details</div>
-        <table role="presentation" style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Item</th>
-              <th style="text-align:left; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Specs</th>
-              <th style="text-align:center; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Qty</th>
-              <th style="text-align:right; padding:8px 0; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:12px;">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allOrderItems.map((o) => `
-              <tr>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px;">${escapeHtml(o.itemName)}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#475569; font-size:13px;">${o.options.length > 0 ? escapeHtml(o.options.join(" · ")) : "—"}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:center;">${o.quantity}</td>
-                <td style="padding:8px 0; border-bottom:1px solid #f1f5f9; color:#0f172a; font-size:13px; text-align:right; font-weight:600;">${normalizePesos(o.subtotal)}</td>
-              </tr>
-            `.trim()).join("")}
-          </tbody>
-        </table>
-      </div>
-    `.trim()
-    : "";
 
   const detailsHtml = `
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:14px;">
@@ -505,25 +561,25 @@ export function renderContributionBatchReceiptEmail(input: {
     greeting,
     messageHtml,
     lineItemsTable,
-    orderDetailsHtml,
     detailsHtml,
     renderSignatureHtml(input.signatureOverride, input.treasurerNameOverride),
   ].join("");
-
-  const orderTextLines = allOrderItems.map(
-    (o) => `  - ${o.quantity}x ${o.itemName}${o.options.length > 0 ? ` (${o.options.join(", ")})` : ""}: ${normalizePesos(o.subtotal)}`
-  );
 
   const text = [
     input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
     input.customMessage?.trim() || "We received your payment below. Thank you.",
     "",
     input.recipientName?.trim() ? `Payer: ${input.recipientName.trim()}` : "",
-    ...safeRows.map((item) => `${item.title}: ${normalizePesos(item.amountPesos)}`),
+    ...safeRows.flatMap((item) => [
+      `${item.title}: ${normalizePesos(item.amountPesos)}`,
+      ...renderContributionLineDetailsText({
+        orderItems: item.orderItems,
+        storeSpecs: item.storeSpecs,
+      }),
+    ]),
     `Total: ${normalizePesos(input.totalAmountPesos)}`,
     `Date: ${paidAtLabel}`,
     input.method?.trim() ? `Method: ${input.method.trim()}` : "",
-    ...(orderTextLines.length > 0 ? ["\nYour Order:", ...orderTextLines] : []),
     renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ]
     .filter(Boolean)

@@ -53,6 +53,8 @@ export async function middleware(req: NextRequest) {
 
   const pathMatches = (targetPath: string, allowedPrefix: string) =>
     targetPath === allowedPrefix || targetPath.startsWith(`${allowedPrefix}/`);
+  const getRouteRole = (role: string | null | undefined) =>
+    role === "assistant_adviser" ? "adviser" : role;
 
   if (!user && !isLoginRoute && !isAuthCallbackRoute && !isOAuthConsentRoute) {
     const redirectUrl = req.nextUrl.clone();
@@ -99,10 +101,11 @@ export async function middleware(req: NextRequest) {
       }
     }
 
+    const routeRole = getRouteRole(targetRole) || "occupant";
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = `/${targetRole}/home`;
+    redirectUrl.pathname = `/${routeRole}/home`;
     redirectUrl.search = "";
-    return redirect(redirectUrl, `Auth/Legacy route: Redirecting heavily to role home -> /${targetRole}/home`);
+    return redirect(redirectUrl, `Auth/Legacy route: Redirecting heavily to role home -> /${routeRole}/home`);
   }
 
   // Also redirect if they try to visit the old flat /home route or root /
@@ -131,10 +134,11 @@ export async function middleware(req: NextRequest) {
       }
     }
 
+    const routeRole = getRouteRole(targetRole) || "occupant";
     const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = `/${targetRole}/home`;
+    redirectUrl.pathname = `/${routeRole}/home`;
     redirectUrl.search = "";
-    return redirect(redirectUrl, `/home route: redirecting to role path /${targetRole}/home`);
+    return redirect(redirectUrl, `/home route: redirecting to role path /${routeRole}/home`);
   }
 
   // Globally ensure `dorm_id` is set for all valid application routes if missing
@@ -145,6 +149,13 @@ export async function middleware(req: NextRequest) {
     !isLoginRoute &&
     !isJoinRoute
   ) {
+    if (pathMatches(pathname, "/assistant_adviser")) {
+      const suffix = pathname.slice("/assistant_adviser".length);
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = `/adviser${suffix || "/home"}`;
+      return redirect(redirectUrl, "Assistant adviser routes are served under /adviser.");
+    }
+
     // Admin scope restriction: keep admin pages focused on dorm setup, occupants, clearance, and semesters.
     if (pathname.startsWith("/admin")) {
       const allowedAdminPrefixes = [
@@ -178,16 +189,30 @@ export async function middleware(req: NextRequest) {
     }
 
     // Role scoping: ensure users can only access their actual role prefix
-    const rolePrefixes = ["admin", "adviser", "student_assistant", "treasurer", "officer", "occupant"];
+    const rolePrefixes = ["admin", "adviser", "assistant_adviser", "student_assistant", "treasurer", "officer", "occupant"];
     const matchedPrefix = rolePrefixes.find(p => pathname.startsWith(`/${p}`));
+
+    const aiBlockedPrefix = rolePrefixes.find((p) => pathMatches(pathname, `/${p}/ai`));
+    if (aiBlockedPrefix) {
+      const routeRole = getRouteRole(aiBlockedPrefix) || "occupant";
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = `/${routeRole}/home`;
+      redirectUrl.search = "";
+      return redirect(redirectUrl, "AI pages removed from all role workspaces.");
+    }
 
     if (matchedPrefix) {
       const activeRole = req.cookies.get("dormy_active_role")?.value;
-      if (activeRole && matchedPrefix !== activeRole) {
+      const activeRouteRole = getRouteRole(activeRole);
+      const matchedRouteRole = getRouteRole(matchedPrefix);
+      if (activeRouteRole && matchedRouteRole !== activeRouteRole) {
         const redirectUrl = req.nextUrl.clone();
-        redirectUrl.pathname = `/${activeRole}/home`;
+        redirectUrl.pathname = `/${activeRouteRole}/home`;
         redirectUrl.search = "";
-        return redirect(redirectUrl, `Role mismatch: tried ${matchedPrefix}, but active is ${activeRole}.`);
+        return redirect(
+          redirectUrl,
+          `Role mismatch: tried ${matchedPrefix}, but active is ${activeRole}.`
+        );
       }
     }
 

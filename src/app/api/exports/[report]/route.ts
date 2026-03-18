@@ -14,6 +14,8 @@ import {
 } from "@/lib/export/xlsx";
 import {
   formatCartItemSpecs,
+  formatChoiceLabel,
+  getStoreItemUnitPriceRange,
   normalizeAndPriceCartItems,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
@@ -172,7 +174,11 @@ async function resolveContext(report: ReportKey, request: NextRequest): Promise<
     );
   }
 
-  if (requestedDormId && selectedMembership.role !== "admin") {
+  if (
+    requestedDormId &&
+    selectedMembership.role !== "admin" &&
+    requestedDormId !== activeDormId
+  ) {
     return NextResponse.json(
       { error: "Only admins can export using a custom dorm filter." },
       { status: 403 }
@@ -379,6 +385,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       maintenance_balance: number;
       fines_balance: number;
       events_balance: number;
+      gadgets_balance: number;
       total_balance: number;
     }
   >();
@@ -391,6 +398,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       maintenance_balance: 0,
       fines_balance: 0,
       events_balance: 0,
+      gadgets_balance: 0,
       total_balance: 0,
     });
   }
@@ -415,6 +423,9 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     if (entry.ledger === "contributions") {
       summary.events_balance += amount;
     }
+    if (entry.ledger === "gadgets") {
+      summary.gadgets_balance += amount;
+    }
     summary.total_balance += amount;
   }
 
@@ -427,8 +438,15 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
       "Maintenance Balance": formatPeso(row.maintenance_balance),
       "Fines Balance": formatPeso(row.fines_balance),
       "Contributions Balance": formatPeso(row.events_balance),
+      "Gadgets Balance": formatPeso(row.gadgets_balance),
       "Total Balance": formatPeso(row.total_balance),
-      "Clearance Status": (row.maintenance_balance <= 0 && row.fines_balance <= 0 && row.events_balance <= 0) ? "CLEARED" : "NOT CLEARED",
+      "Clearance Status":
+        row.maintenance_balance <= 0 &&
+        row.fines_balance <= 0 &&
+        row.events_balance <= 0 &&
+        row.gadgets_balance <= 0
+          ? "CLEARED"
+          : "NOT CLEARED",
     }));
 
   const transactionRows = entries.map((entry) => {
@@ -458,7 +476,8 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
     "Course",
     "Maintenance Balance",
     "Fines Balance",
-    "Events Balance",
+    "Contributions Balance",
+    "Gadgets Balance",
     "Total Balance",
     "Clearance Status",
   ]);
@@ -750,6 +769,8 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     occupantName: string;
     studentId: string;
     itemName: string;
+    optionNames: string;
+    optionValues: string;
     specs: string;
     quantity: number;
     unitPrice: number;
@@ -757,6 +778,14 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
     method: string;
     note: string;
   }> = [];
+  const storeCatalogByContribution = new Map<
+    string,
+    {
+      contribution: string;
+      linkedEvent: string;
+      items: ReturnType<typeof normalizeStoreItems>;
+    }
+  >();
 
   const entryRows = filteredRows.map((item) => ({
     "Contribution": item.contributionTitle,
@@ -771,6 +800,19 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
   }));
 
   for (const item of filteredRows) {
+    const metadata =
+      item.row.metadata && typeof item.row.metadata === "object"
+        ? (item.row.metadata as Record<string, unknown>)
+        : {};
+    const storeItems = normalizeStoreItems(metadata.store_items);
+    if (storeItems.length > 0) {
+      storeCatalogByContribution.set(item.contributionId, {
+        contribution: item.contributionTitle,
+        linkedEvent: item.eventTitle,
+        items: storeItems,
+      });
+    }
+
     const summary =
       summaryByContribution.get(item.contributionId) ??
       {
@@ -784,16 +826,19 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
 
     if (item.amount < 0 || item.row.entry_type === "payment") {
       summary.collected += Math.abs(item.amount);
-      const metadata =
-        item.row.metadata && typeof item.row.metadata === "object"
-          ? (item.row.metadata as Record<string, unknown>)
-          : {};
-      const storeItems = normalizeStoreItems(metadata.store_items);
       const cartItems = normalizeAndPriceCartItems(metadata.cart_items, storeItems);
       const storeDetails = cartItems
         .map((cartItem) => {
           const storeItem = storeItems.find((entry) => entry.id === cartItem.item_id);
           const itemName = storeItem?.name ?? "Item";
+          const optionNames = cartItem.options
+            .map((option) => option.name.trim())
+            .filter((optionName) => optionName.length > 0)
+            .join(" · ");
+          const optionValues = cartItem.options
+            .map((option) => (option.name ? `${option.name}: ${option.value}` : option.value))
+            .filter((optionValue) => optionValue.length > 0)
+            .join(" · ");
           const specs = formatCartItemSpecs(cartItem.options);
           const quantity = Math.max(1, Number(cartItem.quantity ?? 1));
           const subtotal = Math.max(0, Number(cartItem.subtotal ?? 0));
@@ -805,6 +850,8 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
             occupantName: item.occupantName,
             studentId: item.studentId,
             itemName,
+            optionNames,
+            optionValues,
             specs: specs || "",
             quantity,
             unitPrice,
@@ -939,6 +986,8 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         "Name": row.occupantName,
         "Student ID": row.studentId,
         "Item": row.itemName,
+        "Variation / Size": row.optionNames,
+        "Selected Options": row.optionValues,
         "Specs / Choices": row.specs,
         "Qty": row.quantity,
         "Unit Price (₱)": formatPeso(row.unitPrice),
@@ -952,12 +1001,71 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         "Name",
         "Student ID",
         "Item",
+        "Variation / Size",
+        "Selected Options",
         "Specs / Choices",
         "Qty",
         "Unit Price (₱)",
         "Subtotal (₱)",
         "Method",
         "Note",
+      ]
+    );
+  }
+  const storeCatalogRows = [...storeCatalogByContribution.values()]
+    .sort((left, right) => left.contribution.localeCompare(right.contribution))
+    .flatMap((row) =>
+      row.items.flatMap((storeItem) => {
+        const priceRange = getStoreItemUnitPriceRange(storeItem);
+        if (!storeItem.options.length) {
+          return [
+            {
+              contribution: row.contribution,
+              linkedEvent: row.linkedEvent,
+              itemName: storeItem.name,
+              basePrice: formatPeso(storeItem.price),
+              unitPriceMin: formatPeso(priceRange.min),
+              unitPriceMax: formatPeso(priceRange.max),
+              optionName: "",
+              optionChoices: "",
+            },
+          ];
+        }
+        return storeItem.options.map((option) => ({
+          contribution: row.contribution,
+          linkedEvent: row.linkedEvent,
+          itemName: storeItem.name,
+          basePrice: formatPeso(storeItem.price),
+          unitPriceMin: formatPeso(priceRange.min),
+          unitPriceMax: formatPeso(priceRange.max),
+          optionName: option.name,
+          optionChoices: option.choices.map(formatChoiceLabel).join(" | "),
+        }));
+      })
+    );
+  if (storeCatalogRows.length > 0) {
+    appendSheet(
+      workbook,
+      "Store Catalog",
+      storeCatalogRows.map((row) => ({
+        "Contribution": row.contribution,
+        "Linked Event": row.linkedEvent,
+        "Item": row.itemName,
+        "Base Price (₱)": row.basePrice,
+        "Unit Price Min (₱)": row.unitPriceMin,
+        "Unit Price Max (₱)": row.unitPriceMax,
+        "Variation / Size": row.optionName,
+        "Choices (Price Adj)": row.optionChoices,
+      })),
+      [
+        "Contribution",
+        "Linked Event",
+        "Item",
+        "Base Price (₱)",
+        "Unit Price Min (₱)",
+        "Unit Price Max (₱)",
+        "Variation / Size",
+        "Choices (Price Adj)",
       ]
     );
   }

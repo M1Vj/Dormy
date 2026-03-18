@@ -70,9 +70,26 @@ export async function createFineRule(dormId: string, formData: FormData) {
   const parsed = fineRuleSchema.safeParse(rawData);
   if (!parsed.success) return { error: "Invalid data" };
 
+  const normalizedTitle = parsed.data.title.trim();
+  const { data: duplicateRule, error: duplicateRuleError } = await supabase
+    .from("fine_rules")
+    .select("id")
+    .eq("dorm_id", dormId)
+    .ilike("title", normalizedTitle)
+    .limit(1)
+    .maybeSingle();
+
+  if (duplicateRuleError) {
+    return { error: duplicateRuleError.message };
+  }
+  if (duplicateRule) {
+    return { error: "A fine rule with this title already exists." };
+  }
+
   const { error } = await supabase.from("fine_rules").insert({
     dorm_id: dormId,
     ...parsed.data,
+    title: normalizedTitle,
   });
 
   if (error) return { error: error.message };
@@ -146,6 +163,26 @@ export async function updateFineRule(
   const parsed = fineRuleSchema.partial().safeParse(rawData);
   if (!parsed.success) return { error: "Invalid data" };
 
+  const titleInput = typeof parsed.data.title === "string" ? parsed.data.title.trim() : null;
+  if (titleInput) {
+    const { data: duplicateRule, error: duplicateRuleError } = await supabase
+      .from("fine_rules")
+      .select("id")
+      .eq("dorm_id", dormId)
+      .ilike("title", titleInput)
+      .neq("id", ruleId)
+      .limit(1)
+      .maybeSingle();
+
+    if (duplicateRuleError) {
+      return { error: duplicateRuleError.message };
+    }
+    if (duplicateRule) {
+      return { error: "A fine rule with this title already exists." };
+    }
+    parsed.data.title = titleInput;
+  }
+
   const { data: existingRule, error: existingRuleError } = await supabase
     .from("fine_rules")
     .select("id, active")
@@ -201,6 +238,14 @@ const issueFineSchema = z.object({
   pesos: z.coerce.number().min(0),
   points: z.coerce.number().min(0),
   note: z.string().optional(),
+}).superRefine((value, ctx) => {
+  if (value.pesos <= 0 && value.points <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Set at least one penalty amount (pesos or points).",
+      path: ["pesos"],
+    });
+  }
 });
 
 export async function getFines(
@@ -285,7 +330,9 @@ export async function issueFine(dormId: string, formData: FormData) {
   };
 
   const parsed = issueFineSchema.safeParse(rawData);
-  if (!parsed.success) return { error: "Invalid data" };
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid data" };
+  }
 
   // Get current user for issued_by
   const { data: { user } } = await supabase.auth.getUser();

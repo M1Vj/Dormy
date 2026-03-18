@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export type FineRule = {
   id: string;
@@ -78,17 +78,17 @@ function CreateRuleDialog({ dormId }: { dormId: string }) {
   );
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button>Add rule</Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Add fine rule</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add fine rule</DialogTitle>
+          <DialogDescription>
             Define a standard rule for issuing fines.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="rule-title">
@@ -147,14 +147,14 @@ function CreateRuleDialog({ dormId }: { dormId: string }) {
           {state.success ? (
             <p className="text-sm text-primary">Rule added successfully.</p>
           ) : null}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="submit" isLoading={isPending}>
               Add rule
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -171,19 +171,19 @@ function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
   );
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <Button size="sm" variant="ghost">
           Edit
         </Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Edit rule</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit rule</DialogTitle>
+          <DialogDescription>
             Update rule defaults and toggle availability.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         <form action={formAction} className="space-y-4 py-6">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor={`rule-${rule.id}`}>
@@ -278,14 +278,14 @@ function EditRuleDialog({ dormId, rule }: { dormId: string; rule: FineRule }) {
           {state.success ? (
             <p className="text-sm text-primary">Rule updated.</p>
           ) : null}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="submit" isLoading={isPending}>
               Save changes
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

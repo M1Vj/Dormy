@@ -37,14 +37,14 @@ export function LikertScale({
     const isHovered = hovered === scale;
 
     if (isSelected) {
-      if (scale <= 3) return "bg-red-500 text-white border-red-600 hover:bg-red-600";
-      if (scale <= 7) return "bg-yellow-500 text-yellow-950 border-yellow-600 hover:bg-yellow-600";
+      if (scale <= 2) return "bg-red-500 text-white border-red-600 hover:bg-red-600";
+      if (scale <= 4) return "bg-yellow-500 text-yellow-950 border-yellow-600 hover:bg-yellow-600";
       return "bg-green-500 text-white border-green-600 hover:bg-green-600";
     }
 
     if (isHovered) {
-      if (scale <= 3) return "bg-red-100 border-red-300 text-red-900";
-      if (scale <= 7) return "bg-yellow-100 border-yellow-300 text-yellow-900";
+      if (scale <= 2) return "bg-red-100 border-red-300 text-red-900";
+      if (scale <= 4) return "bg-yellow-100 border-yellow-300 text-yellow-900";
       return "bg-green-100 border-green-300 text-green-900";
     }
 
@@ -54,7 +54,7 @@ export function LikertScale({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-5 gap-1.5 sm:flex sm:items-center sm:gap-2">
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((scale) => (
+        {Array.from({ length: 5 }, (_, i) => i + 1).map((scale) => (
           <button
             key={scale}
             type="button"
@@ -74,7 +74,7 @@ export function LikertScale({
       </div>
       <div className="flex justify-between px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:text-xs">
         <span>Poor</span>
-        <span className="hidden sm:inline">Satisfactory</span>
+        <span>Satisfactory</span>
         <span>Excellent</span>
       </div>
     </div>
@@ -156,7 +156,7 @@ export function EventRatingPanel({
         <form action={formAction} className="rounded-lg border p-3">
           <input type="hidden" name="event_id" value={eventId} />
           <div className="space-y-3">
-            <p className="text-sm font-medium">Your rating (1-10)</p>
+            <p className="text-sm font-medium">Your rating (1-5)</p>
             <LikertScale
               value={selectedRating}
               onChange={setSelectedRating}

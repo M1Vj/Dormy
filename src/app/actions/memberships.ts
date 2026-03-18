@@ -90,13 +90,31 @@ export async function updateMembershipRoles(
     }
   }
 
-  const { error: delError } = await supabase
+  let writeClient: typeof supabase = supabase;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    writeClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ) as typeof supabase;
+  }
+
+  const { error: delError } = await writeClient
     .from("dorm_memberships")
     .delete()
     .eq("dorm_id", dormId)
     .eq("user_id", userId);
 
   if (delError) {
+    if (String(delError.message ?? "").toLowerCase().includes("row-level security")) {
+      return { error: "Role update is blocked by database policies. Apply the latest migrations and retry." };
+    }
     return { error: delError.message };
   }
 
@@ -106,11 +124,14 @@ export async function updateMembershipRoles(
     role: r,
   }));
 
-  const { error: insError } = await supabase
+  const { error: insError } = await writeClient
     .from("dorm_memberships")
     .insert(toInsert);
 
   if (insError) {
+    if (String(insError.message ?? "").toLowerCase().includes("row-level security")) {
+      return { error: "Role update is blocked by database policies. Apply the latest migrations and retry." };
+    }
     return { error: insError.message };
   }
 

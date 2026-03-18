@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -74,6 +74,7 @@ function addDays(dateInput: string, days: number) {
 
 export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<MessageState>(null);
   const [restLevel, setRestLevel] = useState(
@@ -82,20 +83,42 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
 
   const canManage = snapshot.viewer.can_manage;
   const weekStart = snapshot.week?.week_start ?? snapshot.selected_week_start;
+  const roleSegment = pathname.split("/")[1] || "occupant";
+  const cleaningBasePath = `/${roleSegment}/cleaning`;
 
   const activeAreas = useMemo(
     () => snapshot.areas.filter((area) => area.active),
     [snapshot.areas]
   );
+  const outlineAreas = useMemo(() => {
+    const grouped = new Map<string, { key: string; label: string; ids: Set<string> }>();
+
+    for (const area of activeAreas) {
+      const label = area.name.trim();
+      const key = label.toLowerCase();
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.ids.add(area.id);
+        continue;
+      }
+      grouped.set(key, {
+        key,
+        label,
+        ids: new Set([area.id]),
+      });
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [activeAreas]);
 
   const moveWeek = (offset: number) => {
     const nextWeek = addDays(weekStart, offset * 7);
-    router.push(`/cleaning?week=${nextWeek}`);
+    router.push(`${cleaningBasePath}?week=${nextWeek}`);
   };
 
   const handleJumpWeek = (targetWeek: string) => {
     if (!targetWeek) return;
-    router.push(`/cleaning?week=${targetWeek}`);
+    router.push(`${cleaningBasePath}?week=${targetWeek}`);
   };
 
   const toggleCleaningDay = (date: string, hasException: boolean, exceptionId?: string) => {
@@ -542,10 +565,15 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                                   )}
                                 </div>
                                 {canManage && !plan.is_rest_week && (
-                                  <form onSubmit={handleSetAssignment} className="mt-1 flex items-center gap-1.5 pt-2 border-t border-border/50">
+                                  <form
+                                    key={`${plan.room_id}:${plan.area_id ?? "none"}`}
+                                    onSubmit={handleSetAssignment}
+                                    className="mt-1 flex items-center gap-1.5 pt-2 border-t border-border/50"
+                                  >
                                     <input type="hidden" name="room_id" value={plan.room_id} />
                                     <select
                                       name="area_id"
+                                      key={`${plan.room_id}:${plan.area_id ?? "none"}:select`}
                                       defaultValue={plan.area_id ?? ""}
                                       className="h-7 w-full rounded-md border bg-muted/50 px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
                                       onChange={() => {
@@ -560,7 +588,14 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
                                         </option>
                                       ))}
                                     </select>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-emerald-600 hover:text-emerald-700" isLoading={isPending} title="Save">
+                                    <Button
+                                      type="submit"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 shrink-0 text-emerald-600 hover:text-emerald-700"
+                                      isLoading={isPending}
+                                      title="Save"
+                                    >
                                       <Save className="size-3.5" />
                                     </Button>
                                   </form>
@@ -590,14 +625,14 @@ export function CleaningWorkspace({ snapshot }: { snapshot: CleaningSnapshot }) 
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-3">
-                {activeAreas.map((area) => {
+                {outlineAreas.map((area) => {
                   const assignedTo = snapshot.room_plans.filter(
-                    (plan) => plan.area_id === area.id
+                    (plan) => !!plan.area_id && area.ids.has(plan.area_id) && !plan.is_rest_week
                   );
                   return (
-                    <div key={area.id} className="rounded-lg border bg-muted/20 p-3 flex flex-col gap-2">
+                    <div key={area.key} className="rounded-lg border bg-muted/20 p-3 flex flex-col gap-2">
                       <div className="font-medium text-sm text-emerald-700 dark:text-emerald-400 border-b pb-1.5 border-border/50">
-                        {area.name}
+                        {area.label}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {assignedTo.length > 0 ? (

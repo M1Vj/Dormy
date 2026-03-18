@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const draftReceiptSchema = z.object({
   dorm_id: z.string().uuid(),
   occupant_id: z.string().uuid(),
-  category: z.enum(["maintenance_fee", "sa_fines", "contributions"]),
+  category: z.enum(["maintenance_fee", "sa_fines", "contributions", "gadgets"]),
   amount: z.number().positive(),
   method: z.string().trim().max(60).optional(),
   note: z.string().trim().max(300).optional(),
@@ -19,11 +19,13 @@ const allowedRolesByLedger = {
   maintenance_fee: ["admin", "adviser", "assistant_adviser"],
   sa_fines: ["admin", "student_assistant", "adviser", "assistant_adviser"],
   contributions: ["admin", "treasurer"],
+  gadgets: ["admin", "student_assistant"],
 } as const;
 
 function labelForLedger(category: z.infer<typeof draftReceiptSchema>["category"]) {
   if (category === "maintenance_fee") return "Maintenance";
   if (category === "sa_fines") return "Fines";
+  if (category === "gadgets") return "Gadgets";
   return "Contributions";
 }
 

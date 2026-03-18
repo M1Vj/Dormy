@@ -40,7 +40,7 @@ export default async function CompetitionPrintPage({
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">Printable Results</h1>
           <Button asChild variant="outline">
-            <Link href={`/events/${id}/competition`}>Back</Link>
+            <Link href={`/${context.role}/events/${id}/competition`}>Back</Link>
           </Button>
         </div>
         <Card>
@@ -67,7 +67,7 @@ export default async function CompetitionPrintPage({
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline">
-            <Link href={`/events/${id}/competition`}>Back</Link>
+            <Link href={`/${context.role}/events/${id}/competition`}>Back</Link>
           </Button>
           <CompetitionPrintButton />
         </div>

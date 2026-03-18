@@ -60,15 +60,7 @@ export default async function ExpensesPage({
     .eq("dorm_id", dormId)
     .eq("user_id", user.id);
 
-  const { data: dormData } = await supabase
-    .from("dorms")
-    .select("attributes")
-    .eq("id", dormId)
-    .single();
-
   const roles = memberships?.map(m => m.role) ?? [];
-  const dormAttributes = typeof dormData?.attributes === "object" && dormData?.attributes !== null ? dormData.attributes : {};
-  const allowTreasurerMaintenance = dormAttributes.treasurer_maintenance_access === true;
   const canSubmit = roles.some(r =>
     new Set(["admin", "treasurer", "officer", "adviser", "assistant_adviser", "student_assistant"]).has(r)
   );
@@ -76,13 +68,11 @@ export default async function ExpensesPage({
     new Set(["admin", "treasurer", "adviser", "assistant_adviser", "student_assistant"]).has(r)
   );
 
-  const showMaintenanceTab = roles.some(r => new Set(["admin", "adviser", "student_assistant"]).has(r)) ||
-    (allowTreasurerMaintenance && roles.some(r => new Set(["treasurer", "officer"]).has(r)));
   const showContributionsTab = roles.some(r =>
     new Set(["admin", "adviser", "assistant_adviser", "student_assistant", "treasurer"]).has(r)
   );
 
-  const canView = showMaintenanceTab || showContributionsTab;
+  const canView = showContributionsTab;
 
   if (!canView) {
     return (
@@ -99,7 +89,7 @@ export default async function ExpensesPage({
     );
   }
 
-  const expenses = result.data ?? [];
+  const expenses = (result.data ?? []).filter((expense) => expense.category === "contributions");
 
   const totalApproved = expenses
     .filter((e) => e.status === "approved")
@@ -114,13 +104,12 @@ export default async function ExpensesPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Expenses</h1>
+          <h1 className="text-2xl font-semibold">Committee Funds</h1>
           <p className="text-sm text-muted-foreground">
-            Track dorm purchases and operating expenses with receipt
-            documentation.
+            Review contribution and committee expense submissions with receipt documentation.
           </p>
         </div>
-        {canSubmit ? <SubmitExpenseDialog dormId={dormId} /> : null}
+        {canSubmit ? <SubmitExpenseDialog dormId={dormId} defaultCategory="contributions" triggerLabel="Submit Committee Expense" /> : null}
       </div>
 
       {/* Summary Cards */}
@@ -161,22 +150,10 @@ export default async function ExpensesPage({
         </Card>
       </div>
 
-      <Tabs defaultValue={showMaintenanceTab ? "maintenance_fee" : "contributions"} className="space-y-4">
+      <Tabs defaultValue="contributions" className="space-y-4">
         <TabsList>
-          {showMaintenanceTab && <TabsTrigger value="maintenance_fee">Maintenance</TabsTrigger>}
           {showContributionsTab && <TabsTrigger value="contributions">Contributions</TabsTrigger>}
         </TabsList>
-
-        {/* Maintenance Fee Tab */}
-        {showMaintenanceTab && (
-          <TabsContent value="maintenance_fee" className="space-y-4">
-            <ExpenseList
-              expenses={expenses.filter(e => e.category === "maintenance_fee")}
-              canReview={canReview}
-              dormId={dormId}
-            />
-          </TabsContent>
-        )}
 
         {/* Contributions Tab */}
         {showContributionsTab && (

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { format } from "date-fns";
 
 import { ChargeDialog } from "@/components/finance/charge-dialog";
+import { CollectionFilters } from "@/components/finance/collection-filters";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { MaintenanceBulkChargeDialog } from "@/components/finance/maintenance-bulk-charge-dialog";
@@ -10,7 +10,6 @@ import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { getExpenses } from "@/app/actions/expenses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -233,31 +232,13 @@ export default async function MaintenancePage({
       </div>
 
       {/* Search & Filter row */}
-      <form method="GET" className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Input
-          name="search"
-          placeholder="Search occupant or room..."
-          defaultValue={search}
-          className="sm:max-w-xs"
-        />
-        <select
-          name="status"
-          defaultValue={statusFilter}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm sm:w-[170px]"
-        >
-          <option value="">All balances</option>
-          <option value="outstanding">Outstanding only</option>
-          <option value="cleared">Cleared only</option>
-        </select>
-        <Button type="submit" variant="secondary" size="sm">
-          Filter
-        </Button>
-        {search || statusFilter ? (
-          <Button asChild type="button" variant="ghost" size="sm">
-            <Link href={`/${activeRole}/finance/maintenance`}>Reset</Link>
-          </Button>
-        ) : null}
-      </form>
+      <CollectionFilters
+        key={`${search}:${statusFilter}`}
+        basePath={`/${activeRole}/finance/maintenance`}
+        search={search}
+        status={statusFilter}
+        placeholder="Search occupant or room..."
+      />
 
       {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

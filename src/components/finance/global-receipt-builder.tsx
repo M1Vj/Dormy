@@ -167,7 +167,7 @@ export function GlobalReceiptBuilder({
             <Badge variant="default">Default</Badge>
           </div>
           <CardDescription>
-            Configure the fallback receipt template used when a specific contribution doesn't have custom receipt settings.
+            Configure the fallback receipt template used when a specific contribution does not have custom receipt settings.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -253,7 +253,9 @@ export function GlobalReceiptBuilder({
       <Card className="border-muted/60">
         <CardHeader>
           <CardTitle>Email Preview</CardTitle>
-          <CardDescription>Generated using a dummy student and mocked contributions.</CardDescription>
+          <CardDescription>
+            Generated using a dummy student and mocked contributions, including a store-item order example with size and option selections.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">

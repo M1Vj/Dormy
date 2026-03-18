@@ -12,10 +12,10 @@ import { StaffStatsGrid } from "@/components/dashboard/staff-stats-grid";
 import { TreasurerDashboard } from "@/components/dashboard/treasurer-dashboard";
 import { OccupantStanding } from "@/components/dashboard/occupant-standing";
 
-import { Activity, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
+import { Activity, ShieldCheck, UserCheck } from "lucide-react";
 import { getActiveDormId } from "@/lib/dorms";
 import { getActiveSemester } from "@/lib/semesters";
-import { getRoleLabel } from "@/lib/roles";
+import { getRoleLabel, getRoleRoute } from "@/lib/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getFineRules } from "@/app/actions/fines";
 import { getLedgerBalance, getLedgerEntries } from "@/app/actions/finance";
@@ -82,7 +82,8 @@ export default async function HomePage() {
 
   const dormId = resolvedMembership.dorm_id;
   const role = resolvedMembership.role;
-  const finesHref = `/${role}/fines`;
+  const rolePath = getRoleRoute(role);
+  const finesHref = `/${rolePath}/fines`;
 
   const { data: dorm } = await supabase
     .from("dorms")
@@ -201,7 +202,7 @@ export default async function HomePage() {
             totalCharged={stats.totalCharged}
             totalPaid={stats.totalPaid}
             pendingExpenses={pendingExpensesCount}
-            role={role}
+            role={rolePath}
           />
         </div>
 
@@ -219,12 +220,12 @@ export default async function HomePage() {
                 area: cleaningPlanForRoom.area ?? "Unassigned",
                 date: format(new Date(cleaningPlanForRoom.week_start), "MMM d")
               } : null}
-              role={role}
+              role={rolePath}
             />
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6">
           {/* Announcements Card */}
           <Card className="border-l-4 border-l-blue-500 h-full">
             <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -233,7 +234,7 @@ export default async function HomePage() {
                 <CardDescription>Dorm-wide updates</CardDescription>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link href={`/${role}/home/announcements`}>View all</Link>
+                <Link href={`/${rolePath}/home/announcements`}>View all</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -257,24 +258,6 @@ export default async function HomePage() {
             </CardContent>
           </Card>
 
-          {/* AI Shortcut */}
-          <Card className="bg-gradient-to-br from-purple-500/5 to-sky-500/5 border-purple-500/20">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-500" />
-                Intelligent Assistant
-              </CardTitle>
-              <CardDescription>AI-powered reporting and summaries</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Ask Dormy AI to summarize your ledger, generate event reports, or check occupant standing.
-              </p>
-              <Button asChild className="w-full bg-purple-600 hover:bg-purple-700">
-                <Link href={`/${role}/ai`}>Open AI Workspace</Link>
-              </Button>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Faculty Profile Section */}
@@ -294,7 +277,7 @@ export default async function HomePage() {
             <CardDescription>Shared dorm updates visible to your role.</CardDescription>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link href={`/${role}/home/announcements`}>View all</Link>
+            <Link href={`/${rolePath}/home/announcements`}>View all</Link>
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -353,7 +336,7 @@ export default async function HomePage() {
               <CardDescription>From your current semester calendar.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/${role}/events`}>
+              <Link href={`/${rolePath}/events`}>
                 <CalendarDays className="mr-2 size-4 text-orange-500" />
                 Open calendar
               </Link>

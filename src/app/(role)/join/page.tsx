@@ -8,6 +8,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { JoinDorm } from "@/components/join/join-dorm";
 import { getActiveRole } from "@/lib/roles-server";
+import { getRoleRoute } from "@/lib/roles";
 
 export default async function JoinPage() {
   const supabase = await createSupabaseServerClient();
@@ -29,7 +30,7 @@ export default async function JoinPage() {
 
   const role = await getActiveRole();
   if (role) {
-    redirect(`/${role}/home`);
+    redirect(`/${getRoleRoute(role)}/home`);
   }
 
   const [dorms, applications, invites] = await Promise.all([
@@ -40,4 +41,3 @@ export default async function JoinPage() {
 
   return <JoinDorm dorms={dorms} applications={applications} invites={invites} />;
 }
-

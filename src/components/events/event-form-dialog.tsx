@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, PencilLine } from "lucide-react";
 
@@ -63,6 +63,7 @@ export function EventFormDialog({
 }) {
   const router = useRouter();
   const action = mode === "create" ? createEvent : updateEvent;
+  const [open, setOpen] = useState(false);
 
   const [state, formAction, isPending] = useActionState(
     async (_previousState: FormState, formData: FormData) => {
@@ -88,6 +89,7 @@ export function EventFormDialog({
       } else {
         router.refresh();
       }
+      setOpen(false);
 
       return {
         error: "",
@@ -109,7 +111,7 @@ export function EventFormDialog({
   );
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant={mode === "create" ? "default" : "outline"}>
           {mode === "create" ? (

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
 import { getActiveSemester } from "@/lib/semesters";
+import { getStoreContributionPriceRange } from "@/lib/store-pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -341,6 +342,8 @@ export default async function EventDetailsPage({
     entryRows
       .map((entry) => parseContributionMetadata(entry).storeItems)
       .find((items) => items.length > 0) ?? [];
+  const storePriceRange = isStore ? getStoreContributionPriceRange(storeItems) : null;
+  const storeBaselineAmount = Number((storePriceRange?.min ?? 0).toFixed(2));
 
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const nowIso = new Date().toISOString();
@@ -348,13 +351,19 @@ export default async function EventDetailsPage({
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
 
-    const payable = occupantEntries.reduce((sum, entry) => {
+    const rawPayable = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
-      if (entry.entry_type === "payment") {
+      const isPayment = entry.entry_type === "payment" || amount < 0;
+      if (isPayment) {
         return sum;
       }
-      return sum + amount;
+      return sum + Math.abs(amount);
     }, 0);
+
+    const payable =
+      isStore && rawPayable <= 0
+        ? storeBaselineAmount
+        : Number(rawPayable.toFixed(2));
 
     const paid = occupantEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount_pesos ?? 0);
@@ -364,7 +373,7 @@ export default async function EventDetailsPage({
       return sum;
     }, 0);
 
-    const remaining = payable - paid;
+    const remaining = Number((payable - paid).toFixed(2));
 
     let paymentStatus: OccupantWithStatus["paymentStatus"] = "unpaid";
     if (paid > 0 && remaining > 0) {

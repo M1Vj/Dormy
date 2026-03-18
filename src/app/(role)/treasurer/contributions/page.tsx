@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester, listDormSemesters } from "@/lib/semesters";
+import { getStoreContributionPriceRange } from "@/lib/store-pricing";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
@@ -92,6 +93,8 @@ const normalizeArrayParam = (value?: string | string[]) => {
     .map((item) => item.trim())
     .filter(Boolean);
 };
+
+const formatPesos = (value: number) => `₱${Number(value || 0).toFixed(2)}`;
 
 function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: string | null) {
   const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
@@ -336,15 +339,16 @@ export default async function EventsFinancePage({
         semesterIds: new Set<string>(),
       };
 
-    if (amount < 0 || entry.entry_type === "payment") {
-      existing.collected += Math.abs(amount);
-    } else {
-      existing.charged += amount;
-      if (entry.occupant_id) {
-        existing.participantPayables.add(amount);
-      }
+    const isPayment = amount < 0 || entry.entry_type === "payment";
+    const chargeAmount = isPayment ? 0 : Math.abs(amount);
+    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+
+    existing.charged += chargeAmount;
+    existing.collected += paymentAmount;
+    if (chargeAmount > 0 && entry.occupant_id) {
+      existing.participantPayables.add(chargeAmount);
     }
-    existing.remaining += amount;
+    existing.remaining += chargeAmount - paymentAmount;
 
     if (entry.occupant_id) {
       existing.participantIds.add(entry.occupant_id);
@@ -592,52 +596,64 @@ export default async function EventsFinancePage({
             </CardContent>
           </Card>
         ) : (
-          contributionGroups.map((contribution) => (
-            <Card key={contribution.id} className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm hover:shadow-md transition-shadow duration-200 border-muted">
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{contribution.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {contribution.eventTitle ? `Linked event: ${contribution.eventTitle}` : "No linked event"}
-                    </p>
-                  </div>
-                  <Badge variant={contribution.remaining > 0 ? "destructive" : "secondary"}>
-                    {contribution.remaining > 0 ? "Open" : "Settled"}
-                  </Badge>
-                </div>
+          contributionGroups.map((contribution) => {
+            const storePriceRange = contribution.isStore
+              ? getStoreContributionPriceRange(contribution.storeItems)
+              : null;
+            const storePriceLabel = storePriceRange
+              ? storePriceRange.min === storePriceRange.max
+                ? formatPesos(storePriceRange.min)
+                : `${formatPesos(storePriceRange.min)} - ${formatPesos(storePriceRange.max)}`
+              : null;
+            const useStoreRange = contribution.isStore && contribution.charged <= 0 && contribution.remaining <= 0 && !!storePriceLabel;
 
-                {contribution.details ? (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{contribution.details}</p>
-                ) : null}
-
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Charged</p>
-                    <p className="font-medium">₱{contribution.charged.toFixed(2)}</p>
+            return (
+              <Card key={contribution.id} className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-sm hover:shadow-md transition-shadow duration-200 border-muted">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{contribution.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {contribution.eventTitle ? `Linked event: ${contribution.eventTitle}` : "No linked event"}
+                      </p>
+                    </div>
+                    <Badge variant={contribution.remaining > 0 ? "destructive" : "secondary"}>
+                      {contribution.remaining > 0 ? "Open" : "Settled"}
+                    </Badge>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Collected</p>
-                    <p className="font-medium text-emerald-600">₱{contribution.collected.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Remaining</p>
-                    <p className={`font-medium ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                      ₱{contribution.remaining.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Deadline: {contribution.deadline ? format(new Date(contribution.deadline), "MMM d, yyyy h:mm a") : "Not set"}
-                </p>
+                  {contribution.details ? (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{contribution.details}</p>
+                  ) : null}
 
-                <Button asChild size="sm" className="w-full">
-                  <Link href={`/treasurer/contributions/${contribution.id}`}>Manage</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Charged</p>
+                      <p className="font-medium">{useStoreRange ? storePriceLabel : formatPesos(contribution.charged)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Collected</p>
+                      <p className="font-medium text-emerald-600">{formatPesos(contribution.collected)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Remaining</p>
+                      <p className={`font-medium ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {useStoreRange ? storePriceLabel : formatPesos(contribution.remaining)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Deadline: {contribution.deadline ? format(new Date(contribution.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                  </p>
+
+                  <Button asChild size="sm" className="w-full">
+                    <Link href={`/treasurer/contributions/${contribution.id}`}>Manage</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 
@@ -656,47 +672,61 @@ export default async function EventsFinancePage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {contributionGroups.map((contribution) => (
-              <TableRow key={contribution.id} className="border-border/50 hover:bg-muted/30 transition-colors">
-                <TableCell>
-                  <div className="font-medium">{contribution.title}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {contribution.deadline
-                      ? `Deadline: ${format(new Date(contribution.deadline), "MMM d, yyyy h:mm a")}`
-                      : "No deadline"}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{contribution.eventTitle ?? "—"}</TableCell>
-                <TableCell className="text-right">₱{contribution.charged.toFixed(2)}</TableCell>
-                <TableCell className="text-right text-emerald-600">₱{contribution.collected.toFixed(2)}</TableCell>
-                <TableCell className={`text-right ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                  ₱{contribution.remaining.toFixed(2)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {contribution.participantCount === 0
-                    ? "—"
-                    : contribution.participantPayables.size === 1
-                      ? `₱${Array.from(contribution.participantPayables)[0].toFixed(2)}`
-                      : "Varies"}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {contribution.semesterLabels.length > 0
-                      ? contribution.semesterLabels.map((label) => (
-                        <Badge key={`${contribution.id}-${label}`} variant="outline">
-                          {label}
-                        </Badge>
-                      ))
-                      : <span className="text-xs text-muted-foreground">—</span>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/treasurer/contributions/${contribution.id}`}>Manage</Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {contributionGroups.map((contribution) => {
+              const storePriceRange = contribution.isStore
+                ? getStoreContributionPriceRange(contribution.storeItems)
+                : null;
+              const storePayableLabel = storePriceRange
+                ? storePriceRange.min === storePriceRange.max
+                  ? formatPesos(storePriceRange.min)
+                  : `${formatPesos(storePriceRange.min)} - ${formatPesos(storePriceRange.max)}`
+                : null;
+              const useStoreRange = contribution.isStore && contribution.charged <= 0 && contribution.remaining <= 0 && !!storePayableLabel;
+
+              return (
+                <TableRow key={contribution.id} className="border-border/50 hover:bg-muted/30 transition-colors">
+                  <TableCell>
+                    <div className="font-medium">{contribution.title}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {contribution.deadline
+                        ? `Deadline: ${format(new Date(contribution.deadline), "MMM d, yyyy h:mm a")}`
+                        : "No deadline"}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{contribution.eventTitle ?? "—"}</TableCell>
+                  <TableCell className="text-right">{useStoreRange ? storePayableLabel : formatPesos(contribution.charged)}</TableCell>
+                  <TableCell className="text-right text-emerald-600">{formatPesos(contribution.collected)}</TableCell>
+                  <TableCell className={`text-right ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                    {useStoreRange ? storePayableLabel : formatPesos(contribution.remaining)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {contribution.isStore
+                      ? (storePayableLabel ?? "Varies")
+                      : contribution.participantCount === 0
+                        ? "—"
+                        : contribution.participantPayables.size === 1
+                          ? `₱${Array.from(contribution.participantPayables)[0].toFixed(2)}`
+                          : "Varies"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {contribution.semesterLabels.length > 0
+                        ? contribution.semesterLabels.map((label) => (
+                          <Badge key={`${contribution.id}-${label}`} variant="outline">
+                            {label}
+                          </Badge>
+                        ))
+                        : <span className="text-xs text-muted-foreground">—</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/treasurer/contributions/${contribution.id}`}>Manage</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {contributionGroups.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-24 text-center">

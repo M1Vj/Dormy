@@ -622,7 +622,7 @@ export function PaymentDialog({
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Record Payment</DialogTitle>
             <DialogDescription className="text-sm">
-              Record a payment for {category === "maintenance_fee" ? "maintenance fee" : category === "contributions" ? "event contribution" : "fines"}.
+              Record a payment for {category === "maintenance_fee" ? "maintenance fee" : category === "contributions" ? "event contribution" : category === "gadgets" ? "gadget charges" : "fines"}.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>

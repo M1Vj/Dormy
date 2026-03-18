@@ -86,7 +86,7 @@ export default async function OccupantFinanceOverviewPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -114,6 +114,21 @@ export default async function OccupantFinanceOverviewPage() {
             <p>Charged: <span className="font-medium">{formatPesos(overview.maintenance_fee.charged)}</span></p>
             <p>Collected: <span className="font-medium text-emerald-600">{formatPesos(overview.maintenance_fee.collected)}</span></p>
             <p>Outstanding: <span className="font-medium">{formatPesos(overview.maintenance_fee.outstanding)}</span></p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="h-4 w-4" />
+              Gadgets
+            </CardTitle>
+            <CardDescription>Semester-based gadget charges handled by the student assistant.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            <p>Charged: <span className="font-medium">{formatPesos(overview.gadgets.charged)}</span></p>
+            <p>Collected: <span className="font-medium text-emerald-600">{formatPesos(overview.gadgets.collected)}</span></p>
+            <p>Outstanding: <span className="font-medium">{formatPesos(overview.gadgets.outstanding)}</span></p>
           </CardContent>
         </Card>
 

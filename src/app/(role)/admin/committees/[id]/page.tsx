@@ -18,7 +18,7 @@ import { SubmitExpenseDialog } from "@/components/finance/submit-expense-dialog"
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const STAFF_MANAGE_ROLES = new Set(["admin", "adviser", "student_assistant"]);
+const STAFF_MANAGE_ROLES = new Set(["admin", "student_assistant"]);
 const COMMITTEE_LEAD_ROLES = new Set<CommitteeMemberRole>(["head", "co-head"]);
 
 function getRoleLabel(role: CommitteeMemberRole) {
@@ -68,19 +68,23 @@ export default async function CommitteeDetailsPage({
 
   const viewerCommitteeRole =
     committee.members.find((member) => member.user_id === user.id)?.role ?? null;
+  const isAdviserViewer = viewerRole === "adviser";
 
   const canManageCommittee =
     !isOccupantMode &&
+    !isAdviserViewer &&
     ((viewerRole ? STAFF_MANAGE_ROLES.has(viewerRole) : false) ||
       (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 
   const canCreateCommitteeEvent =
     !isOccupantMode &&
+    !isAdviserViewer &&
     ((viewerRole ? new Set(["admin", "officer"]).has(viewerRole) : false) ||
       (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 
   const canSubmitExpense =
     !isOccupantMode &&
+    !isAdviserViewer &&
     ((viewerRole ? new Set(["admin", "treasurer", "officer"]).has(viewerRole) : false) ||
       (viewerCommitteeRole ? COMMITTEE_LEAD_ROLES.has(viewerCommitteeRole) : false));
 

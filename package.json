@@ -1,9 +1,10 @@
 {
   "name": "dormy-app",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
+    "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
