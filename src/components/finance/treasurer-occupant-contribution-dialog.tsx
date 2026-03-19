@@ -73,7 +73,7 @@ export function TreasurerOccupantContributionDialog({
           tabIndex={0}
           role="button"
           className={cn(
-            "border-b-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 hover:bg-sky-500/5 dark:hover:bg-sky-400/10"
+            "border-b-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 hover:bg-muted/50"
           )}
         >
           <TableCell className="py-2">
