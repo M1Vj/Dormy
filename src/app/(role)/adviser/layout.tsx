@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
-import { getActiveRole } from "@/lib/roles-server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getUserRolesForDorm } from "@/lib/access";
 import { getActiveDormId } from "@/lib/dorms";
+import { getCachedRolesForDorm, getCachedUser } from "@/lib/auth-cache";
 
 const ALLOWED_ROLES = new Set(["adviser", "assistant_adviser"]);
 
@@ -11,12 +9,7 @@ export default async function AdviserLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return <>{children}</>;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) {
     redirect("/login");
@@ -27,7 +20,7 @@ export default async function AdviserLayout({
     redirect("/");
   }
 
-  const roles = await getUserRolesForDorm(supabase, user.id, activeDormId);
+  const roles = await getCachedRolesForDorm(activeDormId);
   const hasAccess = roles.some((r) => ALLOWED_ROLES.has(r));
 
   if (!hasAccess) {

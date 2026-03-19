@@ -1,4 +1,6 @@
 
+import { cookies } from "next/headers";
+import type { AppRole } from "@/lib/roles";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/nav/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -10,6 +12,7 @@ import { UserNav } from "@/components/nav/user-nav"
 import { AuthProvider } from "@/components/providers/auth-provider"
 import { DormProvider } from "@/components/providers/dorm-provider"
 import { getActiveDormId, getUserDorms } from "@/lib/dorms"
+import { getCachedRolesForDorm, getCachedUser } from "@/lib/auth-cache";
 
 export default async function AppLayout({
   children,
@@ -17,15 +20,27 @@ export default async function AppLayout({
   children: React.ReactNode
 }) {
   const dorms = await getUserDorms()
-
   const activeDormId = await getActiveDormId()
   const initialDormId =
     dorms.find((dorm) => dorm.id === activeDormId)?.id ??
     dorms[0]?.id ??
     null
+  const user = await getCachedUser();
+  const initialActualRoles = initialDormId
+    ? (await getCachedRolesForDorm(initialDormId)) as AppRole[]
+    : [];
+  const cookieStore = await cookies();
+  const initialActiveRole = (cookieStore.get("dormy_active_role")?.value ?? null) as AppRole | null;
+  const initialIsOccupantMode = cookieStore.get("dormy_occupant_mode")?.value === "1";
 
   return (
-    <AuthProvider>
+    <AuthProvider
+      initialUser={user}
+      initialActualRoles={initialActualRoles}
+      initialDormId={initialDormId}
+      initialActiveRole={initialActiveRole}
+      initialIsOccupantMode={initialIsOccupantMode}
+    >
       <DormProvider dorms={dorms} initialDormId={initialDormId}>
         <RouteProgress />
         <SidebarProvider>
