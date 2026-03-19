@@ -304,33 +304,32 @@ export default async function TreasurerOccupantsPage() {
                   </TableHeader>
                   <TableBody>
                     {group.occupants.map((occupant) => (
-                      <TableRow key={occupant.id} className="border-b-0">
-                        <TableCell className="py-2">
-                          {occupant.unpaidContributions.length > 0 ? (
-                            <TreasurerOccupantContributionDialog
-                              dormId={activeDormId}
-                              occupantId={occupant.id}
-                              occupantName={occupant.fullName}
-                              studentId={occupant.studentId}
-                              roomCode={group.roomCode === "Unassigned" ? null : group.roomCode}
-                              contributions={occupant.unpaidContributions}
-                              triggerClassName="h-auto w-full items-start justify-start px-0 py-0 text-left hover:bg-transparent hover:text-primary"
-                            />
-                          ) : (
-                            <>
-                              <p className="text-sm font-medium leading-tight">{occupant.fullName}</p>
-                              {occupant.studentId ? (
-                                <p className="text-xs text-muted-foreground">{occupant.studentId}</p>
-                              ) : null}
-                            </>
-                          )}
-                        </TableCell>
-                        <TableCell className="py-2 text-right">
-                          <span className={`text-sm font-medium ${occupant.payable > 0 ? "text-destructive" : "text-emerald-600"}`}>
-                            ₱{occupant.payable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </TableCell>
-                      </TableRow>
+                      occupant.unpaidContributions.length > 0 ? (
+                        <TreasurerOccupantContributionDialog
+                          key={occupant.id}
+                          dormId={activeDormId}
+                          occupantId={occupant.id}
+                          occupantName={occupant.fullName}
+                          studentId={occupant.studentId}
+                          roomCode={group.roomCode === "Unassigned" ? null : group.roomCode}
+                          payable={occupant.payable}
+                          contributions={occupant.unpaidContributions}
+                        />
+                      ) : (
+                        <TableRow key={occupant.id} className="border-b-0">
+                          <TableCell className="py-2">
+                            <p className="text-sm font-medium leading-tight">{occupant.fullName}</p>
+                            {occupant.studentId ? (
+                              <p className="text-xs text-muted-foreground">{occupant.studentId}</p>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-2 text-right">
+                            <span className="text-sm font-medium text-emerald-600">
+                              ₱{occupant.payable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      )
                     ))}
                     {group.occupants.length === 0 ? (
                       <TableRow>

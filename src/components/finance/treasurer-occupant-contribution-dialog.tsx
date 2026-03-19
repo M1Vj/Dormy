@@ -1,11 +1,7 @@
 "use client";
 
-import { ReceiptText } from "lucide-react";
-
 import { ContributionBatchPaymentDialog } from "@/components/finance/contribution-batch-payment-dialog";
 import { ContributionPayableOverrideDialog } from "@/components/finance/contribution-payable-override-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 type UnpaidContributionSummary = {
   id: string;
@@ -32,41 +30,22 @@ function formatPesos(value: number) {
   return `₱${Number(value || 0).toFixed(2)}`;
 }
 
-function formatDeadline(value: string | null) {
-  if (!value) {
-    return "No deadline";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "No deadline";
-  }
-
-  return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 export function TreasurerOccupantContributionDialog({
   dormId,
   occupantId,
   occupantName,
   studentId,
   roomCode,
+  payable,
   contributions,
-  triggerClassName,
 }: {
   dormId: string;
   occupantId: string;
   occupantName: string;
   studentId?: string | null;
   roomCode?: string | null;
+  payable: number;
   contributions: UnpaidContributionSummary[];
-  triggerClassName?: string;
 }) {
   const contributionOptions = contributions.map((contribution) => ({
     id: contribution.id,
@@ -87,30 +66,34 @@ export function TreasurerOccupantContributionDialog({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
+        <TableRow
           data-testid="treasurer-occupant-unpaid-trigger"
           aria-label={`Open unpaid contributions for ${occupantName}`}
-          className={triggerClassName}
+          tabIndex={0}
+          role="button"
+          className={cn(
+            "border-b-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 hover:bg-sky-500/5 dark:hover:bg-sky-400/10"
+          )}
         >
-          <span className="truncate">{occupantName}</span>
-          {studentId ? <span className="block text-xs text-muted-foreground">{studentId}</span> : null}
-        </Button>
+          <TableCell className="py-2">
+            <p className="text-sm font-medium leading-tight">{occupantName}</p>
+            {studentId ? <p className="text-xs text-muted-foreground">{studentId}</p> : null}
+          </TableCell>
+          <TableCell className="py-2 text-right">
+            <span className="text-sm font-medium text-destructive">{formatPesos(payable)}</span>
+          </TableCell>
+        </TableRow>
       </DialogTrigger>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+      <DialogContent className="max-h-[78vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <DialogTitle className="text-xl font-semibold">{occupantName} Unpaid Contributions</DialogTitle>
+              <DialogTitle className="text-xl font-semibold">{occupantName}</DialogTitle>
               <DialogDescription className="text-sm">
-                Review remaining contribution balances for this occupant and take payment or payable actions without leaving the room overview.
+                {studentId ? `${studentId} • ` : ""}
+                {roomCode ? `Room ${roomCode} • ` : ""}
+                Unpaid contributions for this semester.
               </DialogDescription>
-              <div className="flex flex-wrap items-center gap-2">
-                {roomCode ? <Badge variant="outline">Room {roomCode}</Badge> : null}
-                {studentId ? <Badge variant="secondary">{studentId}</Badge> : null}
-                <Badge variant="destructive">{contributions.length} unpaid item{contributions.length === 1 ? "" : "s"}</Badge>
-              </div>
             </div>
 
             {contributions.length > 0 ? (
@@ -134,56 +117,36 @@ export function TreasurerOccupantContributionDialog({
             This occupant has no unpaid contribution items right now.
           </div>
         ) : (
-          <div className="space-y-3">
-            {contributions.map((contribution) => (
-              <div key={contribution.id} className="rounded-xl border border-border/50 bg-background/70 p-4 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <ReceiptText className="h-4 w-4 text-muted-foreground" />
-                      <p className="font-medium">{contribution.title}</p>
-                    </div>
-                    {contribution.details ? (
-                      <p className="text-sm text-muted-foreground">{contribution.details}</p>
-                    ) : null}
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      {contribution.eventTitle ? <span>{contribution.eventTitle}</span> : null}
-                      <span>Deadline: {formatDeadline(contribution.deadline)}</span>
-                    </div>
-                  </div>
-
-                  <Badge variant="destructive" className="shrink-0">
-                    Remaining {formatPesos(contribution.remaining)}
-                  </Badge>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Payable</p>
-                    <p className="text-sm font-semibold">{formatPesos(contribution.payable)}</p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Paid</p>
-                    <p className="text-sm font-semibold text-emerald-600">{formatPesos(contribution.paid)}</p>
-                  </div>
-                  <div className="rounded-lg border bg-muted/20 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Remaining</p>
-                    <p className="text-sm font-semibold text-rose-600">{formatPesos(contribution.remaining)}</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <ContributionPayableOverrideDialog
-                    dormId={dormId}
-                    contributionId={contribution.id}
-                    occupantId={occupantId}
-                    currentPayable={contribution.payable}
-                    variant="outline"
-                    className="min-w-40"
-                  />
-                </div>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Contribution</TableHead>
+                  <TableHead className="text-right">Payable</TableHead>
+                  <TableHead className="w-[150px] text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contributions.map((contribution) => (
+                  <TableRow key={contribution.id}>
+                    <TableCell className="font-medium whitespace-normal">{contribution.title}</TableCell>
+                    <TableCell className="text-right font-medium text-destructive">
+                      {formatPesos(contribution.remaining)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <ContributionPayableOverrideDialog
+                        dormId={dormId}
+                        contributionId={contribution.id}
+                        occupantId={occupantId}
+                        currentPayable={contribution.payable}
+                        variant="outline"
+                        className="min-w-36"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </DialogContent>

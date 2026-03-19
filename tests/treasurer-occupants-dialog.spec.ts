@@ -20,12 +20,14 @@ test.describe("Treasurer occupant contribution dialog", () => {
     const trigger = page.getByTestId("treasurer-occupant-unpaid-trigger").first();
     await expect(trigger).toBeVisible();
 
-    const occupantName = (await trigger.textContent())?.trim() ?? "";
+    const occupantName = ((await trigger.locator("td").first().textContent()) ?? "").split("\n")[0]?.trim() ?? "";
     await trigger.click();
 
-    await expect(page.getByRole("dialog", { name: /unpaid contributions/i })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: occupantName })).toBeVisible();
     await expect(page.getByRole("button", { name: "Record Payment" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Change Payable/i }).first()).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Contribution" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Payable" })).toBeVisible();
 
     await page.getByRole("button", { name: "Record Payment" }).click();
 
