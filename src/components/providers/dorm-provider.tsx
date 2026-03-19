@@ -3,9 +3,7 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
   useState,
   useCallback,
 } from "react";
@@ -43,21 +41,11 @@ export function DormProvider({
     initialDormId
   );
   const [isSwitching, setIsSwitching] = useState(false);
-  const hasSyncedRef = useRef(false);
 
   const activeDorm = useMemo(
     () => dorms.find((dorm) => dorm.id === activeDormId) ?? null,
     [dorms, activeDormId]
   );
-
-  useEffect(() => {
-    if (!activeDormId || hasSyncedRef.current) {
-      return;
-    }
-
-    hasSyncedRef.current = true;
-    switchDormAction(activeDormId);
-  }, [activeDormId]);
 
   const switchDorm = useCallback(async (dormId: string) => {
     if (!dormId || dormId === activeDormId) {

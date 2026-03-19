@@ -1,19 +1,13 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getUserRolesForDorm } from "@/lib/access";
 import { getActiveDormId } from "@/lib/dorms";
+import { getCachedRolesForDorm, getCachedUser } from "@/lib/auth-cache";
 
 export default async function OccupantLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return <>{children}</>;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) {
     redirect("/login");
@@ -24,7 +18,7 @@ export default async function OccupantLayout({
     redirect("/join");
   }
 
-  const roles = await getUserRolesForDorm(supabase, user.id, activeDormId);
+  const roles = await getCachedRolesForDorm(activeDormId);
   const hasAccess = roles.includes("occupant");
 
   if (!hasAccess) {

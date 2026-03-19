@@ -77,7 +77,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+type AuthProviderProps = {
+  children: React.ReactNode;
+  initialUser?: User | null;
+  initialActualRoles?: AppRole[];
+  initialDormId?: string | null;
+  initialActiveRole?: AppRole | null;
+  initialIsOccupantMode?: boolean;
+};
+
+export function AuthProvider({
+  children,
+  initialUser = null,
+  initialActualRoles = [],
+  initialDormId = null,
+  initialActiveRole = null,
+  initialIsOccupantMode = false,
+}: AuthProviderProps) {
   const [supabase] = useState(() => {
     try {
       return createSupabaseBrowserClient();
@@ -85,17 +101,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   });
-  const [user, setUser] = useState<User | null>(null);
-  const [actualRoles, setActualRoles] = useState<AppRole[]>([]);
-  const [dormId, setDormId] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [actualRoles, setActualRoles] = useState<AppRole[]>(initialActualRoles);
+  const [dormId, setDormId] = useState<string | null>(initialDormId);
   const [isLoading, setIsLoading] = useState(false);
   const [activeRoleCookie, setActiveRoleCookie] = useState(() => {
-    return readCookie("dormy_active_role") as AppRole | null;
+    return initialActiveRole ?? (readCookie("dormy_active_role") as AppRole | null);
   });
   const [isOccupantMode, setIsOccupantMode] = useState(() => {
-    return readCookie(OCCUPANT_MODE_COOKIE) === "1";
+    return initialIsOccupantMode || readCookie(OCCUPANT_MODE_COOKIE) === "1";
   });
   const refreshInProgress = useRef(false);
+  const shouldSkipInitialAuthEvent = useRef(
+    Boolean(initialUser || initialActualRoles.length > 0 || initialDormId)
+  );
 
   // We determine the active 'actual' role from the cookie, or we default to the first one available
   const currentActualRole = useMemo(() => {
@@ -154,16 +173,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(authUser ?? null);
 
       if (authUser) {
-        const { data: memberships } = await supabase
+        const activeDormId = readCookie("dorm_id") ?? dormId;
+        let membershipsQuery = supabase
           .from("dorm_memberships")
           .select("role, dorm_id")
           .eq("user_id", authUser.id)
           .order("created_at", { ascending: true });
 
+        if (activeDormId) {
+          membershipsQuery = membershipsQuery.eq("dorm_id", activeDormId);
+        }
+
+        const { data: memberships } = await membershipsQuery;
+
         const roles = (memberships?.map((m) => m.role as AppRole) || []);
         setActualRoles(roles);
-        // Assuming user is only in 1 dorm for now in this app instance
-        setDormId(memberships?.[0]?.dorm_id ?? null);
+        setDormId(activeDormId ?? memberships?.[0]?.dorm_id ?? null);
       } else {
         setActualRoles([]);
         setDormId(null);
@@ -183,23 +208,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshInProgress.current = false;
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, [dormId, supabase]);
 
   useEffect(() => {
-    refresh();
+    if (!initialUser && initialActualRoles.length === 0 && !initialDormId) {
+      refresh();
+    }
 
     if (!supabase) {
       return;
     }
 
     const { data } = supabase.auth.onAuthStateChange(() => {
+      if (shouldSkipInitialAuthEvent.current) {
+        shouldSkipInitialAuthEvent.current = false;
+        return;
+      }
+
       refresh();
     });
 
     return () => {
       data.subscription.unsubscribe();
     };
-  }, [refresh, supabase]);
+  }, [initialActualRoles.length, initialDormId, initialUser, refresh, supabase]);
 
   useEffect(() => {
     if (!user || actualRoles.length > 0) {

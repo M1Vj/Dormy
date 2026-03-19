@@ -234,7 +234,7 @@ export default async function HomePage() {
                 <CardDescription>Dorm-wide updates</CardDescription>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link href={`/${rolePath}/home/announcements`}>View all</Link>
+                <Link href={`/${rolePath}/home/announcements`} prefetch={false}>View all</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -277,7 +277,7 @@ export default async function HomePage() {
             <CardDescription>Shared dorm updates visible to your role.</CardDescription>
           </div>
           <Button asChild size="sm" variant="outline">
-            <Link href={`/${rolePath}/home/announcements`}>View all</Link>
+            <Link href={`/${rolePath}/home/announcements`} prefetch={false}>View all</Link>
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -336,7 +336,7 @@ export default async function HomePage() {
               <CardDescription>From your current semester calendar.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/${rolePath}/events`}>
+              <Link href={`/${rolePath}/events`} prefetch={false}>
                 <CalendarDays className="mr-2 size-4 text-orange-500" />
                 Open calendar
               </Link>
@@ -370,7 +370,7 @@ export default async function HomePage() {
               <CardDescription>Visible dorm rules and default penalties.</CardDescription>
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href={finesHref}>
+              <Link href={finesHref} prefetch={false}>
                 <FileText className="mr-2 size-4 text-rose-500" />
                 View fines
               </Link>
