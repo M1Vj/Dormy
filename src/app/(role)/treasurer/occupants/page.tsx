@@ -136,7 +136,7 @@ function normalizeUnpaidContributions(entries: Map<string, Omit<ContributionLedg
 }
 
 export const metadata = {
-  title: "Occupants | Dormy",
+  title: "Occupants",
   description: "View occupants grouped by room with their payable contributions",
 };
 
