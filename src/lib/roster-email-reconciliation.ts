@@ -70,7 +70,7 @@ export async function reconcileRosterEmailMemberships(
         role: "occupant",
         updated_at: now,
       })),
-      { onConflict: "dorm_id,user_id" }
+      { onConflict: "dorm_id,user_id,role" }
     );
 
     if (insertMembershipError) {

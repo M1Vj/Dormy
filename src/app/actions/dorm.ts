@@ -632,7 +632,7 @@ export async function assignDormPersonnel(dormId: string, userId: string, role: 
     .from("dorm_memberships")
     .upsert(
       { dorm_id: dormId, user_id: userId, role },
-      { onConflict: "dorm_id,user_id" }
+      { onConflict: "dorm_id,user_id,role" }
     );
 
   if (error) return { error: error.message };

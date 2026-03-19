@@ -860,7 +860,7 @@ export async function reviewDormApplication(formData: FormData) {
           role: grantedRole,
           updated_at: now,
         },
-        { onConflict: "dorm_id,user_id" }
+        { onConflict: "dorm_id,user_id,role" }
       );
 
     if (membershipInsertError) {
