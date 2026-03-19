@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -84,7 +85,7 @@ export function TreasurerOccupantContributionDialog({
           </TableCell>
         </TableRow>
       </DialogTrigger>
-      <DialogContent className="max-h-[78vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[78vh] overflow-y-auto sm:max-w-xl" showCloseButton={false}>
         <DialogHeader className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
@@ -149,6 +150,8 @@ export function TreasurerOccupantContributionDialog({
             </Table>
           </div>
         )}
+
+        <DialogFooter showCloseButton className="pt-2" />
       </DialogContent>
     </Dialog>
   );

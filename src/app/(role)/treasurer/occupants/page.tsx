@@ -316,7 +316,7 @@ export default async function TreasurerOccupantsPage() {
                           contributions={occupant.unpaidContributions}
                         />
                       ) : (
-                        <TableRow key={occupant.id} className="border-b-0">
+                        <TableRow key={occupant.id} className="border-b-0 hover:bg-transparent">
                           <TableCell className="py-2">
                             <p className="text-sm font-medium leading-tight">{occupant.fullName}</p>
                             {occupant.studentId ? (
