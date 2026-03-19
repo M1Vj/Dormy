@@ -329,7 +329,9 @@ export async function createOccupant(dormId: string, formData: FormData) {
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  const hasAccess = roles.some((r) =>
+    new Set(["admin", "student_assistant", "adviser", "assistant_adviser"]).has(r)
+  );
   if (membershipError || !hasAccess) {
     return { error: "You do not have permission to add occupants." };
   }
@@ -434,7 +436,9 @@ export async function updateOccupant(
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  const hasAccess = roles.some((r) =>
+    new Set(["admin", "student_assistant", "adviser", "assistant_adviser"]).has(r)
+  );
   if (membershipError || !hasAccess) {
     return { error: "You do not have permission to update occupants." };
   }

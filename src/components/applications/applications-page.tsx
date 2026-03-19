@@ -7,6 +7,13 @@ import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import type { AppRole } from "@/lib/roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const applicationReviewRolePriority = [
+  "admin",
+  "adviser",
+  "assistant_adviser",
+  "student_assistant",
+] as const;
+
 export async function ApplicationsPage({
   searchParams,
 }: {
@@ -42,15 +49,16 @@ export async function ApplicationsPage({
     redirect("/join");
   }
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  const role = (membership?.role as AppRole) ?? null;
-  if (!role || !new Set(["admin", "adviser", "student_assistant"]).has(role)) {
+  const roles = (memberships ?? []).map((membership) => membership.role as AppRole);
+  const role = applicationReviewRolePriority.find((candidate) => roles.includes(candidate)) ?? null;
+
+  if (!role) {
     return (
       <div className="rounded-lg border p-6 text-sm text-muted-foreground">
         You do not have access to this page.
