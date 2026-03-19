@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { JoinDorm } from "@/components/join/join-dorm";
 import { getActiveRole } from "@/lib/roles-server";
 import { getRoleRoute } from "@/lib/roles";
+import { reconcileRosterEmailMemberships } from "@/lib/roster-email-reconciliation";
 
 export default async function JoinPage() {
   const supabase = await createSupabaseServerClient();
@@ -26,6 +27,10 @@ export default async function JoinPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (user.email) {
+    await reconcileRosterEmailMemberships(user.id, user.email);
   }
 
   const role = await getActiveRole();

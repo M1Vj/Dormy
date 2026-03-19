@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
+import { reconcileRosterEmailMemberships } from "@/lib/roster-email-reconciliation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function Home() {
@@ -19,6 +20,10 @@ export default async function Home() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (user.email) {
+    await reconcileRosterEmailMemberships(user.id, user.email);
   }
 
   const cookieStore = await cookies();

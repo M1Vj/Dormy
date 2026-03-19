@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { getOccupants } from "@/app/actions/occupants";
+import { createOccupant, getOccupants } from "@/app/actions/occupants";
+import { CreateOccupantForm } from "@/components/admin/occupants/create-occupant-form";
 import { OccupantTable } from "@/components/admin/occupants/occupant-table";
 import { getActiveDormId } from "@/lib/dorms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -73,14 +74,18 @@ export default async function AdminOccupantsPage({
     room: trimmedRoom,
     level: trimmedLevel,
   });
+  const createOccupantAction = createOccupant.bind(null, activeDormId!);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Occupants</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage the roster and current room assignments.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Occupants</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage the roster and current room assignments.
+          </p>
+        </div>
+        <CreateOccupantForm action={createOccupantAction} />
       </div>
       <OccupantTable
         dormId={activeDormId!}
