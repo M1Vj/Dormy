@@ -171,7 +171,7 @@ export default async function TreasurerHomePage() {
               <p className="text-sm text-muted-foreground">No upcoming events.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/treasurer/events">Open events</Link>
+              <Link href="/treasurer/events" prefetch={false}>Open events</Link>
             </Button>
           </CardContent>
         </Card>
@@ -199,7 +199,7 @@ export default async function TreasurerHomePage() {
               <p className="text-sm text-muted-foreground">No announcements available.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/treasurer/home/announcements">View all announcements</Link>
+              <Link href="/treasurer/home/announcements" prefetch={false}>View all announcements</Link>
             </Button>
           </CardContent>
         </Card>
@@ -215,26 +215,26 @@ export default async function TreasurerHomePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/finance">
+            <Link href="/treasurer/finance" prefetch={false}>
               <Wallet className="mr-2 h-4 w-4" />
               Finance
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/contributions">
+            <Link href="/treasurer/contributions" prefetch={false}>
               <CalendarDays className="mr-2 h-4 w-4" />
               Contributions
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/contribution-expenses">
+            <Link href="/treasurer/contribution-expenses" prefetch={false}>
               <ReceiptText className="mr-2 h-4 w-4" />
               Contribution Expenses
             </Link>
           </Button>
           {showTreasurerMaintenance ? (
             <Button asChild variant="secondary" size="sm">
-              <Link href="/treasurer/finance/maintenance">
+              <Link href="/treasurer/finance/maintenance" prefetch={false}>
                 <Wallet className="mr-2 h-4 w-4" />
                 Maintenance
               </Link>
@@ -242,11 +242,11 @@ export default async function TreasurerHomePage() {
           ) : null}
           {showTreasurerMaintenance ? (
             <Button asChild variant="secondary" size="sm">
-              <Link href="/treasurer/finance/expenses?category=maintenance_fee">Maintenance Expenses</Link>
+              <Link href="/treasurer/finance/expenses?category=maintenance_fee" prefetch={false}>Maintenance Expenses</Link>
             </Button>
           ) : null}
           <Button asChild variant="secondary" size="sm">
-            <Link href="/treasurer/reporting">Reporting</Link>
+            <Link href="/treasurer/reporting" prefetch={false}>Reporting</Link>
           </Button>
         </CardContent>
       </Card>

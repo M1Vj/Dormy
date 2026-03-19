@@ -176,6 +176,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link
                         href={resolvedUrl}
+                        prefetch={false}
                         onClick={(e) => handleNav(e, resolvedUrl)}
                       >
                         {isItemPending ? (

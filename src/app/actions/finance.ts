@@ -1971,6 +1971,7 @@ export async function recordContributionBatchPayment(
   for (const row of allocRows) {
     revalidatePath(`/${activeRole}/contributions/${row.contributionId}`);
   }
+  revalidatePath(`/${activeRole}/occupants`);
   revalidatePath(`/${activeRole}/payments`);
 
   return {
@@ -3631,6 +3632,7 @@ export async function overrideContributionPayable(
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/contributions/${input.contribution_id}`);
   revalidatePath(`/${activeRole}/contributions`);
+  revalidatePath(`/${activeRole}/occupants`);
   revalidatePath(`/${activeRole}/payments`);
 
   return { success: true, payable: input.new_payable };

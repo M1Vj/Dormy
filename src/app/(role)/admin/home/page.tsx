@@ -95,10 +95,10 @@ export default async function AdminHomePage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link href="/admin/terms">Semester management</Link>
+              <Link href="/admin/terms" prefetch={false}>Semester management</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href="/admin/dorms">Manage dormitories</Link>
+              <Link href="/admin/dorms" prefetch={false}>Manage dormitories</Link>
             </Button>
           </CardContent>
         </Card>
@@ -123,7 +123,7 @@ export default async function AdminHomePage() {
               <p className="text-sm text-muted-foreground">No announcements posted yet.</p>
             )}
             <Button asChild size="sm" variant="outline">
-              <Link href="/admin/announcements">
+              <Link href="/admin/announcements" prefetch={false}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Manage announcements
               </Link>

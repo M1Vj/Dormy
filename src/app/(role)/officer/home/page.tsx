@@ -136,7 +136,7 @@ export default async function OfficerHomePage() {
               <p className="text-sm text-muted-foreground">No upcoming events.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/officer/events">Open events</Link>
+              <Link href="/officer/events" prefetch={false}>Open events</Link>
             </Button>
           </CardContent>
         </Card>
@@ -164,7 +164,7 @@ export default async function OfficerHomePage() {
               <p className="text-sm text-muted-foreground">No announcements available.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/officer/home/announcements">View all announcements</Link>
+              <Link href="/officer/home/announcements" prefetch={false}>View all announcements</Link>
             </Button>
           </CardContent>
         </Card>
@@ -180,22 +180,22 @@ export default async function OfficerHomePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm">
-            <Link href="/officer/events">
+            <Link href="/officer/events" prefetch={false}>
               <CalendarDays className="mr-2 h-4 w-4" />
               Events
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/officer/finance/expenses">
+            <Link href="/officer/finance/expenses" prefetch={false}>
               <Wallet className="mr-2 h-4 w-4" />
               Expenses
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/officer/reporting">Reporting</Link>
+            <Link href="/officer/reporting" prefetch={false}>Reporting</Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/officer/cleaning">Cleaning</Link>
+            <Link href="/officer/cleaning" prefetch={false}>Cleaning</Link>
           </Button>
         </CardContent>
       </Card>

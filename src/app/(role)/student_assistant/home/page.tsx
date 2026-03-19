@@ -124,7 +124,7 @@ export default async function StudentAssistantHomePage() {
               <p className="text-sm text-muted-foreground">No recent announcements.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/student_assistant/home/announcements">Manage announcements</Link>
+              <Link href="/student_assistant/home/announcements" prefetch={false}>Manage announcements</Link>
             </Button>
           </CardContent>
         </Card>
@@ -151,7 +151,7 @@ export default async function StudentAssistantHomePage() {
               <p className="text-sm text-muted-foreground">No upcoming events.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/student_assistant/events">Open events</Link>
+              <Link href="/student_assistant/events" prefetch={false}>Open events</Link>
             </Button>
           </CardContent>
         </Card>

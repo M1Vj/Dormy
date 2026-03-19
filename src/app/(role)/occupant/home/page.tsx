@@ -207,7 +207,7 @@ export default async function OccupantHomePage() {
               <p className="text-sm text-muted-foreground">No announcements available.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/occupant/home/announcements">View all announcements</Link>
+              <Link href="/occupant/home/announcements" prefetch={false}>View all announcements</Link>
             </Button>
           </CardContent>
         </Card>
@@ -235,7 +235,7 @@ export default async function OccupantHomePage() {
               <p className="text-sm text-muted-foreground">No upcoming events.</p>
             )}
             <Button asChild variant="outline" size="sm">
-              <Link href="/occupant/events">Open events</Link>
+              <Link href="/occupant/events" prefetch={false}>Open events</Link>
             </Button>
           </CardContent>
         </Card>
@@ -251,22 +251,22 @@ export default async function OccupantHomePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild variant="secondary" size="sm">
-            <Link href="/occupant/payments">
+            <Link href="/occupant/payments" prefetch={false}>
               <Wallet className="mr-2 h-4 w-4" />
               Finance Totals
             </Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/occupant/fines/reports">Report Fine</Link>
+            <Link href="/occupant/fines/reports" prefetch={false}>Report Fine</Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/occupant/cleaning">Cleaning</Link>
+            <Link href="/occupant/cleaning" prefetch={false}>Cleaning</Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/occupant/events">Events</Link>
+            <Link href="/occupant/events" prefetch={false}>Events</Link>
           </Button>
           <Button asChild variant="secondary" size="sm">
-            <Link href="/occupant/committees">
+            <Link href="/occupant/committees" prefetch={false}>
               <Users className="mr-2 h-4 w-4" />
               {viewerCommittees.length ? "My Committee" : "Committees"}
             </Link>
