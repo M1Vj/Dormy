@@ -40,7 +40,7 @@ export function SaDashboard({
             </div>
           </div>
           <Button asChild variant={unverifiedFines > 0 ? "default" : "secondary"} size="sm" className="w-full">
-            <Link href={`/${role}/fines`}>
+            <Link href={`/${role}/fines`} prefetch={false}>
               Verify Reports
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
@@ -71,7 +71,7 @@ export function SaDashboard({
             </div>
           </div>
           <Button asChild variant="secondary" size="sm" className="w-full">
-            <Link href={`/${role}/cleaning`}>
+            <Link href={`/${role}/cleaning`} prefetch={false}>
               Check Status
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
