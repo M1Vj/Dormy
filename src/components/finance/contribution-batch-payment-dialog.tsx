@@ -97,6 +97,9 @@ export function ContributionBatchPaymentDialog({
   contributions,
   occupants,
   occupantContributionRemaining,
+  prefilledOccupantId,
+  lockOccupant = false,
+  triggerText = "Pay Contributions",
   triggerClassName,
   triggerVariant = "default",
 }: {
@@ -105,12 +108,16 @@ export function ContributionBatchPaymentDialog({
   occupants: OccupantOption[];
   /** Map of `occupantId:contributionId` → remaining amount for that occupant */
   occupantContributionRemaining?: OccupantContributionRemaining;
+  prefilledOccupantId?: string;
+  lockOccupant?: boolean;
+  triggerText?: string;
   triggerClassName?: string;
   triggerVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 }) {
   const router = useRouter();
+  const resolvedPrefilledOccupantId = prefilledOccupantId ?? "";
   const [open, setOpen] = useState(false);
-  const [occupantId, setOccupantIdRaw] = useState<string>("");
+  const [occupantId, setOccupantIdRaw] = useState<string>(resolvedPrefilledOccupantId);
 
   /** When occupant changes, reset contribution selections since remaining amounts change per-occupant */
   const setOccupantId = useCallback((newId: string) => {
@@ -136,6 +143,11 @@ export function ContributionBatchPaymentDialog({
     subject: string;
     text: string;
   } | null>(null);
+
+  const selectedOccupant = useMemo(
+    () => occupants.find((occupant) => occupant.id === occupantId) ?? null,
+    [occupantId, occupants]
+  );
 
   // Store cart state: keyed by contribution id
   const [storeCartItems, setStoreCartItems] = useState<Record<string, any[]>>({});
@@ -271,6 +283,7 @@ export function ContributionBatchPaymentDialog({
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
     if (!nextOpen) {
+      setOccupantIdRaw(resolvedPrefilledOccupantId);
       setSelectedContributionIds([]);
       setAmount(0);
       setAllocationTargetId("");
@@ -442,7 +455,7 @@ export function ContributionBatchPaymentDialog({
         <DialogTrigger asChild>
           <Button variant={triggerVariant} className={triggerClassName}>
             <CalendarCheck2 className="mr-2 h-4 w-4" />
-            Pay Contributions
+            {triggerText}
           </Button>
         </DialogTrigger>
         <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
@@ -457,13 +470,22 @@ export function ContributionBatchPaymentDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 flex flex-col">
                 <Label>Occupant</Label>
-                <OccupantCombobox
-                  occupants={occupants}
-                  value={occupantId}
-                  onValueChange={setOccupantId}
-                  placeholder="Select occupant..."
-                  className="shadow-sm"
-                />
+                {lockOccupant ? (
+                  <div className="flex min-h-10 items-center rounded-md border bg-muted/30 px-3 text-sm shadow-sm">
+                    {selectedOccupant?.fullName ?? "Selected occupant"}
+                    {selectedOccupant?.studentId ? (
+                      <span className="ml-2 text-xs text-muted-foreground">{selectedOccupant.studentId}</span>
+                    ) : null}
+                  </div>
+                ) : (
+                  <OccupantCombobox
+                    occupants={occupants}
+                    value={occupantId}
+                    onValueChange={setOccupantId}
+                    placeholder="Select occupant..."
+                    className="shadow-sm"
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
