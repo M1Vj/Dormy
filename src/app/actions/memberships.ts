@@ -6,7 +6,7 @@ import { z } from "zod";
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppRole } from "@/lib/auth";
-import { canManageRole } from "@/lib/roles";
+import { canManageRole, getRoleWeight } from "@/lib/roles";
 
 const updateRolesSchema = z.object({
   dormId: z.string().uuid(),
@@ -41,18 +41,19 @@ export async function updateMembershipRoles(
   }
 
   // Check if actor has permission
-  const { data: actorMembership } = await supabase
+  const { data: actorMemberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", dormId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!actorMembership?.role) {
+  const actorRoles = (actorMemberships ?? []).map((membership) => membership.role as AppRole);
+  const actorRole =
+    actorRoles.sort((left, right) => getRoleWeight(right) - getRoleWeight(left))[0] ?? null;
+
+  if (!actorRole) {
     return { error: "You do not have permission to update roles." };
   }
-
-  const actorRole = actorMembership.role;
   if (!new Set(["admin", "adviser", "assistant_adviser", "student_assistant"]).has(actorRole)) {
     return { error: "Only admin, adviser, and student assistant accounts can delegate roles." };
   }
