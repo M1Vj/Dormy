@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -203,27 +204,21 @@ export default async function EventDetailsPage({
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const entryRows = (entries ?? []) as EntryRow[];
   const nowIso = new Date().toISOString();
+  const isOptional = entryRows.map((entry) => entry.metadata?.is_optional === true).find(Boolean) ?? false;
 
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
-    const chargeEntries = occupantEntries.filter(
-      (entry) => {
-        const amount = Number(entry.amount_pesos ?? 0);
-        return !(entry.entry_type === "payment" || amount < 0);
-      }
+    const chargeEntries = occupantEntries.filter((entry) => entry.entry_type !== "payment");
+
+    const paid = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      0
     );
 
-    const paid = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      const isPayment = entry.entry_type === "payment" || amount < 0;
-      return isPayment ? sum + Math.abs(amount) : sum;
-    }, 0);
-
-    const charged = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      const isPayment = entry.entry_type === "payment" || amount < 0;
-      return isPayment ? sum : sum + Math.abs(amount);
-    }, 0);
+    const charged = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos),
+      0
+    );
 
     let status: OccupantWithStatus["status"] = "unpaid";
     if (charged > 0 && paid >= charged) {
@@ -451,6 +446,7 @@ export default async function EventDetailsPage({
                       category="contributions"
                       eventId={eventId}
                       eventTitle={event.title}
+                      metadata={{ is_optional: isOptional }}
                       trigger={
                         <Button size="sm" variant="outline" className="w-full">
                           Record Payment
@@ -512,6 +508,7 @@ export default async function EventDetailsPage({
                         category="contributions"
                         eventId={eventId}
                         eventTitle={event.title}
+                        metadata={{ is_optional: isOptional }}
                         trigger={
                           <Button size="sm" variant="outline">
                             Record Pay

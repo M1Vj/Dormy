@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { getTreasurerSemesterSnapshots } from "@/lib/finance/treasurer-semester-balance";
 import { getActiveDormId } from "@/lib/dorms";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -384,8 +385,6 @@ export default async function TreasurerFinancePage({
   for (const row of contributionRowsForGroups) {
     const eventTitleFallback = row.event_id ? eventTitleById.get(row.event_id) ?? null : null;
     const parsed = parseContributionMetadata(row, eventTitleFallback);
-    const amount = Number(row.amount_pesos ?? 0);
-
     const existing =
       contributionGroupMap.get(parsed.groupKey) ?? {
         id: parsed.groupKey,
@@ -400,9 +399,8 @@ export default async function TreasurerFinancePage({
         semesterIds: new Set<string>(),
       };
 
-    const isPayment = amount < 0 || row.entry_type === "payment";
-    const chargeAmount = isPayment ? 0 : Math.abs(amount);
-    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+    const chargeAmount = getContributionChargeAmount(row.entry_type, row.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos);
 
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
@@ -752,43 +750,45 @@ export default async function TreasurerFinancePage({
       </div>
 
       <div className="hidden rounded-md border md:block">
-        <Table>
+        <Table className="min-w-[1180px] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Details</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Semester</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+              <TableHead className="w-[136px]">Date</TableHead>
+              <TableHead className="w-[110px]">Type</TableHead>
+              <TableHead className="w-[170px]">Source</TableHead>
+              <TableHead className="w-[360px]">Title</TableHead>
+              <TableHead className="w-[340px]">Details</TableHead>
+              <TableHead className="w-[140px] text-right">Amount</TableHead>
+              <TableHead className="w-[180px]">Semester</TableHead>
+              <TableHead className="w-[100px] text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {stream.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{format(new Date(row.happenedAt), "MMM d, yyyy")}</TableCell>
-                <TableCell>
+                <TableCell className="align-top">{format(new Date(row.happenedAt), "MMM d, yyyy")}</TableCell>
+                <TableCell className="align-top">
                   <Badge variant={row.kind === "inflow" ? "secondary" : "destructive"}>
                     {row.kind === "inflow" ? "Inflow" : "Expense"}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{sourceLabel(row.source)}</TableCell>
-                <TableCell>
-                  <div className="font-medium">{row.title}</div>
-                  {row.subtitle ? <div className="text-xs text-muted-foreground">{row.subtitle}</div> : null}
+                <TableCell className="text-xs text-muted-foreground align-top whitespace-normal break-words">
+                  {sourceLabel(row.source)}
                 </TableCell>
-                <TableCell className="max-w-[280px] text-xs text-muted-foreground">
+                <TableCell className="align-top whitespace-normal break-words">
+                  <div className="font-medium leading-snug">{row.title}</div>
+                  {row.subtitle ? <div className="text-xs leading-snug text-muted-foreground">{row.subtitle}</div> : null}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground align-top whitespace-normal break-words">
                   {row.detail || "—"}
                 </TableCell>
-                <TableCell className={`text-right font-medium ${row.kind === "inflow" ? "text-emerald-600" : "text-rose-600"}`}>
+                <TableCell className={`text-right font-medium align-top ${row.kind === "inflow" ? "text-emerald-600" : "text-rose-600"}`}>
                   ₱{row.amount.toFixed(2)}
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top whitespace-normal break-words">
                   {row.semesterLabels.length ? row.semesterLabels.join(", ") : "—"}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right align-top">
                   {row.actionHref ? (
                     <Button asChild variant="outline" size="sm">
                       <Link href={row.actionHref}>Open</Link>

@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
@@ -37,6 +36,7 @@ import {
   formatChoiceLabel,
   getStoreContributionPriceRange,
   normalizeStoreItems,
+  type StoreItem,
 } from "@/lib/store-pricing";
 
 type ContributionOption = {
@@ -47,8 +47,9 @@ type ContributionOption = {
   receiptSubject: string | null;
   receiptMessage: string | null;
   receiptLogoUrl: string | null;
+  isOptional?: boolean;
   isStore?: boolean;
-  storeItems?: any[];
+  storeItems?: StoreItem[];
 };
 
 /** Per-occupant remaining amounts keyed by `occupantId:contributionId` */
@@ -63,6 +64,7 @@ type OccupantOption = {
 type BatchPaymentPayload = {
   occupant_id: string;
   contribution_ids: string[];
+  declined_contribution_ids: string[];
   amount: number;
   method: "cash" | "gcash";
   paid_at_iso: string;
@@ -80,6 +82,20 @@ type BatchPaymentPayload = {
     options: Array<{ name: string; value: string; price_adjustment?: number }>;
     subtotal: number;
   }>;
+};
+
+type StoreCartOption = {
+  name: string;
+  value: string;
+  price_adjustment?: number;
+};
+
+type StoreCartItem = {
+  id: string;
+  item_id: string;
+  quantity: number;
+  options: StoreCartOption[];
+  subtotal: number;
 };
 
 function nowLocalDateTimeValue() {
@@ -123,10 +139,12 @@ export function ContributionBatchPaymentDialog({
   const setOccupantId = useCallback((newId: string) => {
     setOccupantIdRaw(newId);
     setSelectedContributionIds([]);
+    setDeclinedContributionIds([]);
     setAmount(0);
     setAllocationTargetId("");
   }, []);
   const [selectedContributionIds, setSelectedContributionIds] = useState<string[]>([]);
+  const [declinedContributionIds, setDeclinedContributionIds] = useState<string[]>([]);
   const [amount, setAmount] = useState<number>(0);
   const [method, setMethod] = useState<"cash" | "gcash">("cash");
   const [paidAtLocal, setPaidAtLocal] = useState(nowLocalDateTimeValue());
@@ -150,14 +168,14 @@ export function ContributionBatchPaymentDialog({
   );
 
   // Store cart state: keyed by contribution id
-  const [storeCartItems, setStoreCartItems] = useState<Record<string, any[]>>({});
+  const [storeCartItems, setStoreCartItems] = useState<Record<string, StoreCartItem[]>>({});
 
-  const sumCartSubtotals = useCallback((items: any[] | undefined) => {
+  const sumCartSubtotals = useCallback((items: StoreCartItem[] | undefined) => {
     return (items ?? []).reduce((sum, item) => sum + Math.max(0, Number(item?.subtotal ?? 0)), 0);
   }, []);
 
   const getStoreCartSubtotal = useCallback(
-    (contributionId: string, carts: Record<string, any[]> = storeCartItems) =>
+    (contributionId: string, carts: Record<string, StoreCartItem[]> = storeCartItems) =>
       Number(sumCartSubtotals(carts[contributionId]).toFixed(2)),
     [storeCartItems, sumCartSubtotals]
   );
@@ -192,9 +210,13 @@ export function ContributionBatchPaymentDialog({
   );
 
   const computeAmountForSelection = useCallback(
-    (selected: ContributionOption[], carts: Record<string, any[]> = storeCartItems) => {
+    (
+      selected: ContributionOption[],
+      carts: Record<string, StoreCartItem[]> = storeCartItems,
+      declinedIds: string[] = declinedContributionIds
+    ) => {
       const nonStoreTotal = selected
-        .filter((contribution) => !contribution.isStore)
+        .filter((contribution) => !contribution.isStore && !declinedIds.includes(contribution.id))
         .reduce((sum, contribution) => {
           const remaining = occupantId
             ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
@@ -203,7 +225,7 @@ export function ContributionBatchPaymentDialog({
         }, 0);
 
       const storeTotal = selected
-        .filter((contribution) => contribution.isStore)
+        .filter((contribution) => contribution.isStore && !declinedIds.includes(contribution.id))
         .reduce((sum, contribution) => {
           const cartSubtotal = getStoreCartSubtotal(contribution.id, carts);
           const fallbackAmount = getStoreFallbackAmount(contribution);
@@ -212,7 +234,7 @@ export function ContributionBatchPaymentDialog({
 
       return Number((nonStoreTotal + storeTotal).toFixed(2));
     },
-    [getStoreCartSubtotal, getStoreFallbackAmount, occupantId, occupantContributionRemaining, storeCartItems]
+    [declinedContributionIds, getStoreCartSubtotal, getStoreFallbackAmount, occupantId, occupantContributionRemaining, storeCartItems]
   );
 
   const hasAnyStoreContributions = useMemo(
@@ -226,6 +248,9 @@ export function ContributionBatchPaymentDialog({
   );
 
   const amountDifference = useMemo(() => Number((amount - computedTotal).toFixed(2)), [amount, computedTotal]);
+  const onlyDeclinesSelected =
+    selectedContributionIds.length > 0 &&
+    selectedContributionIds.every((contributionId) => declinedContributionIds.includes(contributionId));
 
   const previewRows = useMemo(() => {
     if (!selectedContributions.length) return [] as Array<{ title: string; amount: number }>;
@@ -242,6 +267,13 @@ export function ContributionBatchPaymentDialog({
       const remaining = occupantId
         ? (getOccupantRemaining(contribution.id) ?? 0)
         : contribution.remaining;
+      if (declinedContributionIds.includes(contribution.id)) {
+        return {
+          id: contribution.id,
+          title: contribution.title,
+          amount: 0,
+        };
+      }
       return {
         id: contribution.id,
         title: contribution.title,
@@ -263,7 +295,7 @@ export function ContributionBatchPaymentDialog({
       }
       return { title: row.title, amount: Number((row.amount + amountDifference).toFixed(2)) };
     });
-  }, [allocationTargetId, amountDifference, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
+  }, [allocationTargetId, amountDifference, declinedContributionIds, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
 
   const toggleContribution = (id: string, checked: boolean) => {
     const next = checked
@@ -278,6 +310,23 @@ export function ContributionBatchPaymentDialog({
     if (!next.includes(allocationTargetId)) {
       setAllocationTargetId("");
     }
+
+    if (!checked) {
+      setDeclinedContributionIds((current) => current.filter((value) => value !== id));
+    }
+  };
+
+  const toggleDeclinedContribution = (id: string, checked: boolean) => {
+    const next = checked
+      ? Array.from(new Set([...declinedContributionIds, id]))
+      : declinedContributionIds.filter((value) => value !== id);
+
+    setDeclinedContributionIds(next);
+    const nextSelected = contributions.filter((contribution) => selectedContributionIds.includes(contribution.id));
+    setAmount(computeAmountForSelection(nextSelected, storeCartItems, next));
+    if (checked && allocationTargetId === id) {
+      setAllocationTargetId("");
+    }
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -285,6 +334,7 @@ export function ContributionBatchPaymentDialog({
     if (!nextOpen) {
       setOccupantIdRaw(resolvedPrefilledOccupantId);
       setSelectedContributionIds([]);
+      setDeclinedContributionIds([]);
       setAmount(0);
       setAllocationTargetId("");
       setPaidAtLocal(nowLocalDateTimeValue());
@@ -307,12 +357,12 @@ export function ContributionBatchPaymentDialog({
       return null;
     }
 
-    if (amount <= 0) {
+    if (amount <= 0 && declinedContributionIds.length === 0) {
       toast.error("Amount must be greater than zero.");
       return null;
     }
 
-    if (Math.abs(amountDifference) >= 0.01 && !allocationTargetId) {
+    if (Math.abs(amountDifference) >= 0.01 && amount > 0 && !allocationTargetId) {
       toast.error("Choose where to apply the excess or short payment amount.");
       return null;
     }
@@ -324,12 +374,15 @@ export function ContributionBatchPaymentDialog({
     }
 
     // Use global templates for batch receipt emails
-    const selectedContributionSet = new Set(selectedContributionIds);
+    const selectedContributionSet = new Set(
+      selectedContributionIds.filter((id) => !declinedContributionIds.includes(id))
+    );
 
     const payload: BatchPaymentPayload = {
       occupant_id: occupantId,
-      contribution_ids: selectedContributionIds,
-      amount,
+      contribution_ids: selectedContributionIds.filter((id) => !declinedContributionIds.includes(id)),
+      declined_contribution_ids: declinedContributionIds,
+      amount: onlyDeclinesSelected ? 0 : amount,
       method,
       paid_at_iso: paidAt.toISOString(),
       allocation_target_id: allocationTargetId || null,
@@ -351,7 +404,7 @@ export function ContributionBatchPaymentDialog({
                 quantity: Math.max(1, Number(item.quantity ?? 1)),
                 options: Array.isArray(item.options)
                   ? item.options
-                      .map((option: any) => ({
+                      .map((option) => ({
                         name: String(option?.name ?? "").trim(),
                         value: String(option?.value ?? "").trim(),
                         price_adjustment:
@@ -394,6 +447,13 @@ export function ContributionBatchPaymentDialog({
   };
 
   const handleProceedToConfirmation = async () => {
+    if (computedTotal <= 0 && declinedContributionIds.length > 0) {
+      const payload = buildPayload();
+      if (!payload) return;
+      await submitPayment(payload);
+      return;
+    }
+
     if (computedTotal <= 0) {
       const payload = buildPayload();
       if (!payload) return;
@@ -462,7 +522,7 @@ export function ContributionBatchPaymentDialog({
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Record Contribution Payment</DialogTitle>
             <DialogDescription className="text-sm">
-              One payment can cover multiple contributions and optionally send one combined receipt email.
+              One payment can cover multiple contributions, and optional ones can be marked as not paid or not availed for this occupant.
             </DialogDescription>
           </DialogHeader>
 
@@ -510,6 +570,7 @@ export function ContributionBatchPaymentDialog({
                 ) : (
                   contributions.map((contribution) => {
                     const checked = selectedContributionIds.includes(contribution.id);
+                    const declined = declinedContributionIds.includes(contribution.id);
                     const storePriceRange = contribution.isStore
                       ? getStoreContributionPriceRange(contribution.storeItems || [])
                       : null;
@@ -517,63 +578,101 @@ export function ContributionBatchPaymentDialog({
                       ? getStoreCartSubtotal(contribution.id)
                       : 0;
                     return (
-                      <label key={contribution.id} className={`flex items-start gap-3 rounded-md border border-border/50 bg-background/50 p-3 hover:bg-muted/30 transition-colors ${occupantId ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))}
-                          className="mt-0.5"
-                          disabled={!occupantId}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium leading-none">{contribution.title}</p>
-                          {occupantId ? (
-                            contribution.isStore ? (
-                              <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                                <p>
-                                  {storePriceRange ? (
-                                    storePriceRange.min === storePriceRange.max ? (
-                                      <>
-                                        Item price: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)}</span>
-                                      </>
+                      <div key={contribution.id} className={`rounded-md border border-border/50 bg-background/50 p-3 transition-colors ${occupantId ? "hover:bg-muted/30" : "cursor-not-allowed opacity-60"}`}>
+                        <label className={`flex items-start gap-3 ${occupantId ? "cursor-pointer" : "cursor-not-allowed"}`}>
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))}
+                            className="mt-0.5"
+                            disabled={!occupantId}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium leading-none">{contribution.title}</p>
+                              {contribution.isOptional ? <Badge variant="secondary">Optional</Badge> : null}
+                              {contribution.isStore ? <Badge variant="outline">Store</Badge> : null}
+                              {declined ? <Badge variant="outline" className="border-amber-300 text-amber-700">Declined</Badge> : null}
+                            </div>
+                            {occupantId ? (
+                              contribution.isStore ? (
+                                <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                                  <p>
+                                    {storePriceRange ? (
+                                      storePriceRange.min === storePriceRange.max ? (
+                                        <>
+                                          Item price: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          Price range: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)} - {formatPesos(storePriceRange.max)}</span>
+                                        </>
+                                      )
                                     ) : (
                                       <>
-                                        Price range: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)} - {formatPesos(storePriceRange.max)}</span>
+                                        Item price: <span className="font-semibold text-foreground">{formatPesos(0)}</span>
                                       </>
-                                    )
+                                    )}
+                                  </p>
+                                  {storeCartSubtotal > 0 && !declined ? (
+                                    <p>
+                                      Cart total: <span className="font-semibold text-foreground">{formatPesos(storeCartSubtotal)}</span>
+                                    </p>
+                                  ) : null}
+                                  {declined ? <p className="font-medium text-amber-700">No payment will be recorded for this item.</p> : null}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground mt-1.5">
+                                  {declined ? (
+                                    <span className="font-semibold text-amber-700">Remaining will be set to zero.</span>
                                   ) : (
                                     <>
-                                      Item price: <span className="font-semibold text-foreground">{formatPesos(0)}</span>
+                                      Remaining: <span className="font-semibold text-foreground">{formatPesos(getOccupantRemaining(contribution.id) ?? 0)}</span>
                                     </>
                                   )}
                                 </p>
-                                {storeCartSubtotal > 0 ? (
-                                  <p>
-                                    Cart total: <span className="font-semibold text-foreground">{formatPesos(storeCartSubtotal)}</span>
-                                  </p>
-                                ) : null}
-                              </div>
+                              )
                             ) : (
-                              <p className="text-xs text-muted-foreground mt-1.5">
-                                Remaining: <span className="font-semibold text-foreground">{formatPesos(getOccupantRemaining(contribution.id) ?? 0)}</span>
-                              </p>
-                            )
-                          ) : (
-                            <p className="text-xs text-muted-foreground mt-1.5">Select an occupant first</p>
-                          )}
-                        </div>
-                      </label>
+                              <p className="text-xs text-muted-foreground mt-1.5">Select an occupant first</p>
+                            )}
+                          </div>
+                        </label>
+                        {checked && contribution.isOptional ? (
+                          <div className="mt-3 rounded-md border bg-amber-50/60 p-3 dark:bg-amber-950/20">
+                            <label className="flex items-start gap-3 text-sm">
+                              <Checkbox
+                                checked={declined}
+                                onCheckedChange={(value) => toggleDeclinedContribution(contribution.id, Boolean(value))}
+                                className="mt-0.5"
+                              />
+                              <div className="space-y-1">
+                                <span className="font-medium">
+                                  {contribution.isStore ? "Occupant will not avail this optional item" : "Occupant will not pay this optional contribution"}
+                                </span>
+                                <p className="text-xs text-muted-foreground">
+                                  This only affects this contribution and removes it from the payment total.
+                                </p>
+                              </div>
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
                     );
                   })
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2 pt-1 font-medium">
                 <Badge variant="secondary" className="bg-secondary/50">Selected: {selectedContributionIds.length}</Badge>
+                {declinedContributionIds.length > 0 ? (
+                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                    Declined: {declinedContributionIds.length}
+                  </Badge>
+                ) : null}
                 <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Exact Total: ₱{computedTotal.toFixed(2)}</Badge>
               </div>
             </div>
 
             {/* Store Cart Builder — per selected store contribution */}
-            {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore).map((contribution) => {
+            {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore && !declinedContributionIds.includes(c.id)).map((contribution) => {
               const cartForContribution = storeCartItems[contribution.id] || [];
               const items = normalizeStoreItems(contribution.storeItems || []);
               const computeSubtotal = (itemId: string, quantity: number, options: unknown) =>
@@ -593,14 +692,14 @@ export function ContributionBatchPaymentDialog({
               };
 
               const removeCartItem = (itemIdx: number) => {
-                const updated = cartForContribution.filter((_: any, i: number) => i !== itemIdx);
+                const updated = cartForContribution.filter((_, i: number) => i !== itemIdx);
                 const next = { ...storeCartItems, [contribution.id]: updated };
                 setStoreCartItems(next);
                 setAmount(computeAmountForSelection(selectedContributions, next));
               };
 
-              const updateCartItem = (itemIdx: number, patch: Partial<any>) => {
-                const updated = cartForContribution.map((ci: any, i: number) => i === itemIdx ? { ...ci, ...patch } : ci);
+              const updateCartItem = (itemIdx: number, patch: Partial<StoreCartItem>) => {
+                const updated = cartForContribution.map((ci, i: number) => i === itemIdx ? { ...ci, ...patch } : ci);
                 const next = { ...storeCartItems, [contribution.id]: updated };
                 setStoreCartItems(next);
                 setAmount(computeAmountForSelection(selectedContributions, next));
@@ -620,7 +719,7 @@ export function ContributionBatchPaymentDialog({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {cartForContribution.map((cartItem: any, cartIdx: number) => {
+                      {cartForContribution.map((cartItem, cartIdx: number) => {
                         const selectedStoreItem = items.find((i) => i.id === cartItem.item_id);
                         const selectedOptions = selectedStoreItem?.options ?? [];
                         const currentQty = Math.max(1, Number(cartItem.quantity || 1));
@@ -767,10 +866,12 @@ export function ContributionBatchPaymentDialog({
                 <Label>Amount Paid (₱)</Label>
                 <Input
                   type="number"
-                  min="0.01"
+                  min="0"
                   step="0.01"
-                  value={amount}
+                  value={onlyDeclinesSelected ? 0 : amount}
+                  readOnly={onlyDeclinesSelected}
                   onChange={(event) => setAmount(parseFloat(event.target.value) || 0)}
+                  className={onlyDeclinesSelected ? "bg-muted font-mono" : ""}
                 />
               </div>
               <div className="space-y-2">
@@ -779,7 +880,7 @@ export function ContributionBatchPaymentDialog({
               </div>
             </div>
 
-            {Math.abs(amountDifference) >= 0.01 ? (
+            {Math.abs(amountDifference) >= 0.01 && !onlyDeclinesSelected ? (
               <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs font-medium text-amber-700">
                   Amount difference: {amountDifference > 0 ? "+" : ""}₱{amountDifference.toFixed(2)}
@@ -790,7 +891,9 @@ export function ContributionBatchPaymentDialog({
                     <SelectValue placeholder="Select contribution" />
                   </SelectTrigger>
                   <SelectContent>
-                    {selectedContributions.map((contribution) => (
+                    {selectedContributions
+                      .filter((contribution) => !declinedContributionIds.includes(contribution.id))
+                      .map((contribution) => (
                       <SelectItem key={contribution.id} value={contribution.id}>
                         {contribution.title}
                       </SelectItem>

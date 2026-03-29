@@ -21,8 +21,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
+import {
+  getContributionChargeAmount,
+  getContributionCollectedAmount,
+  getContributionSettlementStatus,
+  isOptionalContributionDeclined,
+} from "@/lib/contribution-ledger";
+import { getCanonicalContributionCartItems } from "@/lib/contribution-store";
 import { getActiveSemester } from "@/lib/semesters";
-import { getStoreContributionPriceRange } from "@/lib/store-pricing";
+import {
+  getStoreContributionPriceRange,
+  normalizeStoreItems,
+  type CartItem,
+  type StoreItem,
+} from "@/lib/store-pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -64,10 +76,10 @@ type OccupantWithStatus = OccupantRow & {
   payable: number;
   paid: number;
   remaining: number;
-  paymentStatus: "paid" | "partial" | "unpaid";
+  paymentStatus: "paid" | "partial" | "unpaid" | "declined";
   deadline: string | null;
   overdue: boolean;
-  cartItems: any[];
+  cartItems: CartItem[];
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -85,6 +97,15 @@ const getRoomCode = (occupant: OccupantRow) => {
 };
 
 function StatusBadge({ status }: { status: OccupantWithStatus["paymentStatus"] }) {
+  if (status === "declined") {
+    return (
+      <Badge variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+        <XCircle className="mr-1 h-3 w-3" />
+        Declined
+      </Badge>
+    );
+  }
+
   if (status === "paid") {
     return (
       <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700">
@@ -111,7 +132,7 @@ function StatusBadge({ status }: { status: OccupantWithStatus["paymentStatus"] }
   );
 }
 
-function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: any[] }) {
+function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItems: StoreItem[] }) {
   if (!items || !Array.isArray(items) || items.length === 0) return null;
 
   const validItems = items.filter(Boolean);
@@ -125,7 +146,7 @@ function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: an
         const itemName = sItem ? sItem.name : "Unknown Item";
         const optionsTxt =
           Array.isArray(item.options) && item.options.length > 0
-            ? `(${item.options.map((o: any) => `${o?.name ? `${o.name}: ` : ""}${o?.value}`).join(", ")})`
+            ? `(${item.options.map((option) => `${option.name ? `${option.name}: ` : ""}${option.value}`).join(", ")})`
             : "";
 
         return (
@@ -197,6 +218,8 @@ function parseContributionMetadata(entry: EntryRow) {
         metadata.contribution_receipt_logo_url.trim().length > 0
         ? metadata.contribution_receipt_logo_url.trim()
         : null,
+    isOptional: metadata.is_optional === true,
+    optionalDeclined: metadata.optional_declined === true,
     isStore: metadata.is_store === true,
     storeItems: Array.isArray(metadata.store_items) ? metadata.store_items : [],
     cartItems: Array.isArray(metadata.cart_items) ? metadata.cart_items : [],
@@ -338,10 +361,13 @@ export default async function EventDetailsPage({
     "";
   const isStore =
     entryRows.map((entry) => parseContributionMetadata(entry).isStore).find(Boolean) ?? false;
-  const storeItems =
+  const isOptional =
+    entryRows.map((entry) => parseContributionMetadata(entry).isOptional).find(Boolean) ?? false;
+  const rawStoreItems =
     entryRows
       .map((entry) => parseContributionMetadata(entry).storeItems)
       .find((items) => items.length > 0) ?? [];
+  const storeItems = normalizeStoreItems(rawStoreItems);
   const storePriceRange = isStore ? getStoreContributionPriceRange(storeItems) : null;
   const storeBaselineAmount = Number((storePriceRange?.min ?? 0).toFixed(2));
 
@@ -350,38 +376,30 @@ export default async function EventDetailsPage({
 
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
+    const declined = occupantEntries.some((entry) => isOptionalContributionDeclined(entry.metadata));
 
-    const rawPayable = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      const isPayment = entry.entry_type === "payment" || amount < 0;
-      if (isPayment) {
-        return sum;
-      }
-      return sum + Math.abs(amount);
-    }, 0);
+    const rawPayable = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos),
+      0
+    );
 
     const payable =
-      isStore && rawPayable <= 0
+      isStore && rawPayable <= 0 && !declined
         ? storeBaselineAmount
         : Number(rawPayable.toFixed(2));
 
-    const paid = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      if (entry.entry_type === "payment" || amount < 0) {
-        return sum + Math.abs(amount);
-      }
-      return sum;
-    }, 0);
+    const paid = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      0
+    );
 
     const remaining = Number((payable - paid).toFixed(2));
-
-    let paymentStatus: OccupantWithStatus["paymentStatus"] = "unpaid";
-    if (paid > 0 && remaining > 0) {
-      paymentStatus = "partial";
-    }
-    if (remaining <= 0 && (payable > 0 || paid > 0)) {
-      paymentStatus = "paid";
-    }
+    const paymentStatus = getContributionSettlementStatus({
+      payable,
+      paid,
+      remaining,
+      declined,
+    });
 
     const deadline =
       occupantEntries
@@ -390,12 +408,15 @@ export default async function EventDetailsPage({
         .sort()
         .at(-1) ?? contributionDeadline;
 
-    const overdue = deadline !== null && deadline < nowIso && remaining > 0;
+    const overdue = deadline !== null && deadline < nowIso && remaining > 0 && !declined;
 
-    const cartItems = occupantEntries
-      .map((entry) => parseContributionMetadata(entry).cartItems)
-      .filter((items) => items.length > 0)
-      .flat();
+    const cartItems = getCanonicalContributionCartItems(
+      occupantEntries.map((entry) => ({
+        entryType: entry.entry_type,
+        cartItems: parseContributionMetadata(entry).cartItems,
+      })),
+      storeItems
+    );
 
     return {
       ...occupant,
@@ -436,7 +457,11 @@ export default async function EventDetailsPage({
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{contributionTitle}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">{contributionTitle}</h1>
+              {isOptional ? <Badge variant="secondary">Optional</Badge> : null}
+              {isStore ? <Badge variant="outline">Store</Badge> : null}
+            </div>
             <p className="text-sm text-muted-foreground">
               {linkedEventTitle ? `Linked event: ${linkedEventTitle}` : "No linked event"}
             </p>
@@ -610,6 +635,7 @@ export default async function EventDetailsPage({
                                 has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
                                 has_contribution_receipt_message: Boolean(contributionReceiptMessage),
                                 has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                is_optional: isOptional,
                                 is_store: isStore,
                                 store_items: storeItems,
                                 remaining_balance: occupant.remaining,
@@ -704,8 +730,10 @@ export default async function EventDetailsPage({
                                   has_contribution_receipt_subject: Boolean(contributionReceiptSubject),
                                   has_contribution_receipt_message: Boolean(contributionReceiptMessage),
                                   has_contribution_receipt_logo_url: Boolean(contributionReceiptLogoUrl),
+                                  is_optional: isOptional,
                                   is_store: isStore,
                                   store_items: storeItems,
+                                  remaining_balance: occupant.remaining,
                                 }}
                                 triggerText="Record Pay"
                                 triggerVariant="outline"
