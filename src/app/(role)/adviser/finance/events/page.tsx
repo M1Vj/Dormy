@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
@@ -144,14 +145,10 @@ export default async function EventsFinancePage({
     .map((event) => {
       const eventEntries = typedEntries.filter((entry) => entry.event_id === event.id);
       const collected = eventEntries.reduce((sum, entry) => {
-        const amount = Number(entry.amount_pesos ?? 0);
-        const isPayment = entry.entry_type === "payment" || amount < 0;
-        return isPayment ? sum + Math.abs(amount) : sum;
+        return sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
       }, 0);
       const charged = eventEntries.reduce((sum, entry) => {
-        const amount = Number(entry.amount_pesos ?? 0);
-        const isPayment = entry.entry_type === "payment" || amount < 0;
-        return isPayment ? sum : sum + Math.abs(amount);
+        return sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos);
       }, 0);
       const deadline =
         eventEntries

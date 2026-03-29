@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getActiveRole } from "@/lib/roles-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureActiveSemesterId } from "@/lib/semesters";
@@ -17,6 +18,11 @@ import {
   normalizeAndPriceCartItems,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
+import {
+  getContributionChargeAmount,
+  getContributionCollectedAmount,
+  isContributionPaymentEntry,
+} from "@/lib/contribution-ledger";
 
 const transactionSchema = z.object({
   occupant_id: z.string().uuid(),
@@ -41,6 +47,7 @@ const transactionSchema = z.object({
 
 type TransactionData = z.infer<typeof transactionSchema>;
 export type LedgerCategory = 'maintenance_fee' | 'sa_fines' | 'contributions' | 'gadgets';
+type ServerSupabaseClient = NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>;
 
 const allowedRolesByLedger: Record<LedgerCategory, string[]> = {
   maintenance_fee: ["admin", "adviser"],
@@ -93,13 +100,15 @@ const contributionBatchSchema = z.object({
   event_title: z.string().trim().max(200).optional().nullable(),
   include_already_charged: z.boolean().default(false),
   is_store: z.boolean().default(false),
+  is_optional: z.boolean().default(false),
   store_items: z.array(storeItemSchema).optional(),
 });
 
 const contributionBatchPaymentSchema = z.object({
   occupant_id: z.string().uuid(),
-  contribution_ids: z.array(z.string().uuid()).min(1),
-  amount: z.number().positive(),
+  contribution_ids: z.array(z.string().uuid()).default([]),
+  declined_contribution_ids: z.array(z.string().uuid()).default([]),
+  amount: z.number().min(0),
   method: z.enum(["cash", "gcash"]),
   paid_at_iso: z.string().datetime(),
   allocation_target_id: z.string().uuid().optional().nullable(),
@@ -158,6 +167,13 @@ const contributionPayableOverrideSchema = z.object({
   reason: z.string().trim().min(3).max(300),
 });
 
+const optionalContributionDeclineSchema = z.object({
+  occupant_id: z.string().uuid(),
+  contribution_ids: z.array(z.string().uuid()).min(1),
+  send_email: z.boolean().default(true),
+  email_override: z.string().email().optional().nullable(),
+});
+
 const treasurerFinanceManualEntrySchema = z.object({
   entry_kind: z.enum(["inflow", "expense"]),
   title: z.string().trim().min(2).max(160),
@@ -180,6 +196,8 @@ type ContributionMetadata = {
   contribution_title: string;
   contribution_details: string | null;
   contribution_event_title: string | null;
+  is_optional: boolean;
+  optional_declined: boolean;
   payable_deadline: string | null;
   contribution_receipt_signature: string | null;
   contribution_receipt_subject: string | null;
@@ -216,6 +234,8 @@ function parseContributionMetadata(
     "Contribution";
   const detailsRaw = metadata.contribution_details;
   const eventTitleRaw = metadata.contribution_event_title;
+  const isOptionalRaw = metadata.is_optional;
+  const optionalDeclinedRaw = metadata.optional_declined;
   const deadlineRaw = metadata.payable_deadline;
   const signatureRaw = metadata.contribution_receipt_signature;
   const subjectRaw = metadata.contribution_receipt_subject;
@@ -242,6 +262,8 @@ function parseContributionMetadata(
       typeof eventTitleRaw === "string" && eventTitleRaw.trim().length > 0
         ? eventTitleRaw.trim()
         : null,
+    is_optional: isOptionalRaw === true,
+    optional_declined: optionalDeclinedRaw === true,
     payable_deadline:
       typeof deadlineRaw === "string" && deadlineRaw.trim().length > 0
         ? deadlineRaw
@@ -264,6 +286,31 @@ function parseContributionMetadata(
         : null,
     store_items,
     cart_items,
+  };
+}
+
+function parseGlobalReceiptTemplate(value: unknown) {
+  const template = asMetadataRecord(value);
+
+  return {
+    signature:
+      typeof template.signature === "string" && template.signature.trim().length > 0
+        ? template.signature.trim()
+        : null,
+    subject:
+      typeof template.subject === "string" && template.subject.trim().length > 0
+        ? template.subject.trim()
+        : null,
+    message:
+      typeof template.message === "string" && template.message.trim().length > 0
+        ? template.message.trim()
+        : null,
+    logoUrl:
+      typeof template.logo_url === "string" && template.logo_url.trim().length > 0
+        ? template.logo_url.trim()
+        : typeof template.logoUrl === "string" && template.logoUrl.trim().length > 0
+          ? template.logoUrl.trim()
+          : null,
   };
 }
 
@@ -857,8 +904,9 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
         .select("attributes")
         .eq("id", dormId)
         .single();
-      const dormAttributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
-      const globalTemplate = dormAttributes.global_receipt_template || {};
+      const globalTemplate = parseGlobalReceiptTemplate(
+        asMetadataRecord(dorm?.attributes).global_receipt_template
+      );
 
       const contributionMetadata =
         tx.category === "contributions"
@@ -885,7 +933,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
       const resolvedLogoUrl =
         receiptConfig?.logo_url?.trim() ||
         contributionMetadata?.contribution_receipt_logo_url ||
-        globalTemplate.logo_url || globalTemplate.logoUrl ||
+        globalTemplate.logoUrl ||
         null;
 
       const orderItems = buildOrderItemsFromCart(
@@ -1052,8 +1100,9 @@ export async function previewTransactionReceiptEmail(
     .select("attributes")
     .eq("id", dormId)
     .single();
-  const dormAttributes = typeof dormDoc?.attributes === 'object' && dormDoc?.attributes !== null ? dormDoc.attributes as any : {};
-  const globalTemplate = dormAttributes.global_receipt_template || {};
+  const globalTemplate = parseGlobalReceiptTemplate(
+    asMetadataRecord(dormDoc?.attributes).global_receipt_template
+  );
 
   const contributionMetadata =
     tx.category === "contributions"
@@ -1080,7 +1129,7 @@ export async function previewTransactionReceiptEmail(
   const resolvedLogoUrl =
     receiptConfig?.logo_url?.trim() ||
     contributionMetadata?.contribution_receipt_logo_url ||
-    globalTemplate.logo_url || globalTemplate.logoUrl ||
+    globalTemplate.logoUrl ||
     null;
 
   const orderItems = buildOrderItemsFromCart(
@@ -1289,6 +1338,7 @@ export async function createContributionBatch(
     event_title?: string | null;
     include_already_charged?: boolean;
     is_store?: boolean;
+    is_optional?: boolean;
     store_items?: {
       id: string;
       name: string;
@@ -1310,6 +1360,7 @@ export async function createContributionBatch(
     event_title: payload.event_title ?? null,
     include_already_charged: payload.include_already_charged ?? false,
     is_store: payload.is_store ?? false,
+    is_optional: payload.is_optional ?? false,
     store_items: payload.store_items ?? [],
   });
 
@@ -1474,7 +1525,8 @@ export async function createContributionBatch(
         payable_deadline: deadlineIso,
         payable_label: contributionTitle,
         is_store: parsed.data.is_store,
-        store_items: parsed.data.store_items,
+        is_optional: parsed.data.is_optional,
+        store_items: normalizedStoreItems,
         store_price_min_pesos: storePriceRange?.min ?? null,
         store_price_max_pesos: storePriceRange?.max ?? null,
       },
@@ -1525,6 +1577,8 @@ type ContributionGroupEntry = {
   title: string;
   details: string | null;
   eventTitle: string | null;
+  isOptional: boolean;
+  declined: boolean;
   receiptSignature: string | null;
   receiptSubject: string | null;
   receiptMessage: string | null;
@@ -1538,6 +1592,102 @@ type ContributionGroupEntry = {
   paid: number;
   outstanding: number;
 };
+
+type OptionalContributionDeclineEntry = {
+  contributionId: string;
+  title: string;
+  eventTitle: string | null;
+  isStore: boolean;
+  amount: number;
+};
+
+async function resolveOccupantRecipientEmail(
+  supabase: ServerSupabaseClient,
+  dormId: string,
+  occupantId: string,
+  emailOverride?: string | null
+) {
+  const { data: occupant } = await supabase
+    .from("occupants")
+    .select("id, user_id, full_name, contact_email")
+    .eq("dorm_id", dormId)
+    .eq("id", occupantId)
+    .maybeSingle();
+
+  if (!occupant) {
+    throw new Error("Occupant not found.");
+  }
+
+  let recipientEmail = emailOverride?.trim() || occupant.contact_email?.trim() || "";
+
+  if (!recipientEmail && occupant.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import("@supabase/supabase-js");
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+    const { data: authUser } = await adminClient.auth.admin.getUserById(occupant.user_id);
+    recipientEmail = authUser.user?.email?.trim() || "";
+  }
+
+  return {
+    occupant,
+    recipientEmail: recipientEmail || null,
+  };
+}
+
+async function sendOptionalContributionDeclineEmail(input: {
+  supabase: ServerSupabaseClient;
+  dormId: string;
+  occupantId: string;
+  actorName: string | null;
+  contributions: OptionalContributionDeclineEntry[];
+  emailOverride?: string | null;
+}) {
+  if (input.contributions.length === 0) {
+    return;
+  }
+
+  const { occupant, recipientEmail } = await resolveOccupantRecipientEmail(
+    input.supabase,
+    input.dormId,
+    input.occupantId,
+    input.emailOverride
+  );
+
+  if (!recipientEmail) {
+    return;
+  }
+
+  const { sendEmail, renderOptionalContributionDeclineEmail } = await import("@/lib/email");
+  const rendered = renderOptionalContributionDeclineEmail({
+    recipientName: occupant.full_name ?? null,
+    contributions: input.contributions.map((contribution) => ({
+      title: contribution.title,
+      eventTitle: contribution.eventTitle,
+      isStore: contribution.isStore,
+      amountPesos: contribution.amount,
+    })),
+    treasurerNameOverride: input.actorName,
+  });
+
+  const result = await sendEmail({
+    to: recipientEmail,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+  });
+
+  if (!result.success) {
+    console.warn("Failed to send optional contribution decline email:", result.error);
+  }
+}
 
 
 
@@ -1594,7 +1744,9 @@ export async function recordContributionBatchPayment(
     return { error: rawEntriesError.message };
   }
 
-  const selectedIds = new Set(input.contribution_ids);
+  const paymentContributionIds = Array.from(new Set(input.contribution_ids));
+  const declinedContributionIds = Array.from(new Set(input.declined_contribution_ids));
+  const selectedIds = new Set([...paymentContributionIds, ...declinedContributionIds]);
   const contributionMap = new Map<string, ContributionGroupEntry>();
 
   for (const row of rawEntries ?? []) {
@@ -1612,6 +1764,8 @@ export async function recordContributionBatchPayment(
       title: metadata.contribution_title,
       details: metadata.contribution_details,
       eventTitle: metadata.contribution_event_title,
+      isOptional: metadata.is_optional,
+      declined: metadata.optional_declined,
       receiptSignature: metadata.contribution_receipt_signature,
       receiptSubject: metadata.contribution_receipt_subject,
       receiptMessage: metadata.contribution_receipt_message,
@@ -1626,13 +1780,9 @@ export async function recordContributionBatchPayment(
       outstanding: 0,
     };
 
-    const amount = Number(row.amount_pesos ?? 0);
-    if (row.entry_type === "payment" || amount < 0) {
-      existing.paid += Math.abs(amount);
-    } else {
-      existing.payable += amount;
-    }
-    existing.outstanding += amount;
+    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    existing.payable += getContributionChargeAmount(row.entry_type, row.amount_pesos);
+    existing.outstanding = Number((existing.payable - existing.paid).toFixed(2));
 
     if (!existing.semesterId && row.semester_id) {
       existing.semesterId = row.semester_id;
@@ -1648,6 +1798,12 @@ export async function recordContributionBatchPayment(
     }
     if (!existing.details && metadata.contribution_details) {
       existing.details = metadata.contribution_details;
+    }
+    if (!existing.isOptional && metadata.is_optional) {
+      existing.isOptional = true;
+    }
+    if (!existing.declined && metadata.optional_declined) {
+      existing.declined = true;
     }
     if (!existing.receiptSignature && metadata.contribution_receipt_signature) {
       existing.receiptSignature = metadata.contribution_receipt_signature;
@@ -1670,6 +1826,22 @@ export async function recordContributionBatchPayment(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const declinedRows = contributionRows.filter((row) =>
+    declinedContributionIds.includes(row.contributionId)
+  );
+
+  for (const row of declinedRows) {
+    if (!row.isOptional) {
+      return { error: `${row.title} is not marked as an optional contribution.` };
+    }
+    if (row.paid > 0.009) {
+      return { error: `${row.title} already has recorded payments and cannot be marked as declined.` };
+    }
+    if (row.outstanding <= 0.009 || row.declined) {
+      return { error: `${row.title} is already settled for this occupant.` };
+    }
+  }
+
   const storeItemsByContribution = new Map(
     contributionRows.map((row) => [row.contributionId, row.storeItems] as const)
   );
@@ -1679,6 +1851,9 @@ export async function recordContributionBatchPayment(
   );
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
+    if (declinedContributionIds.includes(row.contributionId)) {
+      continue;
+    }
     const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
     const effectiveCartItems =
       suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
@@ -1694,7 +1869,7 @@ export async function recordContributionBatchPayment(
 
   const allocations = new Map(dueByContribution);
   const difference = Number((input.amount - totalDue).toFixed(2));
-  if (Math.abs(difference) >= 0.01) {
+  if (Math.abs(difference) >= 0.01 && paymentContributionIds.length > 0) {
     if (!input.allocation_target_id) {
       return {
         error: "Select where to apply the payment difference when amount is not exact.",
@@ -1712,6 +1887,7 @@ export async function recordContributionBatchPayment(
   }
 
   const allocRows = contributionRows
+    .filter((row) => paymentContributionIds.includes(row.contributionId))
     .map((row) => {
       const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
       const effectiveCartItems =
@@ -1728,7 +1904,7 @@ export async function recordContributionBatchPayment(
     })
     .filter((row) => row.allocation > 0);
 
-  if (!allocRows.length) {
+  if (!allocRows.length && declinedRows.length === 0) {
     return { error: "Nothing to record after allocation." };
   }
 
@@ -1739,23 +1915,20 @@ export async function recordContributionBatchPayment(
     logoUrl: null as string | null,
   };
 
-  if (input.send_receipt_email) {
+  if (paymentContributionIds.length === 0 && input.amount > 0.009) {
+    return { error: "Payment amount must be zero when all selected contributions are declined." };
+  }
+
+  if (input.send_receipt_email && allocRows.length > 0) {
     const { data: dorm } = await supabase
       .from("dorms")
       .select("attributes")
       .eq("id", dormId)
       .single();
 
-    const attributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
-    if (attributes.global_receipt_template) {
-      const g = attributes.global_receipt_template;
-      globalTemplate = {
-        signature: g.signature ?? null,
-        subject: g.subject ?? null,
-        message: g.message ?? null,
-        logoUrl: g.logo_url ?? g.logoUrl ?? null,
-      };
-    }
+    globalTemplate = parseGlobalReceiptTemplate(
+      asMetadataRecord(dorm?.attributes).global_receipt_template
+    );
 
     if (!globalTemplate.signature) {
       return { error: "Set a global receipt signature in Settings -> Receipt before sending email." };
@@ -1839,8 +2012,48 @@ export async function recordContributionBatchPayment(
     }
   }
 
-  const { error: insertError } = await writeClient.from("ledger_entries").insert(
-    allocRows.map((row) => ({
+  if (declinedRows.length > 0) {
+    const { error: declineInsertError } = await writeClient.from("ledger_entries").insert(
+      declinedRows.map((row) => ({
+        dorm_id: dormId,
+        semester_id: row.semesterId ?? semesterResult.semesterId,
+        ledger: "contributions",
+        entry_type: "adjustment",
+        occupant_id: input.occupant_id,
+        event_id: row.eventId,
+        amount_pesos: -Math.abs(row.outstanding),
+        method: "optional_decline",
+        note: row.storeItems.length > 0 ? `Optional item not availed • ${row.title}` : `Optional contribution declined • ${row.title}`,
+        metadata: {
+          contribution_id: row.contributionId,
+          contribution_title: row.title,
+          contribution_details: row.details,
+          contribution_event_title: row.eventTitle,
+          payable_deadline: row.deadline,
+          contribution_receipt_signature: row.receiptSignature,
+          contribution_receipt_subject: row.receiptSubject,
+          contribution_receipt_message: row.receiptMessage,
+          contribution_receipt_logo_url: row.receiptLogoUrl,
+          is_store: row.storeItems.length > 0,
+          is_optional: true,
+          optional_declined: true,
+          optional_declined_at: new Date().toISOString(),
+          optional_declined_by: user.id,
+          optional_declined_amount_pesos: row.outstanding,
+          store_items: row.storeItems,
+        },
+        created_by: user.id,
+      }))
+    );
+
+    if (declineInsertError) {
+      return { error: declineInsertError.message };
+    }
+  }
+
+  if (allocRows.length > 0) {
+    const { error: insertError } = await writeClient.from("ledger_entries").insert(
+      allocRows.map((row) => ({
       dorm_id: dormId,
       semester_id: row.semesterId ?? semesterResult.semesterId,
       ledger: "contributions",
@@ -1869,10 +2082,11 @@ export async function recordContributionBatchPayment(
       },
       created_by: user.id,
     }))
-  );
+    );
 
-  if (insertError) {
-    return { error: insertError.message };
+    if (insertError) {
+      return { error: insertError.message };
+    }
   }
 
   try {
@@ -1885,6 +2099,7 @@ export async function recordContributionBatchPayment(
       metadata: {
         occupant_id: input.occupant_id,
         contribution_ids: input.contribution_ids,
+        declined_contribution_ids: declinedContributionIds,
         total_paid: input.amount,
         method: input.method,
         paid_at_iso: input.paid_at_iso,
@@ -1895,7 +2110,7 @@ export async function recordContributionBatchPayment(
     console.error("Failed to write audit event for contribution batch payment:", auditError);
   }
 
-  if (input.send_receipt_email) {
+  if (input.send_receipt_email && allocRows.length > 0) {
     try {
       const { sendEmail, renderContributionBatchReceiptEmail } = await import("@/lib/email");
 
@@ -1966,6 +2181,27 @@ export async function recordContributionBatchPayment(
     }
   }
 
+  if (input.send_receipt_email && declinedRows.length > 0) {
+    try {
+      await sendOptionalContributionDeclineEmail({
+        supabase,
+        dormId,
+        occupantId: input.occupant_id,
+        actorName: (user.user_metadata?.full_name as string | undefined)?.trim() || user.email || null,
+        contributions: declinedRows.map((row) => ({
+          contributionId: row.contributionId,
+          title: row.title,
+          eventTitle: row.eventTitle,
+          isStore: row.storeItems.length > 0,
+          amount: row.outstanding,
+        })),
+        emailOverride: input.receipt_email_override,
+      });
+    } catch (emailError) {
+      console.error("Optional contribution decline email error:", emailError);
+    }
+  }
+
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/contributions`);
   for (const row of allocRows) {
@@ -1977,7 +2213,45 @@ export async function recordContributionBatchPayment(
   return {
     success: true,
     paidCount: allocRows.length,
+    declinedCount: declinedRows.length,
     totalPaid: allocRows.reduce((sum, row) => sum + row.allocation, 0),
+  };
+}
+
+export async function recordOptionalContributionDecline(
+  dormId: string,
+  payload: z.infer<typeof optionalContributionDeclineSchema>
+) {
+  const parsed = optionalContributionDeclineSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid optional contribution decline request." };
+  }
+
+  const input = parsed.data;
+  const result = await recordContributionBatchPayment(dormId, {
+    occupant_id: input.occupant_id,
+    contribution_ids: [],
+    declined_contribution_ids: input.contribution_ids,
+    amount: 0,
+    method: "cash",
+    paid_at_iso: new Date().toISOString(),
+    allocation_target_id: null,
+    send_receipt_email: input.send_email,
+    receipt_email_override: input.email_override ?? null,
+    receipt_subject: null,
+    receipt_message: null,
+    receipt_signature: null,
+    receipt_logo_url: null,
+    cart_items: [],
+  });
+
+  if (result && "error" in result) {
+    return result;
+  }
+
+  return {
+    success: true,
+    declinedCount: "declinedCount" in result ? result.declinedCount : input.contribution_ids.length,
   };
 }
 
@@ -2412,12 +2686,8 @@ export async function sendContributionPayableReminders(
         outstanding: 0,
       };
 
-    const amount = Number(row.amount_pesos ?? 0);
-    if (row.entry_type === "payment" || amount < 0) {
-      existing.outstanding -= Math.abs(amount);
-    } else {
-      existing.outstanding += amount;
-    }
+    existing.outstanding += getContributionChargeAmount(row.entry_type, row.amount_pesos);
+    existing.outstanding -= getContributionCollectedAmount(row.entry_type, row.amount_pesos);
 
     if (!existing.title && contributionMetadata.contribution_title) {
       existing.title = contributionMetadata.contribution_title;
@@ -2502,7 +2772,7 @@ export async function sendContributionPayableReminders(
     (occupantRows ?? []).map((occupant) => [occupant.id, occupant] as const)
   );
 
-  let adminClient: any = null;
+  let adminClient: SupabaseClient | null = null;
 
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient } = await import("@supabase/supabase-js");
@@ -2515,7 +2785,7 @@ export async function sendContributionPayableReminders(
           persistSession: false,
         },
       }
-    ) as typeof adminClient;
+    );
   }
 
   let sentCount = 0;
@@ -2648,6 +2918,9 @@ export async function previewContributionBatchPaymentEmail(
   if (!input.send_receipt_email) {
     return { error: "Receipt email is disabled for this payment." };
   }
+  if (input.contribution_ids.length === 0) {
+    return { error: "No payable contributions selected for receipt preview." };
+  }
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -2705,6 +2978,8 @@ export async function previewContributionBatchPaymentEmail(
       title: metadata.contribution_title,
       details: metadata.contribution_details,
       eventTitle: metadata.contribution_event_title,
+      isOptional: metadata.is_optional,
+      declined: metadata.optional_declined,
       receiptSignature: metadata.contribution_receipt_signature,
       receiptSubject: metadata.contribution_receipt_subject,
       receiptMessage: metadata.contribution_receipt_message,
@@ -2719,13 +2994,9 @@ export async function previewContributionBatchPaymentEmail(
       outstanding: 0,
     };
 
-    const amount = Number(row.amount_pesos ?? 0);
-    if (row.entry_type === "payment" || amount < 0) {
-      existing.paid += Math.abs(amount);
-    } else {
-      existing.payable += amount;
-    }
-    existing.outstanding += amount;
+    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    existing.payable += getContributionChargeAmount(row.entry_type, row.amount_pesos);
+    existing.outstanding = Number((existing.payable - existing.paid).toFixed(2));
 
     if (!existing.semesterId && row.semester_id) {
       existing.semesterId = row.semester_id;
@@ -2741,6 +3012,12 @@ export async function previewContributionBatchPaymentEmail(
     }
     if (!existing.details && metadata.contribution_details) {
       existing.details = metadata.contribution_details;
+    }
+    if (!existing.isOptional && metadata.is_optional) {
+      existing.isOptional = true;
+    }
+    if (!existing.declined && metadata.optional_declined) {
+      existing.declined = true;
     }
     if (!existing.receiptSignature && metadata.contribution_receipt_signature) {
       existing.receiptSignature = metadata.contribution_receipt_signature;
@@ -2836,16 +3113,9 @@ export async function previewContributionBatchPaymentEmail(
     .eq("id", dormId)
     .single();
 
-  const attributes = typeof dorm?.attributes === 'object' && dorm?.attributes !== null ? dorm.attributes as any : {};
-  if (attributes.global_receipt_template) {
-    const g = attributes.global_receipt_template;
-    globalTemplate = {
-      signature: g.signature ?? null,
-      subject: g.subject ?? null,
-      message: g.message ?? null,
-      logoUrl: g.logo_url ?? g.logoUrl ?? null,
-    };
-  }
+  globalTemplate = parseGlobalReceiptTemplate(
+    asMetadataRecord(dorm?.attributes).global_receipt_template
+  );
 
   if (!globalTemplate.signature) {
     return { error: "Set a global receipt signature in Settings -> Receipt before sending email." };
@@ -3901,7 +4171,7 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
     await Promise.all([
       supabase
         .from("ledger_entries")
-        .select("ledger, amount_pesos, voided_at, semester_id")
+        .select("ledger, amount_pesos, voided_at, semester_id, entry_type")
         .eq("dorm_id", dormId)
         .eq("semester_id", semesterResult.semesterId)
         .is("voided_at", null),
@@ -3937,8 +4207,11 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
       else maintenanceCollected += Math.abs(amount);
     }
     if (entry.ledger === "contributions") {
-      if (amount >= 0) contributionsCharged += amount;
-      else contributionsCollected += Math.abs(amount);
+      if (isContributionPaymentEntry(entry.entry_type)) {
+        contributionsCollected += Math.abs(amount);
+      } else {
+        contributionsCharged += amount;
+      }
     }
     if (entry.ledger === "gadgets") {
       if (amount >= 0) gadgetsCharged += amount;

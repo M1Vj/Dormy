@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { CalendarClock, Plus, X } from "lucide-react";
@@ -37,7 +37,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-function StoreItemField({ index, form, onRemove }: { index: number; form: any; onRemove: () => void }) {
+function StoreItemField({
+  index,
+  form,
+  onRemove,
+}: {
+  index: number;
+  form: UseFormReturn<FormValues>;
+  onRemove: () => void;
+}) {
   const { fields: optionFields, append: appendOption, remove: removeOption } = useFieldArray({
     control: form.control,
     name: `storeItems.${index}.options`,
@@ -185,6 +193,7 @@ const formSchema = z.object({
   deadline: z.string().optional(),
   includeAlreadyCharged: z.boolean(),
   isStore: z.boolean(),
+  isOptional: z.boolean(),
   storeItems: z.array(storeItemSchema),
 });
 
@@ -236,6 +245,7 @@ export function ContributionBatchDialog({
       deadline: "",
       includeAlreadyCharged: false,
       isStore: false,
+      isOptional: false,
       storeItems: [],
     },
   });
@@ -295,6 +305,7 @@ export function ContributionBatchDialog({
         deadline: deadlineIso,
         include_already_charged: isEventSelected ? values.includeAlreadyCharged : false,
         is_store: values.isStore,
+        is_optional: values.isOptional,
         store_items: values.isStore ? formattedStoreItems : [],
       });
 
@@ -317,6 +328,7 @@ export function ContributionBatchDialog({
         deadline: "",
         includeAlreadyCharged: false,
         isStore: false,
+        isOptional: false,
         storeItems: [],
       });
     } catch {
@@ -361,35 +373,60 @@ export function ContributionBatchDialog({
             />
 
             {isTreasurer && (
-              <FormField
-                control={form.control}
-                name="isStore"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <input
-                        type="checkbox"
-                        checked={field.value}
-                        onChange={(event) => {
-                          field.onChange(event.target.checked);
-                          if (!event.target.checked) {
-                            form.setValue("storeItems", []);
-                          } else if (itemFields.length === 0) {
-                            appendItem({ name: "", price: 0, options: [] });
-                          }
-                        }}
-                        className="size-4 rounded border mt-0.5"
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Is this a Store Contribution?</FormLabel>
-                      <DialogDescription className="text-xs">
-                        Enable this if you are selling merchandise (like t-shirts). This allows you to set up items with sizes and choices, instead of a fixed amount per occupant.
-                      </DialogDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-3">
+                <FormField
+                  control={form.control}
+                  name="isStore"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          checked={field.value}
+                          onChange={(event) => {
+                            field.onChange(event.target.checked);
+                            if (!event.target.checked) {
+                              form.setValue("storeItems", []);
+                            } else if (itemFields.length === 0) {
+                              appendItem({ name: "", price: 0, options: [] });
+                            }
+                          }}
+                          className="size-4 rounded border mt-0.5"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>Is this a Store Contribution?</FormLabel>
+                        <DialogDescription className="text-xs">
+                          Enable this if you are selling merchandise like shirts. Each occupant can then choose their exact item and options instead of paying one fixed amount.
+                        </DialogDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="isOptional"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          checked={field.value}
+                          onChange={(event) => field.onChange(event.target.checked)}
+                          className="size-4 rounded border mt-0.5"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>Optional contribution</FormLabel>
+                        <DialogDescription className="text-xs">
+                          Treasurers can later mark specific occupants as not paying or not availing this contribution without counting it as collected income.
+                        </DialogDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
             )}
 
             {!isStore ? (
@@ -427,7 +464,7 @@ export function ContributionBatchDialog({
                 </div>
                 {itemFields.length === 0 && (
                   <div className="text-sm text-muted-foreground italic text-center py-4">
-                    No items added. Click "Add Item" to start.
+                    No items added. Click &quot;Add Item&quot; to start.
                   </div>
                 )}
                 {itemFields.map((field, index) => (

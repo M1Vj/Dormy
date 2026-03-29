@@ -75,6 +75,7 @@ export function ContributionDetailsFilters({
         <option value="paid">Paid</option>
         <option value="partial">Partial</option>
         <option value="unpaid">Unpaid</option>
+        <option value="declined">Declined</option>
       </select>
       <div className="flex gap-2">
         <Button type="submit" variant="secondary" size="sm" className="w-full" disabled={isPending}>

@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { normalizeStoreItems } from "@/lib/store-pricing";
 import { cn } from "@/lib/utils";
 
 type UnpaidContributionSummary = {
@@ -23,6 +24,7 @@ type UnpaidContributionSummary = {
   payable: number;
   paid: number;
   remaining: number;
+  isOptional: boolean;
   isStore: boolean;
   storeItems: unknown[];
 };
@@ -56,8 +58,9 @@ export function TreasurerOccupantContributionDialog({
     receiptSubject: null,
     receiptMessage: null,
     receiptLogoUrl: null,
+    isOptional: contribution.isOptional,
     isStore: contribution.isStore,
-    storeItems: contribution.storeItems,
+    storeItems: normalizeStoreItems(contribution.storeItems),
   }));
 
   const contributionRemaining = Object.fromEntries(

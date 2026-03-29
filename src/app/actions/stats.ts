@@ -2,6 +2,7 @@
 
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isContributionPaymentEntry } from "@/lib/contribution-ledger";
 
 export type DashboardStats = {
   // Finance summary
@@ -139,7 +140,10 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
 
   for (const entry of entryList) {
     const amount = Number(entry.amount_pesos);
-    const isPayment = entry.entry_type === "payment" || amount < 0;
+    const isPayment =
+      entry.ledger === "contributions"
+        ? isContributionPaymentEntry(entry.entry_type)
+        : entry.entry_type === "payment" || amount < 0;
     const isThisSem = entry.semester_id === semesterResult.semesterId;
     const ledger = entry.ledger;
 

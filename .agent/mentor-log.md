@@ -35,3 +35,11 @@
 - Fixed committee member assignment failures by auto-healing missing `dorm_memberships` rows for valid active occupants in the same dorm.
 - Added server-side overpayment guards in finance transaction recording to block payments that exceed outstanding ledger balance.
 - Enabled Adviser/Admin/Student Assistant template activation UI with a working action button and hardened `updateTemplate` authorization + service-role write fallback.
+
+## 2026-03-29
+- Fixed contribution detail store rendering to use one canonical cart snapshot so the same ordered item is not shown twice when charge and payment metadata both carry cart payloads.
+- Added optional contribution support across treasurer contribution creation, batch payment, per-occupant payment, contribution details, reporting, finance totals, exports, and reminder flows.
+- Implemented per-occupant optional decline handling as non-income contribution adjustments that zero only that contribution's payable while keeping other contributions unaffected.
+- Added optional-decline email delivery so occupants receive a "will not pay" or "will not avail" notice instead of a receipt when no income is recorded.
+- Applied and committed live Supabase migrations for `COFILANG Faction Shirt` to add `Submitted elsewhere` size choice metadata and mark the contribution optional.
+- Fixed treasurer finance table overflow and verified the new optional decline UX in the browser, including automatic total recalculation to `₱0.00`.

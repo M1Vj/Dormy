@@ -14,7 +14,7 @@
 - [x] 11-ai-voice (`feature/ai-voice`)
 - [x] 12-audit-log (`feature/audit-log`)
 - [x] 13-cleaning-schedule (`feature/cleaning-schedule`)
-- [ ] 14-contribution-finance-suite (`feature/contribution-finance-suite`)
+- [x] 14-contribution-finance-suite (`feature/contribution-finance-suite`)
 - [x] T1-role-toggle (`feature/tasks-completion`)
 - [x] T2-fines-search (already complete)
 - [x] T3-eval-semester-rules (`feature/tasks-completion`)
