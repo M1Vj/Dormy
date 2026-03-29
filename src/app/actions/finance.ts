@@ -108,6 +108,7 @@ const contributionBatchPaymentSchema = z.object({
   occupant_id: z.string().uuid(),
   contribution_ids: z.array(z.string().uuid()).default([]),
   declined_contribution_ids: z.array(z.string().uuid()).default([]),
+  allow_overpayment_contribution_ids: z.array(z.string().uuid()).default([]),
   amount: z.number().min(0),
   method: z.enum(["cash", "gcash"]),
   paid_at_iso: z.string().datetime(),
@@ -205,6 +206,13 @@ type ContributionMetadata = {
   contribution_receipt_logo_url: string | null;
   store_items: StoreItem[];
   cart_items: CartItem[];
+};
+
+type ContributionBalanceRow = {
+  entry_type?: string | null;
+  amount_pesos?: number | string | null;
+  event_id?: string | null;
+  metadata?: unknown;
 };
 
 function asMetadataRecord(value: unknown): Record<string, unknown> {
@@ -478,6 +486,62 @@ function mapInputCartItemsByContribution(
   return mapped;
 }
 
+function getContributionLedgerBalance(
+  rows: ContributionBalanceRow[],
+  contributionId: string
+) {
+  const matchingRows = rows.filter((row) => {
+    const metadata = parseContributionMetadata(row.metadata, {
+      eventId: row.event_id ?? null,
+      note: null,
+    });
+    return metadata.contribution_id === contributionId;
+  });
+
+  if (matchingRows.length === 0) {
+    return null;
+  }
+
+  const payable = Number(
+    matchingRows
+      .reduce((sum, row) => sum + getContributionChargeAmount(row.entry_type, row.amount_pesos), 0)
+      .toFixed(2)
+  );
+  const paid = Number(
+    matchingRows
+      .reduce((sum, row) => sum + getContributionCollectedAmount(row.entry_type, row.amount_pesos), 0)
+      .toFixed(2)
+  );
+  const parsedRows = matchingRows.map((row) =>
+    parseContributionMetadata(row.metadata, {
+      eventId: row.event_id ?? null,
+      note: null,
+    })
+  );
+
+  return {
+    payable,
+    paid,
+    outstanding: Number((payable - paid).toFixed(2)),
+    isStore: parsedRows.some((row) => row.store_items.length > 0),
+    title: parsedRows.find((row) => row.contribution_title)?.contribution_title ?? "Contribution",
+  };
+}
+
+function mergeContributionCartItems(
+  existingCartItems: unknown,
+  newCartItems: unknown,
+  storeItems: ContributionMetadata["store_items"] | undefined
+) {
+  return normalizeCartItemsForContribution(
+    [
+      ...normalizeCartItemsForContribution(existingCartItems, storeItems),
+      ...normalizeCartItemsForContribution(newCartItems, storeItems),
+    ],
+    storeItems
+  );
+}
+
 export async function createTreasurerFinanceManualEntry(
   dormId: string,
   payload: z.infer<typeof treasurerFinanceManualEntrySchema>
@@ -715,6 +779,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     const storeItems = normalizeStoreItems(metadataForInsert.store_items);
     const cartItems = normalizeAndPriceCartItems(metadataForInsert.cart_items, storeItems);
     const computedTotal = sumCartSubtotal(cartItems, storeItems);
+    const allowSettledOverpayment = metadataForInsert.allow_settled_overpayment === true;
 
     const { data: chargeEntries } = await writeClient
       .from("ledger_entries")
@@ -731,13 +796,25 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
     });
 
     if (chargeEntry) {
-      // The exact total for this cart replaces the previous original charge of 0.
-      const newChargeAmount = computedTotal > 0 ? computedTotal : Math.abs(finalAmount);
+      const existingMetadata =
+        typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null
+          ? (chargeEntry.metadata as Record<string, unknown>)
+          : {};
+      const mergedCartItems =
+        allowSettledOverpayment && cartItems.length > 0
+          ? mergeContributionCartItems(existingMetadata.cart_items, cartItems, storeItems)
+          : cartItems;
+      const newChargeAmount =
+        allowSettledOverpayment && cartItems.length > 0
+          ? Number((Math.max(0, Number(chargeEntry.amount_pesos ?? 0)) + computedTotal).toFixed(2))
+          : computedTotal > 0
+            ? computedTotal
+            : Math.abs(finalAmount);
       const updatedMetadata = {
-        ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null ? chargeEntry.metadata : {}),
+        ...existingMetadata,
         is_store: true,
         store_items: storeItems,
-        cart_items: cartItems,
+        cart_items: mergedCartItems,
       };
 
       const { error: updateError } = await writeClient
@@ -758,7 +835,7 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
   if (tx.entry_type === "payment") {
     const { data: ledgerRows, error: ledgerRowsError } = await writeClient
       .from("ledger_entries")
-      .select("amount_pesos")
+      .select("entry_type, amount_pesos, event_id, metadata")
       .eq("dorm_id", dormId)
       .eq("occupant_id", tx.occupant_id)
       .eq("ledger", tx.category)
@@ -768,21 +845,53 @@ export async function recordTransaction(dormId: string, data: TransactionData) {
       return { error: ledgerRowsError.message };
     }
 
-    const outstandingBalance = Number(
-      (ledgerRows ?? [])
-        .reduce((sum, row) => sum + Number(row.amount_pesos), 0)
-        .toFixed(2)
-    );
     const paymentAmount = Number(Math.abs(finalAmount).toFixed(2));
+    const contributionId =
+      tx.category === "contributions" && typeof metadataForInsert.contribution_id === "string"
+        ? metadataForInsert.contribution_id.trim()
+        : "";
+    const allowSettledOverpayment =
+      tx.category === "contributions" && metadataForInsert.allow_settled_overpayment === true;
 
-    if (outstandingBalance <= 0.009) {
-      return { error: "No outstanding balance available for this account." };
-    }
+    if (tx.category === "contributions" && contributionId) {
+      const contributionBalance = getContributionLedgerBalance(
+        (ledgerRows ?? []) as ContributionBalanceRow[],
+        contributionId
+      );
 
-    if (paymentAmount - outstandingBalance > 0.009) {
-      return {
-        error: `Payment exceeds outstanding balance (available: ₱${outstandingBalance.toFixed(2)}).`,
-      };
+      if (!contributionBalance) {
+        return { error: "Contribution balance could not be resolved for this occupant." };
+      }
+
+      if (contributionBalance.outstanding <= 0.009 && !allowSettledOverpayment) {
+        return {
+          error: contributionBalance.isStore
+            ? "This store contribution is already settled for this occupant."
+            : "This contribution is already settled for this occupant.",
+        };
+      }
+
+      if (paymentAmount - contributionBalance.outstanding > 0.009 && !allowSettledOverpayment) {
+        return {
+          error: `Payment exceeds this contribution's remaining balance (available: ₱${contributionBalance.outstanding.toFixed(2)}).`,
+        };
+      }
+    } else {
+      const outstandingBalance = Number(
+        (ledgerRows ?? [])
+          .reduce((sum, row) => sum + Number(row.amount_pesos), 0)
+          .toFixed(2)
+      );
+
+      if (outstandingBalance <= 0.009) {
+        return { error: "No outstanding balance available for this account." };
+      }
+
+      if (paymentAmount - outstandingBalance > 0.009) {
+        return {
+          error: `Payment exceeds outstanding balance (available: ₱${outstandingBalance.toFixed(2)}).`,
+        };
+      }
     }
   }
 
@@ -1746,6 +1855,7 @@ export async function recordContributionBatchPayment(
 
   const paymentContributionIds = Array.from(new Set(input.contribution_ids));
   const declinedContributionIds = Array.from(new Set(input.declined_contribution_ids));
+  const allowOverpaymentContributionIds = new Set(input.allow_overpayment_contribution_ids);
   const selectedIds = new Set([...paymentContributionIds, ...declinedContributionIds]);
   const contributionMap = new Map<string, ContributionGroupEntry>();
 
@@ -1838,6 +1948,16 @@ export async function recordContributionBatchPayment(
       return { error: `${row.title} already has recorded payments and cannot be marked as declined.` };
     }
     if (row.outstanding <= 0.009 || row.declined) {
+      return { error: `${row.title} is already settled for this occupant.` };
+    }
+  }
+
+  for (const row of contributionRows) {
+    if (!paymentContributionIds.includes(row.contributionId)) {
+      continue;
+    }
+
+    if (row.outstanding <= 0.009 && !allowOverpaymentContributionIds.has(row.contributionId)) {
       return { error: `${row.title} is already settled for this occupant.` };
     }
   }
@@ -1963,7 +2083,7 @@ export async function recordContributionBatchPayment(
   if (storeRowsToUpdate.length > 0) {
     const { data: chargeEntries, error: chargeLookupError } = await writeClient
       .from("ledger_entries")
-      .select("id, metadata")
+      .select("id, metadata, amount_pesos")
       .eq("dorm_id", dormId)
       .eq("occupant_id", input.occupant_id)
       .eq("entry_type", "charge")
@@ -1987,17 +2107,26 @@ export async function recordContributionBatchPayment(
         continue;
       }
 
+      const existingMetadata =
+        typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null
+          ? (chargeEntry.metadata as Record<string, unknown>)
+          : {};
+      const isAdditionalStorePurchase =
+        allowOverpaymentContributionIds.has(row.contributionId) && row.cartItems.length > 0;
+      const updatedCartItems = isAdditionalStorePurchase
+        ? mergeContributionCartItems(existingMetadata.cart_items, row.cartItems, row.storeItems)
+        : row.cartItems;
       const updatedMetadata = {
-        ...(typeof chargeEntry.metadata === "object" && chargeEntry.metadata !== null
-          ? chargeEntry.metadata
-          : {}),
+        ...existingMetadata,
         is_store: true,
         store_items: row.storeItems,
-        cart_items: row.cartItems,
+        cart_items: updatedCartItems,
       };
 
-      const chargeAmount =
-        sumCartSubtotal(row.cartItems, row.storeItems) || Math.abs(row.allocation);
+      const addedStoreSubtotal = sumCartSubtotal(row.cartItems, row.storeItems);
+      const chargeAmount = isAdditionalStorePurchase
+        ? Number((Math.max(0, Number(chargeEntry.amount_pesos ?? 0)) + addedStoreSubtotal).toFixed(2))
+        : addedStoreSubtotal || Math.abs(row.allocation);
       const { error: updateError } = await writeClient
         .from("ledger_entries")
         .update({
@@ -2104,6 +2233,7 @@ export async function recordContributionBatchPayment(
         method: input.method,
         paid_at_iso: input.paid_at_iso,
         allocation_target_id: input.allocation_target_id ?? null,
+        allow_overpayment_contribution_ids: Array.from(allowOverpaymentContributionIds),
       },
     });
   } catch (auditError) {
@@ -2232,6 +2362,7 @@ export async function recordOptionalContributionDecline(
     occupant_id: input.occupant_id,
     contribution_ids: [],
     declined_contribution_ids: input.contribution_ids,
+    allow_overpayment_contribution_ids: [],
     amount: 0,
     method: "cash",
     paid_at_iso: new Date().toISOString(),
