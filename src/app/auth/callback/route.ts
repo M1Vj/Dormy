@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { reconcileRosterEmailMemberships } from "@/lib/roster-email-reconciliation";
+
 function getSafeNextPath(value: string | null) {
   if (!value) return "/";
   if (!value.startsWith("/")) return "/";
@@ -46,6 +48,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login`);
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user?.email) {
+    await reconcileRosterEmailMemberships(user.id, user.email);
+  }
+
   return response;
 }
-

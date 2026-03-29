@@ -2,6 +2,7 @@ import "server-only";
 
 import nodemailer from "nodemailer";
 import { formatDateTimeInAppTimeZone } from "@/lib/datetime";
+import { getOptionalContributionDecisionLabel } from "@/lib/contribution-ledger";
 
 type SendEmailOptions = {
   to: string;
@@ -588,6 +589,78 @@ export function renderContributionBatchReceiptEmail(input: {
   return {
     subject,
     html: renderShell({ title: "Dorm Treasurer E-Receipt", bodyHtml }),
+    text,
+  };
+}
+
+export function renderOptionalContributionDeclineEmail(input: {
+  recipientName: string | null;
+  contributions: Array<{
+    title: string;
+    eventTitle?: string | null;
+    isStore: boolean;
+    amountPesos: number;
+  }>;
+  treasurerNameOverride?: string | null;
+}) {
+  const subject = "Optional contribution update";
+  const greeting = input.recipientName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const rows = input.contributions;
+  const tableHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Decision</th>
+          <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Removed Payable</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((item) => `
+            <tr>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">
+                <div>${escapeHtml(item.title)}</div>
+                ${item.eventTitle?.trim() ? `<div style="font-size:12px; color:#64748b; margin-top:4px;">${escapeHtml(item.eventTitle.trim())}</div>` : ""}
+              </td>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(
+                item.isStore ? "Will not avail" : "Will not pay"
+              )}</td>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
+            </tr>
+          `.trim())
+          .join("")}
+      </tbody>
+    </table>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">This confirms the optional contribution update below. Your payable for these items has been set to zero.</p>`,
+    tableHtml,
+    renderSignatureHtml(null, input.treasurerNameOverride),
+  ].join("");
+
+  const text = [
+    input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
+    "This confirms the optional contribution update below. Your payable for these items has been set to zero.",
+    "",
+    ...rows.map((item) => {
+      const decision = getOptionalContributionDecisionLabel({ isStore: item.isStore });
+      return `${item.title}: ${decision} (${normalizePesos(item.amountPesos)})`;
+    }),
+    "",
+    renderSignatureText(null, input.treasurerNameOverride),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Optional Contribution Update", bodyHtml }),
     text,
   };
 }

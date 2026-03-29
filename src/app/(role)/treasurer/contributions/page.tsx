@@ -4,7 +4,11 @@ import { format } from "date-fns";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getActiveDormId, getUserDorms } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester, listDormSemesters } from "@/lib/semesters";
-import { getStoreContributionPriceRange } from "@/lib/store-pricing";
+import { getStoreContributionPriceRange, type StoreItem } from "@/lib/store-pricing";
+import {
+  getContributionChargeAmount,
+  getContributionCollectedAmount,
+} from "@/lib/contribution-ledger";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { ContributionBatchDialog } from "@/components/finance/contribution-batch-dialog";
@@ -62,6 +66,7 @@ type ContributionGroup = {
   receiptMessage: string | null;
   receiptLogoUrl: string | null;
   deadline: string | null;
+  isOptional: boolean;
   charged: number;
   collected: number;
   remaining: number;
@@ -70,7 +75,7 @@ type ContributionGroup = {
   latestPostedAt: string;
   semesterLabels: string[];
   isStore: boolean;
-  storeItems: any[];
+  storeItems: StoreItem[];
 };
 
 function isManualInflowEntry(row: LedgerEntryRow) {
@@ -149,6 +154,7 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
       : null;
 
   const isStore = metadata.is_store === true;
+  const isOptional = metadata.is_optional === true;
   const storeItems = Array.isArray(metadata.store_items) ? metadata.store_items : [];
 
   return {
@@ -161,6 +167,7 @@ function parseContributionFromMetadata(row: LedgerEntryRow, eventTitleFallback: 
     receiptMessage,
     receiptLogoUrl,
     deadline,
+    isOptional,
     isStore,
     storeItems,
   };
@@ -313,8 +320,6 @@ export default async function EventsFinancePage({
 
   for (const entry of typedEntries) {
     const metadata = parseContributionFromMetadata(entry, entry.event_id ? eventById.get(entry.event_id) ?? null : null);
-    const amount = Number(entry.amount_pesos ?? 0);
-
     const existing =
       groupMap.get(metadata.contributionId) ?? {
         id: metadata.contributionId,
@@ -326,8 +331,9 @@ export default async function EventsFinancePage({
         receiptSubject: metadata.receiptSubject,
         receiptMessage: metadata.receiptMessage,
         receiptLogoUrl: metadata.receiptLogoUrl,
+        isOptional: metadata.isOptional,
         isStore: false,
-        storeItems: [] as any[],
+        storeItems: [] as StoreItem[],
         charged: 0,
         collected: 0,
         remaining: 0,
@@ -339,9 +345,8 @@ export default async function EventsFinancePage({
         semesterIds: new Set<string>(),
       };
 
-    const isPayment = amount < 0 || entry.entry_type === "payment";
-    const chargeAmount = isPayment ? 0 : Math.abs(amount);
-    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+    const chargeAmount = getContributionChargeAmount(entry.entry_type, entry.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
 
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
@@ -381,6 +386,9 @@ export default async function EventsFinancePage({
     if (!existing.receiptLogoUrl && metadata.receiptLogoUrl) {
       existing.receiptLogoUrl = metadata.receiptLogoUrl;
     }
+    if (!existing.isOptional && metadata.isOptional) {
+      existing.isOptional = true;
+    }
     if (metadata.isStore) {
       existing.isStore = true;
     }
@@ -409,6 +417,7 @@ export default async function EventsFinancePage({
         receiptSubject: group.receiptSubject,
         receiptMessage: group.receiptMessage,
         receiptLogoUrl: group.receiptLogoUrl,
+        isOptional: group.isOptional,
         isStore: group.isStore,
         storeItems: group.storeItems,
         charged: group.charged,
@@ -444,6 +453,7 @@ export default async function EventsFinancePage({
       receiptSubject: group.receiptSubject,
       receiptMessage: group.receiptMessage,
       receiptLogoUrl: group.receiptLogoUrl,
+      isOptional: group.isOptional,
       isStore: group.isStore,
       storeItems: group.storeItems,
     }));
@@ -453,14 +463,13 @@ export default async function EventsFinancePage({
   for (const entry of typedEntries) {
     if (!entry.occupant_id) continue;
     const metadata = parseContributionFromMetadata(entry, entry.event_id ? eventById.get(entry.event_id) ?? null : null);
-    const amount = Number(entry.amount_pesos ?? 0);
     const key = `${entry.occupant_id}:${metadata.contributionId}`;
-    const isPayment = amount < 0 || entry.entry_type === "payment";
-    const delta = isPayment ? -Math.abs(amount) : amount;
+    const delta =
+      getContributionChargeAmount(entry.entry_type, entry.amount_pesos) -
+      getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
     occupantRemainingMap[key] = (occupantRemainingMap[key] ?? 0) + delta;
-    if (isPayment) {
-      occupantPaidMap[key] = (occupantPaidMap[key] ?? 0) + Math.abs(amount);
-    }
+    occupantPaidMap[key] =
+      (occupantPaidMap[key] ?? 0) + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
   }
 
   const occupantOptions = (occupants ?? []).map((occupant) => ({
@@ -612,7 +621,11 @@ export default async function EventsFinancePage({
                 <CardContent className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{contribution.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{contribution.title}</p>
+                        {contribution.isOptional ? <Badge variant="secondary">Optional</Badge> : null}
+                        {contribution.isStore ? <Badge variant="outline">Store</Badge> : null}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {contribution.eventTitle ? `Linked event: ${contribution.eventTitle}` : "No linked event"}
                       </p>
@@ -686,7 +699,11 @@ export default async function EventsFinancePage({
               return (
                 <TableRow key={contribution.id} className="border-border/50 hover:bg-muted/30 transition-colors">
                   <TableCell>
-                    <div className="font-medium">{contribution.title}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-medium">{contribution.title}</div>
+                      {contribution.isOptional ? <Badge variant="secondary">Optional</Badge> : null}
+                      {contribution.isStore ? <Badge variant="outline">Store</Badge> : null}
+                    </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       {contribution.deadline
                         ? `Deadline: ${format(new Date(contribution.deadline), "MMM d, yyyy h:mm a")}`

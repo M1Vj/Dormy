@@ -12,6 +12,7 @@ import { getActiveDormId } from "@/lib/dorms";
 import { getTreasurerSemesterSnapshots } from "@/lib/finance/treasurer-semester-balance";
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 import {
   BarChart3,
   AlertTriangle,
@@ -235,10 +236,8 @@ export default async function TreasurerReportingPage() {
       approvedExpenses: 0,
       pendingExpenses: 0,
     };
-    const amount = Number(row.amount_pesos ?? 0);
-    const isPayment = amount < 0 || row.entry_type === "payment";
-    const chargeAmount = isPayment ? 0 : Math.abs(amount);
-    const paymentAmount = isPayment ? Math.abs(amount) : 0;
+    const chargeAmount = getContributionChargeAmount(row.entry_type, row.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos);
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
     if (!existing.eventTitle && group.eventTitle) {

@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getCanonicalContributionCartItems } from "@/lib/contribution-store";
+import {
+  getContributionChargeAmount,
+  getContributionCollectedAmount,
+  getContributionSettlementStatus,
+  isOptionalContributionDeclined,
+} from "@/lib/contribution-ledger";
 import {
   Table,
   TableBody,
@@ -22,7 +29,12 @@ import {
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
 import { ensureActiveSemesterId, getActiveSemester } from "@/lib/semesters";
-import { getStoreContributionPriceRange } from "@/lib/store-pricing";
+import {
+  getStoreContributionPriceRange,
+  normalizeStoreItems,
+  type CartItem,
+  type StoreItem,
+} from "@/lib/store-pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Params = {
@@ -59,10 +71,10 @@ type EntryRow = {
 type OccupantWithStatus = OccupantRow & {
   paid: number;
   charged: number;
-  status: "paid" | "partial" | "unpaid";
+  status: "paid" | "partial" | "unpaid" | "declined";
   deadline: string | null;
   overdue: boolean;
-  cartItems: any[];
+  cartItems: CartItem[];
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -80,6 +92,15 @@ const getRoomCode = (occupant: OccupantRow) => {
 };
 
 function StatusBadge({ status }: { status: OccupantWithStatus["status"] }) {
+  if (status === "declined") {
+    return (
+      <Badge variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
+        <XCircle className="mr-1 h-3 w-3" />
+        Declined
+      </Badge>
+    );
+  }
+
   if (status === "paid") {
     return (
       <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700">
@@ -117,7 +138,7 @@ function parseDeadline(value: unknown) {
   return parsed.toISOString();
 }
 
-function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: any[] }) {
+function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItems: StoreItem[] }) {
   if (!items || items.length === 0) return null;
 
   return (
@@ -128,7 +149,7 @@ function CartItemsRenderer({ items, storeItems }: { items: any[]; storeItems: an
         const itemName = sItem ? sItem.name : "Unknown Item";
         const optionsTxt =
           item.options?.length > 0
-            ? `(${item.options.map((o: any) => `${o.value}`).join(", ")})`
+            ? `(${item.options.map((option) => option.value).join(", ")})`
             : "";
 
         return (
@@ -232,46 +253,41 @@ export default async function EventDetailsPage({
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const entryRows = (entries ?? []) as EntryRow[];
   const nowIso = new Date().toISOString();
+  const isOptional = entryRows.map((entry) => entry.metadata?.is_optional === true).find(Boolean) ?? false;
   const isStore = entryRows.map((entry) => entry.metadata?.is_store === true).find(Boolean) ?? false;
-  const storeItems = entryRows
+  const storeItems = normalizeStoreItems(
+    entryRows
     .map((entry) => Array.isArray(entry.metadata?.store_items) ? entry.metadata.store_items : [])
-    .find((items) => items.length > 0) ?? [];
+    .find((items) => items.length > 0) ?? []
+  );
   const storePriceRange = isStore ? getStoreContributionPriceRange(storeItems) : null;
   const storeBaselineAmount = Number((storePriceRange?.min ?? 0).toFixed(2));
 
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
-    const chargeEntries = occupantEntries.filter(
-      (entry) => {
-        const amount = Number(entry.amount_pesos ?? 0);
-        return !(entry.entry_type === "payment" || amount < 0);
-      }
+    const chargeEntries = occupantEntries.filter((entry) => entry.entry_type !== "payment");
+    const declined = occupantEntries.some((entry) => isOptionalContributionDeclined(entry.metadata));
+
+    const paid = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      0
     );
 
-    const paid = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      const isPayment = entry.entry_type === "payment" || amount < 0;
-      return isPayment ? sum + Math.abs(amount) : sum;
-    }, 0);
-
-    const rawCharged = occupantEntries.reduce((sum, entry) => {
-      const amount = Number(entry.amount_pesos ?? 0);
-      const isPayment = entry.entry_type === "payment" || amount < 0;
-      return isPayment ? sum : sum + Math.abs(amount);
-    }, 0);
+    const rawCharged = occupantEntries.reduce(
+      (sum, entry) => sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos),
+      0
+    );
     const charged =
-      isStore && rawCharged <= 0
+      isStore && rawCharged <= 0 && !declined
         ? storeBaselineAmount
         : Number(rawCharged.toFixed(2));
 
-    let status: OccupantWithStatus["status"] = "unpaid";
-    if (charged > 0 && paid >= charged) {
-      status = "paid";
-    } else if (charged > 0 && paid > 0) {
-      status = "partial";
-    } else if (charged === 0 && paid > 0) {
-      status = "paid";
-    }
+    const status = getContributionSettlementStatus({
+      payable: charged,
+      paid,
+      remaining: charged - paid,
+      declined,
+    });
 
     const deadline = chargeEntries
       .map((entry) => parseDeadline(entry.metadata?.payable_deadline))
@@ -283,13 +299,16 @@ export default async function EventDetailsPage({
       deadline !== null &&
       deadline < nowIso &&
       charged > 0 &&
-      paid < charged;
+      paid < charged &&
+      !declined;
 
-    const cartItems = occupantEntries
-      .filter((entry) => Array.isArray(entry.metadata?.cart_items))
-      .map((entry) => entry.metadata!.cart_items as any[])
-      .filter((items) => items.length > 0)
-      .flat();
+    const cartItems = getCanonicalContributionCartItems(
+      occupantEntries.map((entry) => ({
+        entryType: entry.entry_type ?? null,
+        cartItems: entry.metadata?.cart_items,
+      })),
+      storeItems
+    );
 
     return {
       ...occupant,
@@ -501,6 +520,7 @@ export default async function EventDetailsPage({
                       eventId={eventId}
                       eventTitle={event.title}
                       metadata={{
+                        is_optional: isOptional,
                         is_store: isStore,
                         store_items: storeItems,
                       }}
@@ -571,6 +591,7 @@ export default async function EventDetailsPage({
                         eventId={eventId}
                         eventTitle={event.title}
                         metadata={{
+                          is_optional: isOptional,
                           is_store: isStore,
                           store_items: storeItems,
                         }}

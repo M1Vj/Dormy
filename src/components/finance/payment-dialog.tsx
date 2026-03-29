@@ -1,10 +1,9 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { usePathname } from "next/navigation";
 
-import { useState, useEffect, useMemo } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useForm, useFieldArray, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
@@ -41,10 +40,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import {
+  recordOptionalContributionDecline,
   previewTransactionReceiptEmail,
   recordTransaction,
 } from "@/app/actions/finance";
 import { draftPaymentReceiptEmail } from "@/app/actions/email";
+import { getOptionalContributionDecisionLabel } from "@/lib/contribution-ledger";
 import {
   calculateCartSubtotal,
   formatChoiceLabel,
@@ -70,6 +71,7 @@ const formSchema = z.object({
   amount: z.number().min(0, "Amount must be greater than or equal to 0"),
   method: z.string().min(1, "Method is required"),
   note: z.string().optional(),
+  declineOptionalContribution: z.boolean(),
   sendReceiptEmail: z.boolean(),
   receiptSubject: z.string().trim().max(140).optional(),
   receiptMessage: z.string().trim().max(2000).optional(),
@@ -115,18 +117,27 @@ type TransactionPayload = {
   | undefined;
 };
 
-function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }) {
+type PaymentCartItem = z.infer<typeof cartItemSchema>;
+
+function StoreCartBuilder({
+  form,
+  storeItems,
+}: {
+  form: UseFormReturn<PaymentFormValues>;
+  storeItems: unknown[];
+}) {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "cartItems",
   });
 
   const normalizedStoreItems = useMemo(() => normalizeStoreItems(storeItems), [storeItems]);
-  const cartValues = form.watch("cartItems") || [];
+  const watchedCartValues = form.watch("cartItems");
+  const cartValues = useMemo(() => watchedCartValues ?? [], [watchedCartValues]);
 
-  const syncAmountFromCart = (source: any[]) => {
+  const syncAmountFromCart = useCallback((source: PaymentCartItem[]) => {
     const total = source.reduce(
-      (acc: number, item: any) => acc + Math.max(0, Number(item?.subtotal ?? 0)),
+      (acc, item) => acc + Math.max(0, Number(item?.subtotal ?? 0)),
       0
     );
     const normalizedTotal = Number(total.toFixed(2));
@@ -136,11 +147,11 @@ function StoreCartBuilder({ form, storeItems }: { form: any; storeItems: any[] }
         shouldDirty: true,
       });
     }
-  };
+  }, [form]);
 
   useEffect(() => {
     syncAmountFromCart(cartValues);
-  }, [cartValues]);
+  }, [cartValues, syncAmountFromCart]);
 
   return (
     <div className="space-y-4 rounded-xl border p-4 bg-muted/10">
@@ -397,6 +408,7 @@ export function PaymentDialog({
     amount: 0,
     method: "cash",
     note: "",
+    declineOptionalContribution: false,
     sendReceiptEmail: true,
     receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
     receiptMessage: "",
@@ -410,7 +422,9 @@ export function PaymentDialog({
   });
 
   const sendReceiptEmail = form.watch("sendReceiptEmail");
-  const cartItems = form.watch("cartItems");
+  const declineOptionalContribution = form.watch("declineOptionalContribution");
+  const isOptionalContribution = metadata?.is_optional === true;
+  const isStoreContribution = metadata?.is_store === true;
 
   // Automatically update the main amount when cart items change 
   // Moved calculation into StoreCartBuilder
@@ -509,7 +523,52 @@ export function PaymentDialog({
     }
   }
 
+  async function submitOptionalDecline(values: PaymentFormValues) {
+    const contributionId =
+      typeof metadata?.contribution_id === "string" && metadata.contribution_id.trim().length > 0
+        ? metadata.contribution_id.trim()
+        : null;
+
+    if (!contributionId) {
+      toast.error("Contribution ID is missing for this optional record.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      const response = await recordOptionalContributionDecline(dormId, {
+        occupant_id: occupantId,
+        contribution_ids: [contributionId],
+        send_email: values.sendReceiptEmail,
+        email_override: null,
+      });
+
+      if (response && "error" in response) {
+        toast.error(response.error);
+        return;
+      }
+
+      toast.success(
+        isStoreContribution ? "Optional item marked as not availed." : "Optional contribution marked as declined."
+      );
+      setConfirmOpen(false);
+      setPendingPayload(null);
+      setEmailPreview(null);
+      setOpen(false);
+      form.reset(defaultFormValues);
+    } catch {
+      toast.error("Failed to update optional contribution.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   async function onSubmit(values: PaymentFormValues) {
+    if (isContribution && isOptionalContribution && values.declineOptionalContribution) {
+      await submitOptionalDecline(values);
+      return;
+    }
+
     if (isContribution && metadata?.remaining_balance !== undefined && (metadata.remaining_balance as number) <= 0) {
       setPendingFormValues(values);
       setOverpaymentConfirmOpen(true);
@@ -519,6 +578,11 @@ export function PaymentDialog({
   }
 
   async function processSubmit(values: PaymentFormValues) {
+    if (values.declineOptionalContribution) {
+      await submitOptionalDecline(values);
+      return;
+    }
+
     const payload = buildPayload(values);
     if (!payload) return;
 
@@ -632,6 +696,39 @@ export function PaymentDialog({
                 <StoreCartBuilder form={form} storeItems={metadata.store_items} />
               ) : null}
 
+              {isContribution && isOptionalContribution ? (
+                <FormField
+                  control={form.control}
+                  name="declineOptionalContribution"
+                  render={({ field }) => (
+                    <FormItem className="flex items-start gap-3 rounded-xl border bg-amber-50/70 p-4 dark:bg-amber-950/20">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={(checked) => {
+                            const nextValue = Boolean(checked);
+                            field.onChange(nextValue);
+                            if (nextValue) {
+                              form.setValue("amount", 0, { shouldDirty: true, shouldValidate: true });
+                              form.setValue("cartItems", [], { shouldDirty: true, shouldValidate: true });
+                            }
+                          }}
+                          className="mt-1"
+                        />
+                      </FormControl>
+                      <div className="space-y-1">
+                        <FormLabel className="leading-none">
+                          {isStoreContribution ? "Occupant will not avail this optional item" : "Occupant will not pay this optional contribution"}
+                        </FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          This sets the remaining payable to zero for this contribution only and sends an email notice instead of recording income.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              ) : null}
+
               <FormField
                 control={form.control}
                 name="amount"
@@ -643,9 +740,9 @@ export function PaymentDialog({
                         type="number"
                         step="0.01"
                         {...field}
-                        readOnly={metadata?.is_store === true}
+                        readOnly={metadata?.is_store === true || declineOptionalContribution}
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        className={metadata?.is_store === true ? "bg-muted font-mono" : ""}
+                        className={metadata?.is_store === true || declineOptionalContribution ? "bg-muted font-mono" : ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -702,9 +799,15 @@ export function PaymentDialog({
                         />
                       </FormControl>
                       <div className="space-y-1">
-                        <FormLabel className="leading-none">Email receipt</FormLabel>
+                        <FormLabel className="leading-none">
+                          {declineOptionalContribution ? "Email update" : "Email receipt"}
+                        </FormLabel>
                         <p className="text-xs text-muted-foreground">
-                          {isContribution
+                          {declineOptionalContribution
+                            ? `Sends an email confirming the occupant ${getOptionalContributionDecisionLabel({
+                                isStore: isStoreContribution,
+                              })}.`
+                            : isContribution
                             ? "Uses the global contribution receipt template."
                             : "Sends a receipt to the occupant email on file. Customize the subject/message, or draft with AI."}
                         </p>
@@ -713,7 +816,7 @@ export function PaymentDialog({
                   )}
                 />
 
-                {sendReceiptEmail ? (
+                {sendReceiptEmail && !declineOptionalContribution ? (
                   <div className="mt-4 space-y-4 rounded-xl border bg-background/80 p-4">
                     {isContribution ? (
                       <>
@@ -801,7 +904,7 @@ export function PaymentDialog({
               </div>
               <DialogFooter className="pt-1">
                 <Button type="submit" isLoading={isPending || isPreparingPreview}>
-                  Submit Payment
+                  {declineOptionalContribution ? "Save Decision" : "Submit Payment"}
                 </Button>
               </DialogFooter>
             </form>

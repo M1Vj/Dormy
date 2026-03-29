@@ -19,6 +19,7 @@ import {
   normalizeAndPriceCartItems,
   normalizeStoreItems,
 } from "@/lib/store-pricing";
+import { getContributionChargeAmount, getContributionCollectedAmount, isContributionPaymentEntry } from "@/lib/contribution-ledger";
 
 type ReportKey =
   | "fines-ledger"
@@ -824,7 +825,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         participantIds: new Set<string>(),
       };
 
-    if (item.amount < 0 || item.row.entry_type === "payment") {
+    if (isContributionPaymentEntry(item.row.entry_type)) {
       summary.collected += Math.abs(item.amount);
       const cartItems = normalizeAndPriceCartItems(metadata.cart_items, storeItems);
       const storeDetails = cartItems
@@ -875,7 +876,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         storeDetails,
       });
     } else {
-      summary.charged += item.amount;
+      summary.charged += getContributionChargeAmount(item.row.entry_type, item.amount);
     }
 
     summary.balance = summary.charged - summary.collected;
@@ -896,11 +897,8 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
         balance: 0,
       };
 
-    if (item.amount < 0 || item.row.entry_type === "payment") {
-      person.paid += Math.abs(item.amount);
-    } else {
-      person.payable += item.amount;
-    }
+    person.paid += getContributionCollectedAmount(item.row.entry_type, item.amount);
+    person.payable += getContributionChargeAmount(item.row.entry_type, item.amount);
     person.balance = person.payable - person.paid;
     perPerson.set(personKey, person);
   }

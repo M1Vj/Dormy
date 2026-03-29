@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { getActiveDormId } from "@/lib/dorms";
 import { ensureActiveSemesterId } from "@/lib/semesters";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 import { getStoreContributionPriceRange } from "@/lib/store-pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,6 +43,8 @@ type ContributionLedgerSummary = {
   details: string | null;
   eventTitle: string | null;
   deadline: string | null;
+  isOptional: boolean;
+  declined: boolean;
   isStore: boolean;
   storeItems: unknown[];
   payable: number;
@@ -102,8 +105,10 @@ function parseContributionMetadata(entry: LedgerEntryRow) {
         ? metadata.contribution_event_title.trim()
         : null,
     deadline: parseDeadline(metadata.payable_deadline),
+    isOptional: metadata.is_optional === true,
     isStore: metadata.is_store === true,
     storeItems: Array.isArray(metadata.store_items) ? metadata.store_items : [],
+    optionalDeclined: metadata.optional_declined === true,
   };
 }
 
@@ -114,7 +119,7 @@ function normalizeUnpaidContributions(entries: Map<string, Omit<ContributionLedg
       const basePayable = Number(contribution.payable.toFixed(2));
       const storePriceRange = contribution.isStore ? getStoreContributionPriceRange(contribution.storeItems) : null;
       const fallbackPayable = Number((storePriceRange?.min ?? 0).toFixed(2));
-      const payable = contribution.isStore && basePayable <= 0 ? fallbackPayable : basePayable;
+      const payable = contribution.isStore && basePayable <= 0 && !contribution.declined ? fallbackPayable : basePayable;
       const remaining = Number((payable - roundedPaid).toFixed(2));
 
       return {
@@ -214,22 +219,22 @@ export default async function TreasurerOccupantsPage() {
       details: parsed.details,
       eventTitle: parsed.eventTitle,
       deadline: parsed.deadline,
+      isOptional: parsed.isOptional,
+      declined: parsed.optionalDeclined,
       isStore: parsed.isStore,
       storeItems: parsed.storeItems,
       payable: 0,
       paid: 0,
     };
 
-    const amount = Number(entry.amount_pesos || 0);
-    if (entry.entry_type === "payment" || amount < 0) {
-      existing.paid += Math.abs(amount);
-    } else {
-      existing.payable += Math.abs(amount);
-    }
+    existing.paid += getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+    existing.payable += getContributionChargeAmount(entry.entry_type, entry.amount_pesos);
 
     if (!existing.details && parsed.details) existing.details = parsed.details;
     if (!existing.eventTitle && parsed.eventTitle) existing.eventTitle = parsed.eventTitle;
     if (!existing.deadline && parsed.deadline) existing.deadline = parsed.deadline;
+    if (!existing.isOptional && parsed.isOptional) existing.isOptional = parsed.isOptional;
+    if (!existing.declined && parsed.optionalDeclined) existing.declined = true;
     if (!existing.isStore && parsed.isStore) existing.isStore = true;
     if (existing.storeItems.length === 0 && parsed.storeItems.length > 0) {
       existing.storeItems = parsed.storeItems;
