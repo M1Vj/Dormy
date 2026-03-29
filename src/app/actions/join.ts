@@ -8,6 +8,7 @@ import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js
 import { logAuditEvent } from "@/lib/audit/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import type { AppRole } from "@/lib/roles";
 
 const assignableRoles = [
   "student_assistant",
@@ -49,6 +50,13 @@ const reviewSchema = z.object({
   grantedRole: z.enum(assignableRoles).optional().nullable(),
   reviewNote: z.string().trim().max(500).optional().nullable(),
 });
+
+const applicationReviewerRolePriority = [
+  "admin",
+  "adviser",
+  "assistant_adviser",
+  "student_assistant",
+] as const;
 
 const createAdminClient = () => {
   return createSupabaseAdminClient(
@@ -161,6 +169,10 @@ function buildOccupantUpdateFromApplication(application: {
   }
 
   return update;
+}
+
+function getApplicationReviewerRole(roles: AppRole[]) {
+  return applicationReviewerRolePriority.find((role) => roles.includes(role)) ?? null;
 }
 
 export async function getDormDirectory() {
@@ -672,14 +684,17 @@ export async function getDormApplicationsForActiveDorm(dormId: string, status?: 
 
   if (!user) return [];
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", parsedDormId.data)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership?.role || !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)) {
+  const reviewerRole = getApplicationReviewerRole(
+    (memberships ?? []).map((membership) => membership.role as AppRole)
+  );
+
+  if (!reviewerRole) {
     return [];
   }
 
@@ -802,18 +817,17 @@ export async function reviewDormApplication(formData: FormData) {
     return { error: applicationError?.message ?? "Application not found." };
   }
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: memberships, error: membershipError } = await supabase
     .from("dorm_memberships")
     .select("role")
     .eq("dorm_id", application.dorm_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (
-    membershipError ||
-    !membership?.role ||
-    !new Set(["admin", "adviser", "student_assistant"]).has(membership.role)
-  ) {
+  const reviewerRole = getApplicationReviewerRole(
+    (memberships ?? []).map((membership) => membership.role as AppRole)
+  );
+
+  if (membershipError || !reviewerRole) {
     return { error: "You do not have permission to review applications." };
   }
 
@@ -822,11 +836,14 @@ export async function reviewDormApplication(formData: FormData) {
       ? (parsed.data.grantedRole ?? application.requested_role)
       : null;
 
-  if (membership.role === "student_assistant" && grantedRole && grantedRole !== "occupant") {
+  if (reviewerRole === "student_assistant" && grantedRole && grantedRole !== "occupant") {
     return { error: "Student assistants can only approve occupant applications." };
   }
 
-  if (membership.role === "adviser" && grantedRole === "adviser") {
+  if (
+    (reviewerRole === "adviser" || reviewerRole === "assistant_adviser") &&
+    grantedRole === "adviser"
+  ) {
     return { error: "Only admins can grant adviser roles." };
   }
 
@@ -843,7 +860,7 @@ export async function reviewDormApplication(formData: FormData) {
           role: grantedRole,
           updated_at: now,
         },
-        { onConflict: "dorm_id,user_id" }
+        { onConflict: "dorm_id,user_id,role" }
       );
 
     if (membershipInsertError) {

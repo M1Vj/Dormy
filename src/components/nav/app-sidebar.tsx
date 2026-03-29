@@ -71,6 +71,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/adviser/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/adviser/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Applications", url: "/adviser/applications", icon: FileText, color: "text-violet-500" },
       { title: "Committees", url: "/adviser/committees", icon: Users, color: "text-emerald-500" },
       { title: "Finance", url: "/adviser/finance", icon: Wallet, color: "text-amber-500" },
       { title: "Events", url: "/adviser/events", icon: Calendar, color: "text-orange-500" },
@@ -83,6 +84,7 @@ function getMenuItems(role: string | null, showTreasurerMaintenance: boolean): M
     return [
       { title: "Home", url: "/student_assistant/home", icon: Home, color: "text-sky-500" },
       { title: "Occupants", url: "/student_assistant/occupants", icon: Users, color: "text-emerald-500" },
+      { title: "Applications", url: "/student_assistant/applications", icon: FileText, color: "text-violet-500" },
       { title: "Committees", url: "/student_assistant/committees", icon: Users, color: "text-emerald-500" },
       { title: "Fines", url: "/student_assistant/fines", icon: FileText, color: "text-rose-500" },
       { title: "Finance", url: "/student_assistant/finance", icon: Wallet, color: "text-amber-500" },

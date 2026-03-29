@@ -1,0 +1,83 @@
+import { redirect } from "next/navigation";
+
+import { getDormApplicationsForActiveDorm } from "@/app/actions/join";
+import { ApplicationsReview } from "@/components/applications/applications-review";
+import type { DormApplicationRow } from "@/components/applications/applications-review";
+import { getActiveDormId, getUserDorms } from "@/lib/dorms";
+import type { AppRole } from "@/lib/roles";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const applicationReviewRolePriority = [
+  "admin",
+  "adviser",
+  "assistant_adviser",
+  "student_assistant",
+] as const;
+
+export async function ApplicationsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ status?: string }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Supabase is not configured for this environment.
+      </div>
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const dorms = await getUserDorms();
+  if (dorms.length === 0) {
+    redirect("/join");
+  }
+
+  const activeDormId = await getActiveDormId();
+  const dormId = dorms.find((dorm) => dorm.id === activeDormId)?.id ?? dorms[0]?.id ?? null;
+
+  if (!dormId) {
+    redirect("/join");
+  }
+
+  const { data: memberships } = await supabase
+    .from("dorm_memberships")
+    .select("role")
+    .eq("dorm_id", dormId)
+    .eq("user_id", user.id);
+
+  const roles = (memberships ?? []).map((membership) => membership.role as AppRole);
+  const role = applicationReviewRolePriority.find((candidate) => roles.includes(candidate)) ?? null;
+
+  if (!role) {
+    return (
+      <div className="rounded-lg border p-6 text-sm text-muted-foreground">
+        You do not have access to this page.
+      </div>
+    );
+  }
+
+  const applications = await getDormApplicationsForActiveDorm(
+    dormId,
+    resolvedSearchParams?.status ?? null
+  );
+
+  const dormName = dorms.find((dorm) => dorm.id === dormId)?.name ?? "Dorm";
+
+  return (
+    <ApplicationsReview
+      dormName={dormName}
+      currentRole={role}
+      applications={applications as unknown as DormApplicationRow[]}
+    />
+  );
+}

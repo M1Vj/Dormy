@@ -85,7 +85,9 @@ export function ApplicationsReview({
   const roleOptions = useMemo(() => {
     const base = roles.filter((role) => role !== "admin") as AppRole[];
     if (currentRole === "student_assistant") return ["occupant"] as AppRole[];
-    if (currentRole === "adviser") return base.filter((role) => role !== "adviser");
+    if (currentRole === "adviser" || currentRole === "assistant_adviser") {
+      return base.filter((role) => role !== "adviser");
+    }
     return base;
   }, [currentRole]);
 

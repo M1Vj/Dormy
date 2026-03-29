@@ -329,7 +329,9 @@ export async function createOccupant(dormId: string, formData: FormData) {
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  const hasAccess = roles.some((r) =>
+    new Set(["admin", "student_assistant", "adviser", "assistant_adviser"]).has(r)
+  );
   if (membershipError || !hasAccess) {
     return { error: "You do not have permission to add occupants." };
   }
@@ -434,7 +436,9 @@ export async function updateOccupant(
     .eq("user_id", user.id)
     ;
   const roles = memberships?.map(m => m.role) ?? [];
-  const hasAccess = roles.some(r => new Set(["admin", "student_assistant", "adviser"]).has(r));
+  const hasAccess = roles.some((r) =>
+    new Set(["admin", "student_assistant", "adviser", "assistant_adviser"]).has(r)
+  );
   if (membershipError || !hasAccess) {
     return { error: "You do not have permission to update occupants." };
   }
@@ -557,19 +561,20 @@ export async function updateOccupant(
 
     // Update Dorm Role
     if (sysAccess.role) {
-      const { data: previousMembership } = await supabase
+      const { data: previousMemberships } = await supabase
         .from("dorm_memberships")
         .select("role")
         .eq("dorm_id", dormId)
-        .eq("user_id", currentOccupant.user_id)
-        .maybeSingle();
+        .eq("user_id", currentOccupant.user_id);
 
-      if (previousMembership?.role !== sysAccess.role) {
+      const existingRoles = (previousMemberships ?? []).map((membership) => membership.role as AppRole);
+
+      if (!existingRoles.includes(sysAccess.role as AppRole)) {
         await supabase
           .from("dorm_memberships")
           .upsert(
             { dorm_id: dormId, user_id: currentOccupant.user_id, role: sysAccess.role as AppRole },
-            { onConflict: "dorm_id,user_id" }
+            { onConflict: "dorm_id,user_id,role" }
           );
 
         await logAuditEvent({
@@ -580,7 +585,7 @@ export async function updateOccupant(
           entityId: currentOccupant.user_id, // Using userId as entityId for membership
           metadata: {
             target_user_id: currentOccupant.user_id,
-            previous_role: previousMembership?.role ?? "none",
+            previous_role: existingRoles.join(", ") || "none",
             new_role: sysAccess.role,
           },
         });
