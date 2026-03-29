@@ -155,6 +155,8 @@ export function ContributionBatchPaymentDialog({
   const [isPreparingPreview, setIsPreparingPreview] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [overpaymentConfirmOpen, setOverpaymentConfirmOpen] = useState(false);
+  const [settledStoreWarningOpen, setSettledStoreWarningOpen] = useState(false);
+  const [pendingSettledContribution, setPendingSettledContribution] = useState<ContributionOption | null>(null);
   const [pendingPayload, setPendingPayload] = useState<BatchPaymentPayload | null>(null);
   const [emailPreview, setEmailPreview] = useState<{
     recipient_email: string;
@@ -197,12 +199,15 @@ export function ContributionBatchPaymentDialog({
 
   const getStoreFallbackAmount = useCallback(
     (contribution: ContributionOption) => {
-      const remaining = occupantId
-        ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
-        : contribution.remaining;
-      if (remaining > 0) {
-        return Number(remaining.toFixed(2));
+      if (occupantId) {
+        const remaining = occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0;
+        return Number(Math.max(0, remaining).toFixed(2));
       }
+
+      if (contribution.remaining > 0) {
+        return Number(contribution.remaining.toFixed(2));
+      }
+
       const storePriceRange = getStoreContributionPriceRange(contribution.storeItems || []);
       return Number((storePriceRange?.min ?? 0).toFixed(2));
     },
@@ -297,23 +302,45 @@ export function ContributionBatchPaymentDialog({
     });
   }, [allocationTargetId, amountDifference, declinedContributionIds, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
 
+  const isSettledStoreContribution = useCallback(
+    (contribution: ContributionOption) =>
+      contribution.isStore && occupantId !== "" && (getOccupantRemaining(contribution.id) ?? 0) <= 0.009,
+    [getOccupantRemaining, occupantId]
+  );
+
+  const applyContributionSelection = useCallback(
+    (id: string, checked: boolean) => {
+      const next = checked
+        ? Array.from(new Set([...selectedContributionIds, id]))
+        : selectedContributionIds.filter((value) => value !== id);
+
+      setSelectedContributionIds(next);
+
+      const nextSelected = contributions.filter((contribution) => next.includes(contribution.id));
+      setAmount(computeAmountForSelection(nextSelected));
+
+      if (!next.includes(allocationTargetId)) {
+        setAllocationTargetId("");
+      }
+
+      if (!checked) {
+        setDeclinedContributionIds((current) => current.filter((value) => value !== id));
+      }
+    },
+    [allocationTargetId, computeAmountForSelection, contributions, selectedContributionIds]
+  );
+
   const toggleContribution = (id: string, checked: boolean) => {
-    const next = checked
-      ? Array.from(new Set([...selectedContributionIds, id]))
-      : selectedContributionIds.filter((value) => value !== id);
+    const contribution = contributions.find((item) => item.id === id);
+    if (!contribution) return;
 
-    setSelectedContributionIds(next);
-
-    const nextSelected = contributions.filter((contribution) => next.includes(contribution.id));
-    setAmount(computeAmountForSelection(nextSelected));
-
-    if (!next.includes(allocationTargetId)) {
-      setAllocationTargetId("");
+    if (checked && isSettledStoreContribution(contribution)) {
+      setPendingSettledContribution(contribution);
+      setSettledStoreWarningOpen(true);
+      return;
     }
 
-    if (!checked) {
-      setDeclinedContributionIds((current) => current.filter((value) => value !== id));
-    }
+    applyContributionSelection(id, checked);
   };
 
   const toggleDeclinedContribution = (id: string, checked: boolean) => {
@@ -340,6 +367,8 @@ export function ContributionBatchPaymentDialog({
       setPaidAtLocal(nowLocalDateTimeValue());
       setConfirmOpen(false);
       setOverpaymentConfirmOpen(false);
+      setSettledStoreWarningOpen(false);
+      setPendingSettledContribution(null);
       setPendingPayload(null);
       setEmailPreview(null);
       setStoreCartItems({});
@@ -571,6 +600,11 @@ export function ContributionBatchPaymentDialog({
                   contributions.map((contribution) => {
                     const checked = selectedContributionIds.includes(contribution.id);
                     const declined = declinedContributionIds.includes(contribution.id);
+                    const occupantRemaining = occupantId
+                      ? (getOccupantRemaining(contribution.id) ?? 0)
+                      : null;
+                    const isSettledForOccupant =
+                      contribution.isStore && occupantRemaining !== null && occupantRemaining <= 0.009;
                     const storePriceRange = contribution.isStore
                       ? getStoreContributionPriceRange(contribution.storeItems || [])
                       : null;
@@ -578,8 +612,17 @@ export function ContributionBatchPaymentDialog({
                       ? getStoreCartSubtotal(contribution.id)
                       : 0;
                     return (
-                      <div key={contribution.id} className={`rounded-md border border-border/50 bg-background/50 p-3 transition-colors ${occupantId ? "hover:bg-muted/30" : "cursor-not-allowed opacity-60"}`}>
-                        <label className={`flex items-start gap-3 ${occupantId ? "cursor-pointer" : "cursor-not-allowed"}`}>
+                      <div
+                        key={contribution.id}
+                        className={`rounded-md border border-border/50 bg-background/50 p-3 transition-colors ${
+                          occupantId ? "hover:bg-muted/30" : "opacity-80"
+                        }`}
+                      >
+                        <label
+                          className={`flex items-start gap-3 ${
+                            occupantId ? "cursor-pointer" : "cursor-not-allowed"
+                          }`}
+                        >
                           <Checkbox
                             checked={checked}
                             onCheckedChange={(value) => toggleContribution(contribution.id, Boolean(value))}
@@ -592,27 +635,40 @@ export function ContributionBatchPaymentDialog({
                               {contribution.isOptional ? <Badge variant="secondary">Optional</Badge> : null}
                               {contribution.isStore ? <Badge variant="outline">Store</Badge> : null}
                               {declined ? <Badge variant="outline" className="border-amber-300 text-amber-700">Declined</Badge> : null}
+                              {isSettledForOccupant ? (
+                                <Badge variant="outline" className="border-emerald-300 text-emerald-700">
+                                  Settled
+                                </Badge>
+                              ) : null}
                             </div>
                             {occupantId ? (
                               contribution.isStore ? (
                                 <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                                  <p>
-                                    {storePriceRange ? (
-                                      storePriceRange.min === storePriceRange.max ? (
+                                  {isSettledForOccupant ? (
+                                    <p className="font-medium text-emerald-700">This store contribution is already settled for this occupant.</p>
+                                  ) : (
+                                    <p>
+                                      {occupantRemaining !== null ? (
                                         <>
-                                          Item price: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)}</span>
+                                          Remaining payable: <span className="font-semibold text-foreground">{formatPesos(occupantRemaining)}</span>
                                         </>
+                                      ) : storePriceRange ? (
+                                        storePriceRange.min === storePriceRange.max ? (
+                                          <>
+                                            Item price: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)}</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            Price range: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)} - {formatPesos(storePriceRange.max)}</span>
+                                          </>
+                                        )
                                       ) : (
                                         <>
-                                          Price range: <span className="font-semibold text-foreground">{formatPesos(storePriceRange.min)} - {formatPesos(storePriceRange.max)}</span>
+                                          Item price: <span className="font-semibold text-foreground">{formatPesos(0)}</span>
                                         </>
-                                      )
-                                    ) : (
-                                      <>
-                                        Item price: <span className="font-semibold text-foreground">{formatPesos(0)}</span>
-                                      </>
-                                    )}
-                                  </p>
+                                      )}
+                                    </p>
+                                  )}
                                   {storeCartSubtotal > 0 && !declined ? (
                                     <p>
                                       Cart total: <span className="font-semibold text-foreground">{formatPesos(storeCartSubtotal)}</span>
@@ -992,6 +1048,60 @@ export function ContributionBatchPaymentDialog({
               }}
             >
               Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={settledStoreWarningOpen}
+        onOpenChange={(open) => {
+          setSettledStoreWarningOpen(open);
+          if (!open) {
+            setPendingSettledContribution(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-muted/50 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-amber-600 dark:text-amber-500">
+              Store Contribution Already Settled
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              {pendingSettledContribution?.title ?? "This store contribution"} is already fully paid for this occupant.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-800 dark:text-amber-200">
+            <p className="text-sm">
+              Recording another payment here is still allowed for cases like double payment or an additional merch purchase.
+            </p>
+            <p className="text-sm">
+              Continue only if you intentionally want to add another store payment for this occupant.
+            </p>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setSettledStoreWarningOpen(false);
+                setPendingSettledContribution(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                if (pendingSettledContribution) {
+                  applyContributionSelection(pendingSettledContribution.id, true);
+                }
+                setSettledStoreWarningOpen(false);
+                setPendingSettledContribution(null);
+              }}
+            >
+              Continue
             </Button>
           </DialogFooter>
         </DialogContent>
