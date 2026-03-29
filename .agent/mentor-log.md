@@ -45,3 +45,11 @@
 - Fixed treasurer finance table overflow and verified the new optional decline UX in the browser, including automatic total recalculation to `₱0.00`.
 - Added a third `COFILANG Faction Shirt` store item option, `ATHELETE Shirt Chinese Collar`, priced at `₱410.00`, through a follow-up contribution metadata migration.
 - Fixed treasurer contribution detail navigation to rely on the shared subpage back button and updated store order-detail rendering to wrap long item labels and option text inside the payment table cell.
+- Blocked duplicate settled store payments for contribution-specific payment flows by validating `recordTransaction` against the targeted contribution balance instead of the occupant's aggregate contributions balance.
+- Removed the batch-payment UI path that allowed selecting already-settled store contributions and added server-side rejection for the same case.
+- Expanded contribution detail order rendering to infer safe fallback cart details from fixed-price store amounts, recover previously missing COFILANG shirt order details, and normalize legacy `Default size` labels to `Submitted elsewhere` in the UI.
+- Applied a targeted live migration that voided six bogus duplicate COFILANG shirt payment rows, backfilled missing cart payloads for ten paid occupants, and normalized the remaining legacy `Default size` cart rows to `Submitted elsewhere`.
+- Expanded the batch payment dialog so any fully settled contribution now surfaces a `Settled` state and warning copy instead of only store contributions, while server-side batch validation rejects any selected contribution that already has zero remaining balance.
+- Fixed the contribution-detail filter row so `Reset` stays inside the control group and changed the occupant table to show the latest payment timestamp in a `Payment Date` column instead of repeating the contribution deadline per row.
+- Restored intentional extra-payment support for settled contributions by requiring an explicit warning confirmation in the batch dialog and single-payment dialog before allowing another payment to be recorded.
+- Updated settled store add-on handling so confirmed additional merch purchases append to the existing cart metadata and increase the stored charge total instead of overwriting the earlier order.

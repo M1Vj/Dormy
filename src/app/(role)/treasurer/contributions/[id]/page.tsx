@@ -66,6 +66,7 @@ type EntryRow = {
   occupant_id?: string | null;
   entry_type: string;
   amount_pesos?: number | string | null;
+  posted_at?: string | null;
   event_id?: string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -76,6 +77,7 @@ type OccupantWithStatus = OccupantRow & {
   remaining: number;
   paymentStatus: "paid" | "partial" | "unpaid" | "declined";
   deadline: string | null;
+  paymentDate: string | null;
   overdue: boolean;
   cartItems: CartItem[];
 };
@@ -137,7 +139,7 @@ function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItem
   if (validItems.length === 0) return null;
 
   return (
-    <div className="mt-2 min-w-0 space-y-2 rounded-md bg-muted/30 p-3 text-xs">
+    <div className="mt-2 min-w-0 space-y-2 rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
       <div className="mb-1 border-b pb-1 font-medium text-muted-foreground">Order Details</div>
       {validItems.map((item, idx) => {
         const sItem = storeItems.find((s) => s.id === item.item_id);
@@ -148,11 +150,11 @@ function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItem
             : "";
 
         return (
-          <div key={idx} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-            <div className="min-w-0 break-words text-foreground">
+          <div key={idx} className="grid min-w-0 gap-1 border-b border-border/40 pb-2 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+            <div className="min-w-0 whitespace-normal text-foreground [overflow-wrap:anywhere]">
               <span className="font-semibold">{item.quantity || 1}x</span> {itemName} {optionsTxt}
             </div>
-            <div className="shrink-0 whitespace-nowrap font-mono text-muted-foreground">
+            <div className="text-left font-mono text-muted-foreground sm:shrink-0 sm:whitespace-nowrap sm:text-right">
               ₱{(item.subtotal || 0).toFixed(2)}
             </div>
           </div>
@@ -280,7 +282,7 @@ export default async function EventDetailsPage({
   const [{ data: rawEntries, error: entriesError }, occupants, { data: dormConfig }] = await Promise.all([
     supabase
       .from("ledger_entries")
-      .select("id, semester_id, occupant_id, event_id, entry_type, amount_pesos, metadata")
+      .select("id, semester_id, occupant_id, event_id, entry_type, amount_pesos, posted_at, metadata")
       .eq("dorm_id", dormId)
       .eq("ledger", "contributions")
       .is("voided_at", null)
@@ -407,6 +409,13 @@ export default async function EventDetailsPage({
         .filter((value): value is string => Boolean(value))
         .sort()
         .at(-1) ?? contributionDeadline;
+    const paymentDate =
+      occupantEntries
+        .filter((entry) => entry.entry_type === "payment")
+        .map((entry) => (typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0 ? entry.posted_at : null))
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? null;
 
     const overdue = deadline !== null && deadline < nowIso && remaining > 0 && !declined;
 
@@ -414,6 +423,7 @@ export default async function EventDetailsPage({
       occupantEntries.map((entry) => ({
         entryType: entry.entry_type,
         cartItems: parseContributionMetadata(entry).cartItems,
+        amountPesos: entry.amount_pesos,
       })),
       storeItems
     );
@@ -425,6 +435,7 @@ export default async function EventDetailsPage({
       remaining,
       paymentStatus,
       deadline,
+      paymentDate,
       overdue,
       cartItems,
     };
@@ -594,7 +605,7 @@ export default async function EventDetailsPage({
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                      Deadline: {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                      Payment date: {occupant.paymentDate ? format(new Date(occupant.paymentDate), "MMM d, yyyy h:mm a") : "Not paid"}
                     </p>
 
                     <div className="flex flex-col gap-2">
@@ -656,7 +667,7 @@ export default async function EventDetailsPage({
                   <TableHead className="text-right font-semibold text-foreground">Payable</TableHead>
                   <TableHead className="text-right font-semibold text-foreground">Paid</TableHead>
                   <TableHead className="text-right font-semibold text-foreground">Remaining</TableHead>
-                  <TableHead className="text-right font-semibold text-foreground">Deadline</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Payment Date</TableHead>
                   <TableHead className="text-center font-semibold text-foreground">Status</TableHead>
                   <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
                 </TableRow>
@@ -668,7 +679,7 @@ export default async function EventDetailsPage({
                       <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
                       {isStore && occupant.cartItems?.length > 0 && (
-                        <div className="mt-2 w-full min-w-0 max-w-md">
+                        <div className="mt-2 w-full min-w-0 max-w-[32rem] xl:max-w-[40rem]">
                           <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
                         </div>
                       )}
@@ -680,7 +691,7 @@ export default async function EventDetailsPage({
                       ₱{occupant.remaining.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right text-xs align-top">
-                      {occupant.deadline ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a") : "Not set"}
+                      {occupant.paymentDate ? format(new Date(occupant.paymentDate), "MMM d, yyyy h:mm a") : "Not paid"}
                     </TableCell>
                     <TableCell className="text-center align-top">
                       <div className="flex flex-col items-center gap-1">

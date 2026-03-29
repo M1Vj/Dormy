@@ -65,6 +65,7 @@ type EntryRow = {
   occupant_id?: string | null;
   entry_type?: string;
   amount_pesos?: number | string | null;
+  posted_at?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -73,6 +74,7 @@ type OccupantWithStatus = OccupantRow & {
   charged: number;
   status: "paid" | "partial" | "unpaid" | "declined";
   deadline: string | null;
+  paymentDate: string | null;
   overdue: boolean;
   cartItems: CartItem[];
 };
@@ -142,22 +144,24 @@ function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItem
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="mt-2 space-y-1 rounded-md bg-muted/30 p-2 text-xs">
-      <div className="font-medium text-muted-foreground mb-1 border-b pb-1">Order Details</div>
+    <div className="mt-2 min-w-0 space-y-2 rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
+      <div className="mb-1 border-b pb-1 font-medium text-muted-foreground">Order Details</div>
       {items.map((item, idx) => {
         const sItem = storeItems.find((s) => s.id === item.item_id);
         const itemName = sItem ? sItem.name : "Unknown Item";
         const optionsTxt =
           item.options?.length > 0
-            ? `(${item.options.map((option) => option.value).join(", ")})`
+            ? `(${item.options.map((option) => `${option.name ? `${option.name}: ` : ""}${option.value}`).join(", ")})`
             : "";
 
         return (
-          <div key={idx} className="flex justify-between items-start gap-2">
-            <div>
+          <div key={idx} className="grid min-w-0 gap-1 border-b border-border/40 pb-2 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+            <div className="min-w-0 whitespace-normal text-foreground [overflow-wrap:anywhere]">
               <span className="font-semibold">{item.quantity}x</span> {itemName} {optionsTxt}
             </div>
-            <div className="font-mono text-muted-foreground">₱{item.subtotal?.toFixed(2)}</div>
+            <div className="text-left font-mono text-muted-foreground sm:shrink-0 sm:whitespace-nowrap sm:text-right">
+              ₱{item.subtotal?.toFixed(2)}
+            </div>
           </div>
         );
       })}
@@ -235,7 +239,7 @@ export default async function EventDetailsPage({
       getOccupants(dormId, { status: "active" }),
       supabase
         .from("ledger_entries")
-        .select("occupant_id, entry_type, amount_pesos, metadata")
+        .select("occupant_id, entry_type, amount_pesos, posted_at, metadata")
         .eq("dorm_id", dormId)
         .eq("ledger", "contributions")
         .eq("event_id", eventId)
@@ -253,6 +257,16 @@ export default async function EventDetailsPage({
   const occupantRows = (occupants ?? []) as OccupantRow[];
   const entryRows = (entries ?? []) as EntryRow[];
   const nowIso = new Date().toISOString();
+  const contributionId =
+    entryRows
+      .map((entry) => {
+        const rawContributionId =
+          entry.metadata?.contribution_id ?? entry.metadata?.payable_batch_id ?? null;
+        return typeof rawContributionId === "string" && rawContributionId.trim().length > 0
+          ? rawContributionId.trim()
+          : null;
+      })
+      .find((value): value is string => Boolean(value)) ?? eventId;
   const isOptional = entryRows.map((entry) => entry.metadata?.is_optional === true).find(Boolean) ?? false;
   const isStore = entryRows.map((entry) => entry.metadata?.is_store === true).find(Boolean) ?? false;
   const storeItems = normalizeStoreItems(
@@ -294,6 +308,13 @@ export default async function EventDetailsPage({
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
+    const paymentDate =
+      occupantEntries
+        .filter((entry) => entry.entry_type === "payment")
+        .map((entry) => (typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0 ? entry.posted_at : null))
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? null;
 
     const overdue =
       deadline !== null &&
@@ -306,6 +327,7 @@ export default async function EventDetailsPage({
       occupantEntries.map((entry) => ({
         entryType: entry.entry_type ?? null,
         cartItems: entry.metadata?.cart_items,
+        amountPesos: entry.amount_pesos,
       })),
       storeItems
     );
@@ -316,6 +338,7 @@ export default async function EventDetailsPage({
       charged,
       status,
       deadline,
+      paymentDate,
       overdue,
       cartItems,
     };
@@ -506,11 +529,11 @@ export default async function EventDetailsPage({
                       <span className="font-mono">{occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Deadline</span>
+                      <span className="text-muted-foreground">Payment date</span>
                       <span>
-                        {occupant.deadline
-                          ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
-                          : "Not set"}
+                        {occupant.paymentDate
+                          ? format(new Date(occupant.paymentDate), "MMM d, yyyy h:mm a")
+                          : "Not paid"}
                       </span>
                     </div>
                     <PaymentDialog
@@ -520,9 +543,11 @@ export default async function EventDetailsPage({
                       eventId={eventId}
                       eventTitle={event.title}
                       metadata={{
+                        contribution_id: contributionId,
                         is_optional: isOptional,
                         is_store: isStore,
                         store_items: storeItems,
+                        remaining_balance: Number((occupant.charged - occupant.paid).toFixed(2)),
                       }}
                       trigger={
                         <Button size="sm" variant="outline" className="w-full">
@@ -544,7 +569,7 @@ export default async function EventDetailsPage({
                   <TableHead>Room</TableHead>
                   <TableHead className="text-right">Charged</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Deadline</TableHead>
+                  <TableHead className="text-right">Payment Date</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -556,7 +581,7 @@ export default async function EventDetailsPage({
                       <div className="font-medium">{occupant.full_name}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
                       {isStore && occupant.cartItems?.length > 0 && (
-                        <div className="mt-2 w-full max-w-[200px]">
+                        <div className="mt-2 w-full min-w-0 max-w-[32rem] xl:max-w-[40rem]">
                           <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
                         </div>
                       )}
@@ -569,9 +594,9 @@ export default async function EventDetailsPage({
                       {occupant.paid > 0 ? `₱${occupant.paid.toFixed(2)}` : "-"}
                     </TableCell>
                     <TableCell className="text-right text-xs align-top">
-                      {occupant.deadline
-                        ? format(new Date(occupant.deadline), "MMM d, yyyy h:mm a")
-                        : "Not set"}
+                      {occupant.paymentDate
+                        ? format(new Date(occupant.paymentDate), "MMM d, yyyy h:mm a")
+                        : "Not paid"}
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
@@ -591,9 +616,11 @@ export default async function EventDetailsPage({
                         eventId={eventId}
                         eventTitle={event.title}
                         metadata={{
+                          contribution_id: contributionId,
                           is_optional: isOptional,
                           is_store: isStore,
                           store_items: storeItems,
+                          remaining_balance: Number((occupant.charged - occupant.paid).toFixed(2)),
                         }}
                         trigger={
                           <Button size="sm" variant="outline">

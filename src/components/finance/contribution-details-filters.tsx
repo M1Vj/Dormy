@@ -57,7 +57,7 @@ export function ContributionDetailsFilters({
   };
 
   return (
-    <form className="grid gap-2 sm:grid-cols-[1fr_180px_auto]" onSubmit={applyFilters}>
+    <form className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={applyFilters}>
       <Input
         name="search"
         placeholder="Search occupant or ID"
@@ -77,8 +77,14 @@ export function ContributionDetailsFilters({
         <option value="unpaid">Unpaid</option>
         <option value="declined">Declined</option>
       </select>
-      <div className="flex gap-2">
-        <Button type="submit" variant="secondary" size="sm" className="w-full" disabled={isPending}>
+      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+        <Button
+          type="submit"
+          variant="secondary"
+          size="sm"
+          className="w-full sm:w-auto"
+          disabled={isPending}
+        >
           Filter
         </Button>
         {hasFilters ? (
@@ -86,7 +92,7 @@ export function ContributionDetailsFilters({
             type="button"
             variant="ghost"
             size="sm"
-            className="w-full"
+            className="w-full sm:w-auto"
             onClick={resetFilters}
             disabled={isPending}
           >
