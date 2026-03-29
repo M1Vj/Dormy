@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle } from "lucide-react";
 
 import { getOccupants } from "@/app/actions/occupants";
 import { ExportXlsxDialog } from "@/components/export/export-xlsx-dialog";
@@ -10,7 +9,6 @@ import { ContributionPayableOverrideDialog } from "@/components/finance/contribu
 import { LedgerOverwriteDialog } from "@/components/finance/ledger-overwrite-dialog";
 import { PaymentDialog } from "@/components/finance/payment-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -139,8 +137,8 @@ function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItem
   if (validItems.length === 0) return null;
 
   return (
-    <div className="mt-2 space-y-1 rounded-md bg-muted/30 p-2 text-xs">
-      <div className="font-medium text-muted-foreground mb-1 border-b pb-1">Order Details</div>
+    <div className="mt-2 min-w-0 space-y-2 rounded-md bg-muted/30 p-3 text-xs">
+      <div className="mb-1 border-b pb-1 font-medium text-muted-foreground">Order Details</div>
       {validItems.map((item, idx) => {
         const sItem = storeItems.find((s) => s.id === item.item_id);
         const itemName = sItem ? sItem.name : "Unknown Item";
@@ -150,11 +148,13 @@ function CartItemsRenderer({ items, storeItems }: { items: CartItem[]; storeItem
             : "";
 
         return (
-          <div key={idx} className="flex justify-between items-start gap-2">
-            <div>
+          <div key={idx} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+            <div className="min-w-0 break-words text-foreground">
               <span className="font-semibold">{item.quantity || 1}x</span> {itemName} {optionsTxt}
             </div>
-            <div className="font-mono text-muted-foreground">₱{(item.subtotal || 0).toFixed(2)}</div>
+            <div className="shrink-0 whitespace-nowrap font-mono text-muted-foreground">
+              ₱{(item.subtotal || 0).toFixed(2)}
+            </div>
           </div>
         );
       })}
@@ -450,27 +450,20 @@ export default async function EventDetailsPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/treasurer/contributions">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{contributionTitle}</h1>
-              {isOptional ? <Badge variant="secondary">Optional</Badge> : null}
-              {isStore ? <Badge variant="outline">Store</Badge> : null}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {linkedEventTitle ? `Linked event: ${linkedEventTitle}` : "No linked event"}
-            </p>
-            {activeSemester ? (
-              <p className="text-xs text-muted-foreground">{activeSemester.label}</p>
-            ) : null}
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{contributionTitle}</h1>
+            {isOptional ? <Badge variant="secondary">Optional</Badge> : null}
+            {isStore ? <Badge variant="outline">Store</Badge> : null}
           </div>
+          <p className="text-sm text-muted-foreground">
+            {linkedEventTitle ? `Linked event: ${linkedEventTitle}` : "No linked event"}
+          </p>
+          {activeSemester ? (
+            <p className="text-xs text-muted-foreground">{activeSemester.label}</p>
+          ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2 mt-4 sm:mt-0">
+        <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-0">
           {!isReadOnlyView ? <LedgerOverwriteDialog dormId={dormId} /> : (
             <Badge variant="outline">View-only semester</Badge>
           )}
@@ -675,7 +668,7 @@ export default async function EventDetailsPage({
                       <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
                       {isStore && occupant.cartItems?.length > 0 && (
-                        <div className="mt-2 w-full max-w-[200px]">
+                        <div className="mt-2 w-full min-w-0 max-w-md">
                           <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
                         </div>
                       )}
