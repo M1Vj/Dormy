@@ -403,6 +403,12 @@ export function PaymentDialog({
     text: string;
   } | null>(null);
   const isContribution = category === "contributions";
+  const remainingBalance =
+    typeof metadata?.remaining_balance === "number"
+      ? metadata.remaining_balance
+      : typeof metadata?.remaining_balance === "string"
+        ? Number(metadata.remaining_balance)
+        : null;
 
   const defaultFormValues: PaymentFormValues = {
     amount: 0,
@@ -468,7 +474,10 @@ export function PaymentDialog({
     }
   }
 
-  function buildPayload(values: PaymentFormValues): TransactionPayload | null {
+  function buildPayload(
+    values: PaymentFormValues,
+    options?: { allowSettledOverpayment?: boolean }
+  ): TransactionPayload | null {
 
     return {
       occupant_id: occupantId,
@@ -480,6 +489,7 @@ export function PaymentDialog({
       event_id: eventId,
       metadata: {
         ...metadata,
+        allow_settled_overpayment: options?.allowSettledOverpayment === true,
         cart_items: values.cartItems, // Forward cart items to the action for processing
       },
       receipt_email: values.sendReceiptEmail
@@ -569,7 +579,7 @@ export function PaymentDialog({
       return;
     }
 
-    if (isContribution && metadata?.remaining_balance !== undefined && (metadata.remaining_balance as number) <= 0) {
+    if (isContribution && remainingBalance !== null && remainingBalance <= 0.009) {
       setPendingFormValues(values);
       setOverpaymentConfirmOpen(true);
       return;
@@ -577,13 +587,16 @@ export function PaymentDialog({
     await processSubmit(values);
   }
 
-  async function processSubmit(values: PaymentFormValues) {
+  async function processSubmit(
+    values: PaymentFormValues,
+    options?: { allowSettledOverpayment?: boolean }
+  ) {
     if (values.declineOptionalContribution) {
       await submitOptionalDecline(values);
       return;
     }
 
-    const payload = buildPayload(values);
+    const payload = buildPayload(values, options);
     if (!payload) return;
 
     if (!values.sendReceiptEmail) {
@@ -917,12 +930,17 @@ export function PaymentDialog({
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-amber-600 dark:text-amber-500">Contribution Already Settled</DialogTitle>
             <DialogDescription className="text-sm">
-              This occupant has already fully paid this contribution. Do you want to record an overpayment anyway?
+              {isStoreContribution
+                ? "This occupant has already fully paid this store contribution. Do you want to record another payment anyway?"
+                : "This occupant has already fully paid this contribution. Do you want to record an overpayment anyway?"}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-800 dark:text-amber-200">
             <p className="text-sm">
-              <strong>Note:</strong> Overpayments are recorded but do not lower the remaining balance below zero.
+              <strong>Note:</strong>{" "}
+              {isStoreContribution
+                ? "Continue only if this is an intentional extra store payment, such as an added merch purchase or a duplicate payment."
+                : "Overpayments are recorded but do not lower the remaining balance below zero."}
             </p>
           </div>
           <DialogFooter className="mt-4">
@@ -935,7 +953,7 @@ export function PaymentDialog({
               onClick={() => {
                 setOverpaymentConfirmOpen(false);
                 if (pendingFormValues) {
-                  processSubmit(pendingFormValues);
+                  processSubmit(pendingFormValues, { allowSettledOverpayment: true });
                 }
               }}
             >
