@@ -43,3 +43,5 @@
 - Added optional-decline email delivery so occupants receive a "will not pay" or "will not avail" notice instead of a receipt when no income is recorded.
 - Applied and committed live Supabase migrations for `COFILANG Faction Shirt` to add `Submitted elsewhere` size choice metadata and mark the contribution optional.
 - Fixed treasurer finance table overflow and verified the new optional decline UX in the browser, including automatic total recalculation to `₱0.00`.
+- Added a third `COFILANG Faction Shirt` store item option, `ATHELETE Shirt Chinese Collar`, priced at `₱410.00`, through a follow-up contribution metadata migration.
+- Fixed treasurer contribution detail navigation to rely on the shared subpage back button and updated store order-detail rendering to wrap long item labels and option text inside the payment table cell.
