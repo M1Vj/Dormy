@@ -73,6 +73,7 @@ export function ContributionDetailsFilters({
       >
         <option value="">All statuses</option>
         <option value="paid">Paid</option>
+        <option value="paid_elsewhere">Paid Elsewhere</option>
         <option value="partial">Partial</option>
         <option value="unpaid">Unpaid</option>
         <option value="declined">Declined</option>

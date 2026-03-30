@@ -108,6 +108,8 @@ const contributionBatchPaymentSchema = z.object({
   occupant_id: z.string().uuid(),
   contribution_ids: z.array(z.string().uuid()).default([]),
   declined_contribution_ids: z.array(z.string().uuid()).default([]),
+  paid_elsewhere_contribution_ids: z.array(z.string().uuid()).default([]),
+  paid_elsewhere_location: z.string().trim().min(2).max(160).optional().nullable(),
   allow_overpayment_contribution_ids: z.array(z.string().uuid()).default([]),
   amount: z.number().min(0),
   method: z.enum(["cash", "gcash"]),
@@ -175,6 +177,14 @@ const optionalContributionDeclineSchema = z.object({
   email_override: z.string().email().optional().nullable(),
 });
 
+const contributionPaidElsewhereSchema = z.object({
+  occupant_id: z.string().uuid(),
+  contribution_ids: z.array(z.string().uuid()).min(1),
+  location: z.string().trim().min(2).max(160),
+  send_email: z.boolean().default(true),
+  email_override: z.string().email().optional().nullable(),
+});
+
 const treasurerFinanceManualEntrySchema = z.object({
   entry_kind: z.enum(["inflow", "expense"]),
   title: z.string().trim().min(2).max(160),
@@ -199,6 +209,9 @@ type ContributionMetadata = {
   contribution_event_title: string | null;
   is_optional: boolean;
   optional_declined: boolean;
+  paid_elsewhere: boolean;
+  paid_elsewhere_location: string | null;
+  paid_elsewhere_at: string | null;
   payable_deadline: string | null;
   contribution_receipt_signature: string | null;
   contribution_receipt_subject: string | null;
@@ -244,6 +257,9 @@ function parseContributionMetadata(
   const eventTitleRaw = metadata.contribution_event_title;
   const isOptionalRaw = metadata.is_optional;
   const optionalDeclinedRaw = metadata.optional_declined;
+  const paidElsewhereRaw = metadata.paid_elsewhere;
+  const paidElsewhereLocationRaw = metadata.paid_elsewhere_location;
+  const paidElsewhereAtRaw = metadata.paid_elsewhere_at;
   const deadlineRaw = metadata.payable_deadline;
   const signatureRaw = metadata.contribution_receipt_signature;
   const subjectRaw = metadata.contribution_receipt_subject;
@@ -272,6 +288,15 @@ function parseContributionMetadata(
         : null,
     is_optional: isOptionalRaw === true,
     optional_declined: optionalDeclinedRaw === true,
+    paid_elsewhere: paidElsewhereRaw === true,
+    paid_elsewhere_location:
+      typeof paidElsewhereLocationRaw === "string" && paidElsewhereLocationRaw.trim().length > 0
+        ? paidElsewhereLocationRaw.trim()
+        : null,
+    paid_elsewhere_at:
+      typeof paidElsewhereAtRaw === "string" && paidElsewhereAtRaw.trim().length > 0
+        ? paidElsewhereAtRaw.trim()
+        : null,
     payable_deadline:
       typeof deadlineRaw === "string" && deadlineRaw.trim().length > 0
         ? deadlineRaw
@@ -1688,6 +1713,9 @@ type ContributionGroupEntry = {
   eventTitle: string | null;
   isOptional: boolean;
   declined: boolean;
+  paidElsewhere: boolean;
+  paidElsewhereLocation: string | null;
+  paidElsewhereAt: string | null;
   receiptSignature: string | null;
   receiptSubject: string | null;
   receiptMessage: string | null;
@@ -1709,6 +1737,81 @@ type OptionalContributionDeclineEntry = {
   isStore: boolean;
   amount: number;
 };
+
+type ContributionBatchEmailRow = {
+  title: string;
+  amountPesos: number;
+  status: "paid" | "paid_elsewhere";
+  paidElsewhereLocation?: string | null;
+  orderItems?: ReturnType<typeof buildOrderItemsFromCart>;
+  storeSpecs?: ReturnType<typeof buildStoreSpecsFromStoreItems>;
+};
+
+function buildContributionBatchEmailRows(input: {
+  orderedContributionIds: string[];
+  paymentRows: Array<{
+    contributionId: string;
+    title: string;
+    allocation: number;
+    storeItems: ContributionMetadata["store_items"];
+    cartItems: ContributionMetadata["cart_items"];
+  }>;
+  paidElsewhereRows: Array<{
+    contributionId: string;
+    title: string;
+    outstanding: number;
+    storeItems: ContributionMetadata["store_items"];
+    cartItems: ContributionMetadata["cart_items"];
+  }>;
+  paidElsewhereLocation: string | null;
+}): ContributionBatchEmailRow[] {
+  const paymentRowMap = new Map(
+    input.paymentRows.map((row) => [row.contributionId, row] as const)
+  );
+  const paidElsewhereRowMap = new Map(
+    input.paidElsewhereRows.map((row) => [row.contributionId, row] as const)
+  );
+
+  return input.orderedContributionIds.flatMap<ContributionBatchEmailRow>((contributionId) => {
+    const paymentRow = paymentRowMap.get(contributionId);
+    if (paymentRow) {
+      const orderItems = buildOrderItemsFromCart(paymentRow.cartItems, paymentRow.storeItems);
+      return [
+        {
+          title: paymentRow.title,
+          amountPesos: paymentRow.allocation,
+          status: "paid" as const,
+          orderItems,
+          storeSpecs: !orderItems
+            ? buildStoreSpecsFromStoreItems(paymentRow.storeItems)
+            : undefined,
+        },
+      ];
+    }
+
+    const paidElsewhereRow = paidElsewhereRowMap.get(contributionId);
+    if (paidElsewhereRow) {
+      const orderItems = buildOrderItemsFromCart(
+        paidElsewhereRow.cartItems,
+        paidElsewhereRow.storeItems
+      );
+      return [
+        {
+          title: paidElsewhereRow.title,
+          amountPesos: paidElsewhereRow.outstanding,
+          status: "paid_elsewhere" as const,
+          paidElsewhereLocation: input.paidElsewhereLocation,
+          orderItems,
+          storeSpecs: !orderItems
+            ? buildStoreSpecsFromStoreItems(paidElsewhereRow.storeItems)
+            : undefined,
+        },
+      ];
+    }
+
+    return [];
+  });
+}
 
 async function resolveOccupantRecipientEmail(
   supabase: ServerSupabaseClient,
@@ -1798,8 +1901,6 @@ async function sendOptionalContributionDeclineEmail(input: {
   }
 }
 
-
-
 export async function recordContributionBatchPayment(
   dormId: string,
   payload: z.infer<typeof contributionBatchPaymentSchema>
@@ -1855,8 +1956,26 @@ export async function recordContributionBatchPayment(
 
   const paymentContributionIds = Array.from(new Set(input.contribution_ids));
   const declinedContributionIds = Array.from(new Set(input.declined_contribution_ids));
+  const paidElsewhereContributionIds = Array.from(new Set(input.paid_elsewhere_contribution_ids));
   const allowOverpaymentContributionIds = new Set(input.allow_overpayment_contribution_ids);
-  const selectedIds = new Set([...paymentContributionIds, ...declinedContributionIds]);
+  const selectedIds = new Set([
+    ...paymentContributionIds,
+    ...declinedContributionIds,
+    ...paidElsewhereContributionIds,
+  ]);
+  const paidElsewhereLocation = input.paid_elsewhere_location?.trim() || null;
+
+  const declineAndElsewhereOverlap = declinedContributionIds.filter((id) =>
+    paidElsewhereContributionIds.includes(id)
+  );
+  if (declineAndElsewhereOverlap.length > 0) {
+    return { error: "A contribution cannot be marked as both declined and paid elsewhere." };
+  }
+
+  if (paidElsewhereContributionIds.length > 0 && !paidElsewhereLocation) {
+    return { error: "Provide where the occupant paid elsewhere." };
+  }
+
   const contributionMap = new Map<string, ContributionGroupEntry>();
 
   for (const row of rawEntries ?? []) {
@@ -1876,6 +1995,9 @@ export async function recordContributionBatchPayment(
       eventTitle: metadata.contribution_event_title,
       isOptional: metadata.is_optional,
       declined: metadata.optional_declined,
+      paidElsewhere: metadata.paid_elsewhere,
+      paidElsewhereLocation: metadata.paid_elsewhere_location,
+      paidElsewhereAt: metadata.paid_elsewhere_at,
       receiptSignature: metadata.contribution_receipt_signature,
       receiptSubject: metadata.contribution_receipt_subject,
       receiptMessage: metadata.contribution_receipt_message,
@@ -1915,6 +2037,15 @@ export async function recordContributionBatchPayment(
     if (!existing.declined && metadata.optional_declined) {
       existing.declined = true;
     }
+    if (!existing.paidElsewhere && metadata.paid_elsewhere) {
+      existing.paidElsewhere = true;
+    }
+    if (!existing.paidElsewhereLocation && metadata.paid_elsewhere_location) {
+      existing.paidElsewhereLocation = metadata.paid_elsewhere_location;
+    }
+    if (!existing.paidElsewhereAt && metadata.paid_elsewhere_at) {
+      existing.paidElsewhereAt = metadata.paid_elsewhere_at;
+    }
     if (!existing.receiptSignature && metadata.contribution_receipt_signature) {
       existing.receiptSignature = metadata.contribution_receipt_signature;
     }
@@ -1939,6 +2070,9 @@ export async function recordContributionBatchPayment(
   const declinedRows = contributionRows.filter((row) =>
     declinedContributionIds.includes(row.contributionId)
   );
+  const paidElsewhereRows = contributionRows.filter((row) =>
+    paidElsewhereContributionIds.includes(row.contributionId)
+  );
 
   for (const row of declinedRows) {
     if (!row.isOptional) {
@@ -1948,6 +2082,12 @@ export async function recordContributionBatchPayment(
       return { error: `${row.title} already has recorded payments and cannot be marked as declined.` };
     }
     if (row.outstanding <= 0.009 || row.declined) {
+      return { error: `${row.title} is already settled for this occupant.` };
+    }
+  }
+
+  for (const row of paidElsewhereRows) {
+    if (row.outstanding <= 0.009 || row.declined || row.paidElsewhere) {
       return { error: `${row.title} is already settled for this occupant.` };
     }
   }
@@ -1971,7 +2111,10 @@ export async function recordContributionBatchPayment(
   );
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
-    if (declinedContributionIds.includes(row.contributionId)) {
+    if (
+      declinedContributionIds.includes(row.contributionId) ||
+      paidElsewhereContributionIds.includes(row.contributionId)
+    ) {
       continue;
     }
     const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
@@ -2024,7 +2167,7 @@ export async function recordContributionBatchPayment(
     })
     .filter((row) => row.allocation > 0);
 
-  if (!allocRows.length && declinedRows.length === 0) {
+  if (!allocRows.length && declinedRows.length === 0 && paidElsewhereRows.length === 0) {
     return { error: "Nothing to record after allocation." };
   }
 
@@ -2036,10 +2179,12 @@ export async function recordContributionBatchPayment(
   };
 
   if (paymentContributionIds.length === 0 && input.amount > 0.009) {
-    return { error: "Payment amount must be zero when all selected contributions are declined." };
+    return {
+      error: "Payment amount must be zero when all selected contributions are marked as declined or paid elsewhere.",
+    };
   }
 
-  if (input.send_receipt_email && allocRows.length > 0) {
+  if (input.send_receipt_email && (allocRows.length > 0 || paidElsewhereRows.length > 0)) {
     const { data: dorm } = await supabase
       .from("dorms")
       .select("attributes")
@@ -2180,6 +2325,47 @@ export async function recordContributionBatchPayment(
     }
   }
 
+  if (paidElsewhereRows.length > 0) {
+    const paidElsewhereTimestamp = new Date().toISOString();
+    const { error: paidElsewhereInsertError } = await writeClient.from("ledger_entries").insert(
+      paidElsewhereRows.map((row) => ({
+        dorm_id: dormId,
+        semester_id: row.semesterId ?? semesterResult.semesterId,
+        ledger: "contributions",
+        entry_type: "adjustment",
+        occupant_id: input.occupant_id,
+        event_id: row.eventId,
+        amount_pesos: -Math.abs(row.outstanding),
+        method: "paid_elsewhere",
+        note: `Paid elsewhere • ${row.title} • ${paidElsewhereLocation}`,
+        metadata: {
+          contribution_id: row.contributionId,
+          contribution_title: row.title,
+          contribution_details: row.details,
+          contribution_event_title: row.eventTitle,
+          payable_deadline: row.deadline,
+          contribution_receipt_signature: row.receiptSignature,
+          contribution_receipt_subject: row.receiptSubject,
+          contribution_receipt_message: row.receiptMessage,
+          contribution_receipt_logo_url: row.receiptLogoUrl,
+          is_store: row.storeItems.length > 0,
+          is_optional: row.isOptional,
+          paid_elsewhere: true,
+          paid_elsewhere_at: paidElsewhereTimestamp,
+          paid_elsewhere_by: user.id,
+          paid_elsewhere_location: paidElsewhereLocation,
+          paid_elsewhere_amount_pesos: row.outstanding,
+          store_items: row.storeItems,
+        },
+        created_by: user.id,
+      }))
+    );
+
+    if (paidElsewhereInsertError) {
+      return { error: paidElsewhereInsertError.message };
+    }
+  }
+
   if (allocRows.length > 0) {
     const { error: insertError } = await writeClient.from("ledger_entries").insert(
       allocRows.map((row) => ({
@@ -2229,6 +2415,8 @@ export async function recordContributionBatchPayment(
         occupant_id: input.occupant_id,
         contribution_ids: input.contribution_ids,
         declined_contribution_ids: declinedContributionIds,
+        paid_elsewhere_contribution_ids: paidElsewhereContributionIds,
+        paid_elsewhere_location: paidElsewhereLocation,
         total_paid: input.amount,
         method: input.method,
         paid_at_iso: input.paid_at_iso,
@@ -2240,7 +2428,7 @@ export async function recordContributionBatchPayment(
     console.error("Failed to write audit event for contribution batch payment:", auditError);
   }
 
-  if (input.send_receipt_email && allocRows.length > 0) {
+  if (input.send_receipt_email && (allocRows.length > 0 || paidElsewhereRows.length > 0)) {
     try {
       const { sendEmail, renderContributionBatchReceiptEmail } = await import("@/lib/email");
 
@@ -2274,20 +2462,31 @@ export async function recordContributionBatchPayment(
       }
 
       if (recipientEmail) {
+        const receiptRows = buildContributionBatchEmailRows({
+          orderedContributionIds: contributionRows.map((row) => row.contributionId),
+          paymentRows: allocRows.map((row) => ({
+            contributionId: row.contributionId,
+            title: row.title,
+            allocation: row.allocation,
+            storeItems: row.storeItems,
+            cartItems: row.cartItems,
+          })),
+          paidElsewhereRows: paidElsewhereRows.map((row) => ({
+            contributionId: row.contributionId,
+            title: row.title,
+            outstanding: row.outstanding,
+            storeItems: row.storeItems,
+            cartItems: row.cartItems,
+          })),
+          paidElsewhereLocation,
+        });
+
         const rendered = renderContributionBatchReceiptEmail({
           treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
           recipientName: occupant.full_name ?? null,
           paidAtIso: input.paid_at_iso,
           method: input.method,
-          contributions: allocRows.map((row) => {
-            const orderItems = buildOrderItemsFromCart(row.cartItems, row.storeItems);
-            return {
-              title: row.title,
-              amountPesos: row.allocation,
-              orderItems,
-              storeSpecs: !orderItems ? buildStoreSpecsFromStoreItems(row.storeItems) : undefined,
-            };
-          }),
+          contributions: receiptRows,
           totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
           customMessage: resolvedReceiptMessage,
           subjectOverride: resolvedReceiptSubject,
@@ -2334,7 +2533,7 @@ export async function recordContributionBatchPayment(
 
   const activeRole = (await getActiveRole()) || "occupant";
   revalidatePath(`/${activeRole}/contributions`);
-  for (const row of allocRows) {
+  for (const row of [...allocRows, ...declinedRows, ...paidElsewhereRows]) {
     revalidatePath(`/${activeRole}/contributions/${row.contributionId}`);
   }
   revalidatePath(`/${activeRole}/occupants`);
@@ -2344,6 +2543,7 @@ export async function recordContributionBatchPayment(
     success: true,
     paidCount: allocRows.length,
     declinedCount: declinedRows.length,
+    paidElsewhereCount: paidElsewhereRows.length,
     totalPaid: allocRows.reduce((sum, row) => sum + row.allocation, 0),
   };
 }
@@ -2362,6 +2562,8 @@ export async function recordOptionalContributionDecline(
     occupant_id: input.occupant_id,
     contribution_ids: [],
     declined_contribution_ids: input.contribution_ids,
+    paid_elsewhere_contribution_ids: [],
+    paid_elsewhere_location: null,
     allow_overpayment_contribution_ids: [],
     amount: 0,
     method: "cash",
@@ -2383,6 +2585,47 @@ export async function recordOptionalContributionDecline(
   return {
     success: true,
     declinedCount: "declinedCount" in result ? result.declinedCount : input.contribution_ids.length,
+  };
+}
+
+export async function recordContributionPaidElsewhere(
+  dormId: string,
+  payload: z.infer<typeof contributionPaidElsewhereSchema>
+) {
+  const parsed = contributionPaidElsewhereSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid paid elsewhere request." };
+  }
+
+  const input = parsed.data;
+  const result = await recordContributionBatchPayment(dormId, {
+    occupant_id: input.occupant_id,
+    contribution_ids: [],
+    declined_contribution_ids: [],
+    paid_elsewhere_contribution_ids: input.contribution_ids,
+    paid_elsewhere_location: input.location,
+    allow_overpayment_contribution_ids: [],
+    amount: 0,
+    method: "cash",
+    paid_at_iso: new Date().toISOString(),
+    allocation_target_id: null,
+    send_receipt_email: input.send_email,
+    receipt_email_override: input.email_override ?? null,
+    receipt_subject: null,
+    receipt_message: null,
+    receipt_signature: null,
+    receipt_logo_url: null,
+    cart_items: [],
+  });
+
+  if (result && "error" in result) {
+    return result;
+  }
+
+  return {
+    success: true,
+    paidElsewhereCount:
+      "paidElsewhereCount" in result ? result.paidElsewhereCount : input.contribution_ids.length,
   };
 }
 
@@ -2427,10 +2670,9 @@ export async function resendContributionReceipt(
 
   const { data: paymentEntries, error: paymentLookupError } = await supabase
     .from("ledger_entries")
-    .select("id, event_id, amount_pesos, method, posted_at, metadata")
+    .select("id, event_id, entry_type, amount_pesos, method, posted_at, metadata")
     .eq("dorm_id", dormId)
     .eq("ledger", "contributions")
-    .eq("entry_type", "payment")
     .eq("occupant_id", input.occupant_id)
     .is("voided_at", null)
     .order("posted_at", { ascending: false });
@@ -2444,6 +2686,7 @@ export async function resendContributionReceipt(
     {
       id: string;
       event_id: string | null;
+      entry_type: string | null;
       amount_pesos: number | string | null;
       method: string | null;
       posted_at: string;
@@ -2462,7 +2705,10 @@ export async function resendContributionReceipt(
     }
 
     const amountPesos = Math.abs(Number(entry.amount_pesos ?? 0));
-    if (!(amountPesos > 0)) {
+    const isPaidElsewhereEntry =
+      entry.entry_type === "adjustment" && contributionMetadata.paid_elsewhere;
+    const isPaymentEntry = entry.entry_type === "payment";
+    if (!(amountPesos > 0) || (!isPaymentEntry && !isPaidElsewhereEntry)) {
       continue;
     }
 
@@ -2485,6 +2731,10 @@ export async function resendContributionReceipt(
         entry,
         contributionMetadata,
         amountPesos: Math.abs(Number(entry.amount_pesos ?? 0)),
+        status:
+          entry.entry_type === "adjustment" && contributionMetadata.paid_elsewhere
+            ? ("paid_elsewhere" as const)
+            : ("paid" as const),
       };
     })
     .filter(
@@ -2494,6 +2744,7 @@ export async function resendContributionReceipt(
         entry: {
           id: string;
           event_id: string | null;
+          entry_type: string | null;
           amount_pesos: number | string | null;
           method: string | null;
           posted_at: string;
@@ -2501,11 +2752,12 @@ export async function resendContributionReceipt(
         };
         contributionMetadata: ContributionMetadata;
         amountPesos: number;
+        status: "paid" | "paid_elsewhere";
       } => Boolean(item)
     );
 
   if (matchedEntries.length === 0) {
-    return { error: "No recorded payment found for the selected contributions." };
+    return { error: "No recorded payment update found for the selected contributions." };
   }
 
   const { data: occupant, error: occupantError } = await supabase
@@ -2603,13 +2855,17 @@ export async function resendContributionReceipt(
   const methodValues = Array.from(
     new Set(
       matchedEntries
+        .filter((item) => item.status === "paid")
         .map((item) => item.entry.method?.trim() || "")
         .filter((value) => value.length > 0)
     )
   );
   const resolvedMethod = methodValues.length === 1 ? methodValues[0] : null;
   const totalAmountPesos = Number(
-    matchedEntries.reduce((sum, item) => sum + item.amountPesos, 0).toFixed(2)
+    matchedEntries
+      .filter((item) => item.status === "paid")
+      .reduce((sum, item) => sum + item.amountPesos, 0)
+      .toFixed(2)
   );
 
   const { sendEmail, renderContributionBatchReceiptEmail } = await import("@/lib/email");
@@ -2626,6 +2882,8 @@ export async function resendContributionReceipt(
       return {
         title: item.contributionMetadata.contribution_title,
         amountPesos: item.amountPesos,
+        status: item.status,
+        paidElsewhereLocation: item.contributionMetadata.paid_elsewhere_location,
         orderItems,
         storeSpecs: !orderItems
           ? buildStoreSpecsFromStoreItems(item.contributionMetadata.store_items)
@@ -3049,7 +3307,10 @@ export async function previewContributionBatchPaymentEmail(
   if (!input.send_receipt_email) {
     return { error: "Receipt email is disabled for this payment." };
   }
-  if (input.contribution_ids.length === 0) {
+  if (
+    input.contribution_ids.length === 0 &&
+    input.paid_elsewhere_contribution_ids.length === 0
+  ) {
     return { error: "No payable contributions selected for receipt preview." };
   }
 
@@ -3091,7 +3352,18 @@ export async function previewContributionBatchPaymentEmail(
     return { error: rawEntriesError.message };
   }
 
-  const selectedIds = new Set(input.contribution_ids);
+  const paymentContributionIds = Array.from(new Set(input.contribution_ids));
+  const paidElsewhereContributionIds = Array.from(
+    new Set(input.paid_elsewhere_contribution_ids)
+  );
+  const paidElsewhereLocation = input.paid_elsewhere_location?.trim() || null;
+  if (paidElsewhereContributionIds.length > 0 && !paidElsewhereLocation) {
+    return { error: "Provide where the occupant paid elsewhere." };
+  }
+  const selectedIds = new Set([
+    ...paymentContributionIds,
+    ...paidElsewhereContributionIds,
+  ]);
   const contributionMap = new Map<string, ContributionGroupEntry>();
 
   for (const row of rawEntries ?? []) {
@@ -3111,6 +3383,9 @@ export async function previewContributionBatchPaymentEmail(
       eventTitle: metadata.contribution_event_title,
       isOptional: metadata.is_optional,
       declined: metadata.optional_declined,
+      paidElsewhere: metadata.paid_elsewhere,
+      paidElsewhereLocation: metadata.paid_elsewhere_location,
+      paidElsewhereAt: metadata.paid_elsewhere_at,
       receiptSignature: metadata.contribution_receipt_signature,
       receiptSubject: metadata.contribution_receipt_subject,
       receiptMessage: metadata.contribution_receipt_message,
@@ -3150,6 +3425,15 @@ export async function previewContributionBatchPaymentEmail(
     if (!existing.declined && metadata.optional_declined) {
       existing.declined = true;
     }
+    if (!existing.paidElsewhere && metadata.paid_elsewhere) {
+      existing.paidElsewhere = true;
+    }
+    if (!existing.paidElsewhereLocation && metadata.paid_elsewhere_location) {
+      existing.paidElsewhereLocation = metadata.paid_elsewhere_location;
+    }
+    if (!existing.paidElsewhereAt && metadata.paid_elsewhere_at) {
+      existing.paidElsewhereAt = metadata.paid_elsewhere_at;
+    }
     if (!existing.receiptSignature && metadata.contribution_receipt_signature) {
       existing.receiptSignature = metadata.contribution_receipt_signature;
     }
@@ -3171,6 +3455,10 @@ export async function previewContributionBatchPaymentEmail(
     return { error: "No selected contributions found for this occupant." };
   }
 
+  const paidElsewhereRows = contributionRows.filter((row) =>
+    paidElsewhereContributionIds.includes(row.contributionId)
+  );
+
   const storeItemsByContribution = new Map(
     contributionRows.map((row) => [row.contributionId, row.storeItems] as const)
   );
@@ -3180,6 +3468,9 @@ export async function previewContributionBatchPaymentEmail(
   );
   const dueByContribution = new Map<string, number>();
   for (const row of contributionRows) {
+    if (paidElsewhereContributionIds.includes(row.contributionId)) {
+      continue;
+    }
     const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
     const effectiveCartItems =
       suppliedCartItems && suppliedCartItems.length > 0 ? suppliedCartItems : row.cartItems;
@@ -3195,7 +3486,7 @@ export async function previewContributionBatchPaymentEmail(
 
   const allocations = new Map(dueByContribution);
   const difference = Number((input.amount - totalDue).toFixed(2));
-  if (Math.abs(difference) >= 0.01) {
+  if (Math.abs(difference) >= 0.01 && paymentContributionIds.length > 0) {
     if (!input.allocation_target_id) {
       return { error: "Select where to apply the payment difference when amount is not exact." };
     }
@@ -3211,6 +3502,7 @@ export async function previewContributionBatchPaymentEmail(
   }
 
   const allocRows = contributionRows
+    .filter((row) => paymentContributionIds.includes(row.contributionId))
     .map((row) => {
       const suppliedCartItems = inputCartItemsByContribution.get(row.contributionId);
       const effectiveCartItems =
@@ -3227,7 +3519,7 @@ export async function previewContributionBatchPaymentEmail(
     })
     .filter((row) => row.allocation > 0);
 
-  if (!allocRows.length) {
+  if (!allocRows.length && paidElsewhereRows.length === 0) {
     return { error: "Nothing to preview after allocation." };
   }
 
@@ -3291,20 +3583,30 @@ export async function previewContributionBatchPaymentEmail(
   }
 
   const { renderContributionBatchReceiptEmail } = await import("@/lib/email");
+  const receiptRows = buildContributionBatchEmailRows({
+    orderedContributionIds: contributionRows.map((row) => row.contributionId),
+    paymentRows: allocRows.map((row) => ({
+      contributionId: row.contributionId,
+      title: row.title,
+      allocation: row.allocation,
+      storeItems: row.storeItems,
+      cartItems: row.cartItems,
+    })),
+    paidElsewhereRows: paidElsewhereRows.map((row) => ({
+      contributionId: row.contributionId,
+      title: row.title,
+      outstanding: row.outstanding,
+      storeItems: row.storeItems,
+      cartItems: row.cartItems,
+    })),
+    paidElsewhereLocation,
+  });
   const rendered = renderContributionBatchReceiptEmail({
     treasurerNameOverride: user.user_metadata?.full_name || user.email || null,
     recipientName: occupant.full_name ?? null,
     paidAtIso: input.paid_at_iso,
     method: input.method,
-    contributions: allocRows.map((row) => {
-      const orderItems = buildOrderItemsFromCart(row.cartItems, row.storeItems);
-      return {
-        title: row.title,
-        amountPesos: row.allocation,
-        orderItems,
-        storeSpecs: !orderItems ? buildStoreSpecsFromStoreItems(row.storeItems) : undefined,
-      };
-    }),
+    contributions: receiptRows,
     totalAmountPesos: allocRows.reduce((sum, row) => sum + row.allocation, 0),
     customMessage: resolvedReceiptMessage,
     subjectOverride: resolvedReceiptSubject,
