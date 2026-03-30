@@ -297,7 +297,7 @@ async function buildFinesLedgerExport(context: ExportContext): Promise<ExportPay
 
   return {
     fileName: `fines-ledger-${context.dormSlug}-${todaySuffix()}.xlsx`,
-    buffer: workbookToBuffer(workbook),
+    buffer: await workbookToBuffer(workbook),
   };
 }
 
@@ -508,7 +508,7 @@ async function buildOccupantStatementExport(context: ExportContext): Promise<Exp
 
   return {
     fileName: `occupant-statement-${context.dormSlug}-${todaySuffix()}.xlsx`,
-    buffer: workbookToBuffer(workbook),
+    buffer: await workbookToBuffer(workbook),
   };
 }
 
@@ -633,7 +633,7 @@ async function buildMaintenanceLedgerExport(context: ExportContext): Promise<Exp
 
   return {
     fileName: `maintenance-ledger-${context.dormSlug}-${todaySuffix()}.xlsx`,
-    buffer: workbookToBuffer(workbook),
+    buffer: await workbookToBuffer(workbook),
   };
 }
 
@@ -1103,7 +1103,7 @@ async function buildEventContributionExport(context: ExportContext): Promise<Exp
 
   return {
     fileName,
-    buffer: workbookToBuffer(workbook),
+    buffer: await workbookToBuffer(workbook),
   };
 }
 
@@ -1214,7 +1214,7 @@ async function buildEvaluationRankingExport(context: ExportContext): Promise<Exp
 
   return {
     fileName: `evaluation-rankings-${context.dormSlug}-${normalizeFilePart(cycle.label ?? cycle.id)}-${todaySuffix()}.xlsx`,
-    buffer: workbookToBuffer(workbook),
+    buffer: await workbookToBuffer(workbook),
   };
 }
 

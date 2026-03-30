@@ -1,7 +1,7 @@
 import "./load-env.mjs";
 
 import fs from "node:fs";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 
 const financesWorkbookPath = process.argv[2];
@@ -42,6 +42,49 @@ const clean = (value) =>
 
 const normalizeNameKey = (value) => clean(value).toLowerCase();
 
+const normalizeCellValue = (value) => {
+  if (value == null) return "";
+  if (value instanceof Date) return value;
+  if (typeof value === "object") {
+    if ("result" in value && value.result != null) return normalizeCellValue(value.result);
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((entry) => entry.text ?? "").join("");
+    }
+    if ("hyperlink" in value) return value.text ?? value.hyperlink ?? "";
+  }
+  return value;
+};
+
+const worksheetToObjects = (worksheet) => {
+  const headerRow = worksheet.getRow(1);
+  const headers = [];
+  for (let i = 1; i <= worksheet.columnCount; i += 1) {
+    headers.push(clean(normalizeCellValue(headerRow.getCell(i).value)));
+  }
+
+  const rows = [];
+  for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex += 1) {
+    const row = worksheet.getRow(rowIndex);
+    const record = {};
+    let hasValue = false;
+
+    headers.forEach((header, idx) => {
+      if (!header) return;
+      const value = normalizeCellValue(row.getCell(idx + 1).value);
+      const normalized = value ?? "";
+      if (clean(normalized) !== "") hasValue = true;
+      record[header] = normalized;
+    });
+
+    if (hasValue) {
+      rows.push(record);
+    }
+  }
+
+  return rows;
+};
+
 const { data: dorm, error: dormError } = await supabase
   .from("dorms")
   .select("id, slug")
@@ -67,10 +110,15 @@ const occupantIdByName = new Map(
   occupants.map((o) => [normalizeNameKey(o.full_name), o.id])
 );
 
-const workbook = XLSX.readFile(financesWorkbookPath, { cellDates: true });
-const sheetName = workbook.SheetNames[0];
-const sheet = workbook.Sheets[sheetName];
-const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+const workbook = new ExcelJS.Workbook();
+await workbook.xlsx.readFile(financesWorkbookPath);
+const worksheet = workbook.worksheets[0];
+if (!worksheet) {
+  console.error("Workbook has no worksheets.");
+  process.exit(1);
+}
+const sheetName = worksheet.name;
+const rows = worksheetToObjects(worksheet);
 
 console.log(`Processing ${rows.length} rows from sheet "${sheetName}"...`);
 
