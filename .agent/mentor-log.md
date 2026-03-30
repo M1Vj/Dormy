@@ -53,3 +53,9 @@
 - Fixed the contribution-detail filter row so `Reset` stays inside the control group and changed the occupant table to show the latest payment timestamp in a `Payment Date` column instead of repeating the contribution deadline per row.
 - Restored intentional extra-payment support for settled contributions by requiring an explicit warning confirmation in the batch dialog and single-payment dialog before allowing another payment to be recorded.
 - Updated settled store add-on handling so confirmed additional merch purchases append to the existing cart metadata and increase the stored charge total instead of overwriting the earlier order.
+
+## 2026-03-30
+- Added a new `paid elsewhere` contribution settlement flow for treasurers across single-payment and batch-payment dialogs, requiring a location and zeroing the remaining payable without counting the amount as collected income.
+- Stored paid-elsewhere updates as contribution adjustments with dedicated metadata (`paid_elsewhere`, location, actor, timestamp, amount) so ledger calculations, revalidation, and contribution detail pages can render the new state consistently.
+- Added a dedicated paid-elsewhere email template so occupants receive a notice showing where the contribution was marked as paid and how much Dormy payable was removed, instead of receiving a receipt.
+- Updated treasurer and officer contribution detail pages plus status filters to surface a `Paid Elsewhere` state, show the location in the UI, and use the paid-elsewhere timestamp in the `Payment Date` column when no local payment entry exists.

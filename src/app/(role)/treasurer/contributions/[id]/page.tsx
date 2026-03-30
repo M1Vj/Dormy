@@ -23,6 +23,7 @@ import {
   getContributionChargeAmount,
   getContributionCollectedAmount,
   getContributionSettlementStatus,
+  isContributionPaidElsewhere,
   isOptionalContributionDeclined,
 } from "@/lib/contribution-ledger";
 import { getCanonicalContributionCartItems } from "@/lib/contribution-store";
@@ -75,11 +76,12 @@ type OccupantWithStatus = OccupantRow & {
   payable: number;
   paid: number;
   remaining: number;
-  paymentStatus: "paid" | "partial" | "unpaid" | "declined";
+  paymentStatus: "paid" | "partial" | "unpaid" | "declined" | "paid_elsewhere";
   deadline: string | null;
   paymentDate: string | null;
   overdue: boolean;
   cartItems: CartItem[];
+  paidElsewhereLocation: string | null;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -97,6 +99,15 @@ const getRoomCode = (occupant: OccupantRow) => {
 };
 
 function StatusBadge({ status }: { status: OccupantWithStatus["paymentStatus"] }) {
+  if (status === "paid_elsewhere") {
+    return (
+      <Badge variant="outline" className="border-sky-300 text-sky-700 hover:bg-sky-50">
+        <CheckCircle className="mr-1 h-3 w-3" />
+        Paid Elsewhere
+      </Badge>
+    );
+  }
+
   if (status === "declined") {
     return (
       <Badge variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
@@ -222,6 +233,17 @@ function parseContributionMetadata(entry: EntryRow) {
         : null,
     isOptional: metadata.is_optional === true,
     optionalDeclined: metadata.optional_declined === true,
+    paidElsewhere: metadata.paid_elsewhere === true,
+    paidElsewhereLocation:
+      typeof metadata.paid_elsewhere_location === "string" &&
+      metadata.paid_elsewhere_location.trim().length > 0
+        ? metadata.paid_elsewhere_location.trim()
+        : null,
+    paidElsewhereAt:
+      typeof metadata.paid_elsewhere_at === "string" &&
+      metadata.paid_elsewhere_at.trim().length > 0
+        ? metadata.paid_elsewhere_at.trim()
+        : null,
     isStore: metadata.is_store === true,
     storeItems: Array.isArray(metadata.store_items) ? metadata.store_items : [],
     cartItems: Array.isArray(metadata.cart_items) ? metadata.cart_items : [],
@@ -379,6 +401,7 @@ export default async function EventDetailsPage({
   const occupantStatus: OccupantWithStatus[] = occupantRows.map((occupant) => {
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
     const declined = occupantEntries.some((entry) => isOptionalContributionDeclined(entry.metadata));
+    const paidElsewhere = occupantEntries.some((entry) => isContributionPaidElsewhere(entry.metadata));
 
     const rawPayable = occupantEntries.reduce(
       (sum, entry) => sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos),
@@ -386,7 +409,7 @@ export default async function EventDetailsPage({
     );
 
     const payable =
-      isStore && rawPayable <= 0 && !declined
+      isStore && rawPayable <= 0 && !declined && !paidElsewhere
         ? storeBaselineAmount
         : Number(rawPayable.toFixed(2));
 
@@ -401,6 +424,7 @@ export default async function EventDetailsPage({
       paid,
       remaining,
       declined,
+      paidElsewhere,
     });
 
     const deadline =
@@ -409,15 +433,23 @@ export default async function EventDetailsPage({
         .filter((value): value is string => Boolean(value))
         .sort()
         .at(-1) ?? contributionDeadline;
-    const paymentDate =
-      occupantEntries
+    const paymentDateCandidates = [
+      ...occupantEntries
         .filter((entry) => entry.entry_type === "payment")
-        .map((entry) => (typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0 ? entry.posted_at : null))
-        .filter((value): value is string => Boolean(value))
-        .sort()
-        .at(-1) ?? null;
+        .map((entry) =>
+          typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0
+            ? entry.posted_at
+            : null
+        ),
+      ...occupantEntries.map((entry) => parseContributionMetadata(entry).paidElsewhereAt),
+    ].filter((value): value is string => Boolean(value));
+    const paymentDate = paymentDateCandidates.sort().at(-1) ?? null;
 
-    const overdue = deadline !== null && deadline < nowIso && remaining > 0 && !declined;
+    const overdue = deadline !== null && deadline < nowIso && remaining > 0 && !declined && !paidElsewhere;
+    const paidElsewhereLocation =
+      occupantEntries
+        .map((entry) => parseContributionMetadata(entry).paidElsewhereLocation)
+        .find((value): value is string => Boolean(value && value.trim().length > 0)) ?? null;
 
     const cartItems = getCanonicalContributionCartItems(
       occupantEntries.map((entry) => ({
@@ -438,6 +470,7 @@ export default async function EventDetailsPage({
       paymentDate,
       overdue,
       cartItems,
+      paidElsewhereLocation,
     };
   });
 
@@ -607,6 +640,11 @@ export default async function EventDetailsPage({
                     <p className="text-xs text-muted-foreground">
                       Payment date: {occupant.paymentDate ? format(new Date(occupant.paymentDate), "MMM d, yyyy h:mm a") : "Not paid"}
                     </p>
+                    {occupant.paymentStatus === "paid_elsewhere" && occupant.paidElsewhereLocation ? (
+                      <p className="text-xs text-sky-700">
+                        Paid elsewhere: {occupant.paidElsewhereLocation}
+                      </p>
+                    ) : null}
 
                     <div className="flex flex-col gap-2">
                       {!isReadOnlyView ? (
@@ -696,6 +734,11 @@ export default async function EventDetailsPage({
                     <TableCell className="text-center align-top">
                       <div className="flex flex-col items-center gap-1">
                         <StatusBadge status={occupant.paymentStatus} />
+                        {occupant.paymentStatus === "paid_elsewhere" && occupant.paidElsewhereLocation ? (
+                          <p className="max-w-[12rem] text-center text-[10px] text-sky-700 [overflow-wrap:anywhere]">
+                            {occupant.paidElsewhereLocation}
+                          </p>
+                        ) : null}
                         {occupant.overdue ? (
                           <Badge variant="destructive" className="text-[10px]">
                             Overdue

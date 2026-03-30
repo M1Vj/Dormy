@@ -41,6 +41,8 @@ import { Textarea } from "@/components/ui/textarea";
 
 import {
   recordOptionalContributionDecline,
+  recordContributionPaidElsewhere,
+  previewContributionBatchPaymentEmail,
   previewTransactionReceiptEmail,
   recordTransaction,
 } from "@/app/actions/finance";
@@ -72,6 +74,8 @@ const formSchema = z.object({
   method: z.string().min(1, "Method is required"),
   note: z.string().optional(),
   declineOptionalContribution: z.boolean(),
+  markPaidElsewhere: z.boolean(),
+  paidElsewhereLocation: z.string().trim().max(160).optional(),
   sendReceiptEmail: z.boolean(),
   receiptSubject: z.string().trim().max(140).optional(),
   receiptMessage: z.string().trim().max(2000).optional(),
@@ -397,6 +401,7 @@ export function PaymentDialog({
   const [overpaymentConfirmOpen, setOverpaymentConfirmOpen] = useState(false);
   const [pendingFormValues, setPendingFormValues] = useState<PaymentFormValues | null>(null);
   const [pendingPayload, setPendingPayload] = useState<TransactionPayload | null>(null);
+  const [pendingAction, setPendingAction] = useState<"payment" | "paid_elsewhere" | null>(null);
   const [emailPreview, setEmailPreview] = useState<{
     recipient_email: string;
     subject: string;
@@ -415,6 +420,8 @@ export function PaymentDialog({
     method: "cash",
     note: "",
     declineOptionalContribution: false,
+    markPaidElsewhere: false,
+    paidElsewhereLocation: "",
     sendReceiptEmail: true,
     receiptSubject: eventTitle ? `Payment receipt: ${eventTitle}` : "Payment receipt",
     receiptMessage: "",
@@ -429,6 +436,7 @@ export function PaymentDialog({
 
   const sendReceiptEmail = form.watch("sendReceiptEmail");
   const declineOptionalContribution = form.watch("declineOptionalContribution");
+  const markPaidElsewhere = form.watch("markPaidElsewhere");
   const isOptionalContribution = metadata?.is_optional === true;
   const isStoreContribution = metadata?.is_store === true;
 
@@ -523,6 +531,7 @@ export function PaymentDialog({
       toast.success("Payment recorded");
       setConfirmOpen(false);
       setPendingPayload(null);
+      setPendingAction(null);
       setEmailPreview(null);
       setOpen(false);
       form.reset(defaultFormValues);
@@ -563,11 +572,61 @@ export function PaymentDialog({
       );
       setConfirmOpen(false);
       setPendingPayload(null);
+      setPendingAction(null);
       setEmailPreview(null);
       setOpen(false);
       form.reset(defaultFormValues);
     } catch {
       toast.error("Failed to update optional contribution.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function submitPaidElsewhere(values: PaymentFormValues) {
+    const contributionId =
+      typeof metadata?.contribution_id === "string" && metadata.contribution_id.trim().length > 0
+        ? metadata.contribution_id.trim()
+        : null;
+    const location = values.paidElsewhereLocation?.trim() || "";
+
+    if (!contributionId) {
+      toast.error("Contribution ID is missing for this record.");
+      return;
+    }
+
+    if (!location) {
+      form.setError("paidElsewhereLocation", {
+        type: "manual",
+        message: "Enter where the occupant paid.",
+      });
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      const response = await recordContributionPaidElsewhere(dormId, {
+        occupant_id: occupantId,
+        contribution_ids: [contributionId],
+        location,
+        send_email: values.sendReceiptEmail,
+        email_override: null,
+      });
+
+      if (response && "error" in response) {
+        toast.error(response.error);
+        return;
+      }
+
+      toast.success("Contribution marked as paid elsewhere.");
+      setConfirmOpen(false);
+      setPendingPayload(null);
+      setPendingAction(null);
+      setEmailPreview(null);
+      setOpen(false);
+      form.reset(defaultFormValues);
+    } catch {
+      toast.error("Failed to save paid elsewhere update.");
     } finally {
       setIsPending(false);
     }
@@ -596,6 +655,78 @@ export function PaymentDialog({
       return;
     }
 
+    if (values.markPaidElsewhere) {
+      if (!values.sendReceiptEmail) {
+        await submitPaidElsewhere(values);
+        return;
+      }
+
+      const contributionId =
+        typeof metadata?.contribution_id === "string" && metadata.contribution_id.trim().length > 0
+          ? metadata.contribution_id.trim()
+          : null;
+      const location = values.paidElsewhereLocation?.trim() || "";
+
+      if (!contributionId) {
+        toast.error("Contribution ID is missing for this record.");
+        return;
+      }
+
+      if (!location) {
+        form.setError("paidElsewhereLocation", {
+          type: "manual",
+          message: "Enter where the occupant paid.",
+        });
+        return;
+      }
+
+      setIsPreparingPreview(true);
+      try {
+        const preview = await previewContributionBatchPaymentEmail(dormId, {
+          occupant_id: occupantId,
+          contribution_ids: [],
+          declined_contribution_ids: [],
+          paid_elsewhere_contribution_ids: [contributionId],
+          paid_elsewhere_location: location,
+          allow_overpayment_contribution_ids: [],
+          amount: 0,
+          method: "cash",
+          paid_at_iso: new Date().toISOString(),
+          allocation_target_id: null,
+          send_receipt_email: true,
+          receipt_email_override: null,
+          receipt_subject: null,
+          receipt_message: null,
+          receipt_signature: null,
+          receipt_logo_url: null,
+          cart_items: [],
+        });
+        if (preview && "error" in preview) {
+          toast.error(preview.error);
+          return;
+        }
+        if (!preview || !("success" in preview) || !preview.success) {
+          toast.error("Failed to generate email preview.");
+          return;
+        }
+
+        setPendingFormValues(values);
+        setPendingPayload(null);
+        setPendingAction("paid_elsewhere");
+        setEmailPreview({
+          recipient_email: preview.recipient_email,
+          subject: preview.subject,
+          text: preview.text,
+        });
+        setConfirmOpen(true);
+      } catch {
+        toast.error("Failed to generate email preview.");
+      } finally {
+        setIsPreparingPreview(false);
+      }
+      return;
+    }
+
     const payload = buildPayload(values, options);
     if (!payload) return;
 
@@ -617,6 +748,8 @@ export function PaymentDialog({
       }
 
       setPendingPayload(payload);
+      setPendingFormValues(null);
+      setPendingAction("payment");
       setEmailPreview({
         recipient_email: preview.recipient_email,
         subject: preview.subject,
@@ -631,6 +764,11 @@ export function PaymentDialog({
   }
 
   async function handleConfirmSubmit() {
+    if (pendingAction === "paid_elsewhere" && pendingFormValues) {
+      await submitPaidElsewhere(pendingFormValues);
+      return;
+    }
+
     if (!pendingPayload) {
       toast.error("No pending payment to submit.");
       return;
@@ -645,6 +783,7 @@ export function PaymentDialog({
       setOverpaymentConfirmOpen(false);
       setPendingFormValues(null);
       setPendingPayload(null);
+      setPendingAction(null);
       setEmailPreview(null);
       form.reset(defaultFormValues);
     }
@@ -722,6 +861,14 @@ export function PaymentDialog({
                             const nextValue = Boolean(checked);
                             field.onChange(nextValue);
                             if (nextValue) {
+                              form.setValue("markPaidElsewhere", false, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                              form.setValue("paidElsewhereLocation", "", {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
                               form.setValue("amount", 0, { shouldDirty: true, shouldValidate: true });
                               form.setValue("cartItems", [], { shouldDirty: true, shouldValidate: true });
                             }
@@ -742,6 +889,75 @@ export function PaymentDialog({
                 />
               ) : null}
 
+              {isContribution ? (
+                <FormField
+                  control={form.control}
+                  name="markPaidElsewhere"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3 rounded-xl border bg-sky-50/70 p-4 dark:bg-sky-950/20">
+                      <div className="flex items-start gap-3">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={(checked) => {
+                              const nextValue = Boolean(checked);
+                              field.onChange(nextValue);
+                              if (nextValue) {
+                                form.setValue("declineOptionalContribution", false, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                form.setValue("amount", 0, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                                form.setValue("cartItems", [], {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                              } else {
+                                form.setValue("paidElsewhereLocation", "", {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                              }
+                            }}
+                            className="mt-1"
+                          />
+                        </FormControl>
+                        <div className="space-y-1">
+                          <FormLabel className="leading-none">
+                            Occupant paid this contribution somewhere else
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            This removes the remaining payable for this contribution only, does not record income, and sends an update email instead of a receipt.
+                          </p>
+                        </div>
+                      </div>
+
+                      {field.value ? (
+                        <FormField
+                          control={form.control}
+                          name="paidElsewhereLocation"
+                          render={({ field: locationField }) => (
+                            <FormItem>
+                              <FormLabel>Where was this paid?</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="e.g. COFILANG Treasurer, officer booth, external list"
+                                  {...locationField}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ) : null}
+                    </FormItem>
+                  )}
+                />
+              ) : null}
+
               <FormField
                 control={form.control}
                 name="amount"
@@ -753,9 +969,9 @@ export function PaymentDialog({
                         type="number"
                         step="0.01"
                         {...field}
-                        readOnly={metadata?.is_store === true || declineOptionalContribution}
+                        readOnly={metadata?.is_store === true || declineOptionalContribution || markPaidElsewhere}
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        className={metadata?.is_store === true || declineOptionalContribution ? "bg-muted font-mono" : ""}
+                        className={metadata?.is_store === true || declineOptionalContribution || markPaidElsewhere ? "bg-muted font-mono" : ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -820,6 +1036,8 @@ export function PaymentDialog({
                             ? `Sends an email confirming the occupant ${getOptionalContributionDecisionLabel({
                                 isStore: isStoreContribution,
                               })}.`
+                            : markPaidElsewhere
+                            ? "Uses the contribution receipt template and adds the paid-elsewhere location to the email."
                             : isContribution
                             ? "Uses the global contribution receipt template."
                             : "Sends a receipt to the occupant email on file. Customize the subject/message, or draft with AI."}
@@ -829,7 +1047,7 @@ export function PaymentDialog({
                   )}
                 />
 
-                {sendReceiptEmail && !declineOptionalContribution ? (
+                {sendReceiptEmail && !declineOptionalContribution && !markPaidElsewhere ? (
                   <div className="mt-4 space-y-4 rounded-xl border bg-background/80 p-4">
                     {isContribution ? (
                       <>
@@ -917,7 +1135,7 @@ export function PaymentDialog({
               </div>
               <DialogFooter className="pt-1">
                 <Button type="submit" isLoading={isPending || isPreparingPreview}>
-                  {declineOptionalContribution ? "Save Decision" : "Submit Payment"}
+                  {declineOptionalContribution || markPaidElsewhere ? "Save Update" : "Submit Payment"}
                 </Button>
               </DialogFooter>
             </form>
@@ -968,7 +1186,9 @@ export function PaymentDialog({
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Confirm Receipt Email</DialogTitle>
             <DialogDescription className="text-sm">
-              Review the exact email that will be sent before finalizing this payment.
+              {pendingAction === "paid_elsewhere"
+                ? "Review the exact email that will be sent before saving this paid-elsewhere update."
+                : "Review the exact email that will be sent before finalizing this payment."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

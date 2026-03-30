@@ -65,6 +65,8 @@ type BatchPaymentPayload = {
   occupant_id: string;
   contribution_ids: string[];
   declined_contribution_ids: string[];
+  paid_elsewhere_contribution_ids: string[];
+  paid_elsewhere_location: string | null;
   allow_overpayment_contribution_ids: string[];
   amount: number;
   method: "cash" | "gcash";
@@ -141,12 +143,15 @@ export function ContributionBatchPaymentDialog({
     setOccupantIdRaw(newId);
     setSelectedContributionIds([]);
     setDeclinedContributionIds([]);
+    setPaidElsewhereContributionIds([]);
     setConfirmedSettledContributionIds([]);
     setAmount(0);
     setAllocationTargetId("");
   }, []);
   const [selectedContributionIds, setSelectedContributionIds] = useState<string[]>([]);
   const [declinedContributionIds, setDeclinedContributionIds] = useState<string[]>([]);
+  const [paidElsewhereContributionIds, setPaidElsewhereContributionIds] = useState<string[]>([]);
+  const [paidElsewhereLocation, setPaidElsewhereLocation] = useState("");
   const [amount, setAmount] = useState<number>(0);
   const [method, setMethod] = useState<"cash" | "gcash">("cash");
   const [paidAtLocal, setPaidAtLocal] = useState(nowLocalDateTimeValue());
@@ -222,10 +227,16 @@ export function ContributionBatchPaymentDialog({
     (
       selected: ContributionOption[],
       carts: Record<string, StoreCartItem[]> = storeCartItems,
-      declinedIds: string[] = declinedContributionIds
+      declinedIds: string[] = declinedContributionIds,
+      paidElsewhereIds: string[] = paidElsewhereContributionIds
     ) => {
       const nonStoreTotal = selected
-        .filter((contribution) => !contribution.isStore && !declinedIds.includes(contribution.id))
+        .filter(
+          (contribution) =>
+            !contribution.isStore &&
+            !declinedIds.includes(contribution.id) &&
+            !paidElsewhereIds.includes(contribution.id)
+        )
         .reduce((sum, contribution) => {
           const remaining = occupantId
             ? (occupantContributionRemaining?.[`${occupantId}:${contribution.id}`] ?? 0)
@@ -234,7 +245,12 @@ export function ContributionBatchPaymentDialog({
         }, 0);
 
       const storeTotal = selected
-        .filter((contribution) => contribution.isStore && !declinedIds.includes(contribution.id))
+        .filter(
+          (contribution) =>
+            contribution.isStore &&
+            !declinedIds.includes(contribution.id) &&
+            !paidElsewhereIds.includes(contribution.id)
+        )
         .reduce((sum, contribution) => {
           const cartSubtotal = getStoreCartSubtotal(contribution.id, carts);
           const fallbackAmount = getStoreFallbackAmount(contribution);
@@ -243,7 +259,15 @@ export function ContributionBatchPaymentDialog({
 
       return Number((nonStoreTotal + storeTotal).toFixed(2));
     },
-    [declinedContributionIds, getStoreCartSubtotal, getStoreFallbackAmount, occupantId, occupantContributionRemaining, storeCartItems]
+    [
+      declinedContributionIds,
+      getStoreCartSubtotal,
+      getStoreFallbackAmount,
+      occupantId,
+      occupantContributionRemaining,
+      paidElsewhereContributionIds,
+      storeCartItems,
+    ]
   );
 
   const hasAnyStoreContributions = useMemo(
@@ -257,54 +281,87 @@ export function ContributionBatchPaymentDialog({
   );
 
   const amountDifference = useMemo(() => Number((amount - computedTotal).toFixed(2)), [amount, computedTotal]);
-  const onlyDeclinesSelected =
+  const onlySpecialSelections =
     selectedContributionIds.length > 0 &&
-    selectedContributionIds.every((contributionId) => declinedContributionIds.includes(contributionId));
+    selectedContributionIds.every(
+      (contributionId) =>
+        declinedContributionIds.includes(contributionId) ||
+        paidElsewhereContributionIds.includes(contributionId)
+    );
+  const selectedDirectPaymentCount = selectedContributionIds.filter(
+    (contributionId) =>
+      !declinedContributionIds.includes(contributionId) &&
+      !paidElsewhereContributionIds.includes(contributionId)
+  ).length;
 
   const previewRows = useMemo(() => {
-    if (!selectedContributions.length) return [] as Array<{ title: string; amount: number }>;
+    if (!selectedContributions.length) {
+      return [] as Array<{ title: string; amount: number; status: "paid" | "declined" | "paid_elsewhere" }>;
+    }
     const rows = selectedContributions.map((contribution) => {
+      if (declinedContributionIds.includes(contribution.id)) {
+        return {
+          id: contribution.id,
+          title: contribution.title,
+          amount: 0,
+          status: "declined" as const,
+        };
+      }
+
+      if (paidElsewhereContributionIds.includes(contribution.id)) {
+        const remaining = occupantId
+          ? (getOccupantRemaining(contribution.id) ?? 0)
+          : contribution.remaining;
+        return {
+          id: contribution.id,
+          title: contribution.title,
+          amount: contribution.isStore
+            ? getStoreFallbackAmount(contribution)
+            : Math.max(0, remaining),
+          status: "paid_elsewhere" as const,
+        };
+      }
+
       if (contribution.isStore) {
         const cartSubtotal = getStoreCartSubtotal(contribution.id);
         return {
           id: contribution.id,
           title: contribution.title,
           amount: cartSubtotal > 0 ? cartSubtotal : getStoreFallbackAmount(contribution),
+          status: "paid" as const,
         };
       }
 
       const remaining = occupantId
         ? (getOccupantRemaining(contribution.id) ?? 0)
         : contribution.remaining;
-      if (declinedContributionIds.includes(contribution.id)) {
-        return {
-          id: contribution.id,
-          title: contribution.title,
-          amount: 0,
-        };
-      }
       return {
         id: contribution.id,
         title: contribution.title,
         amount: Math.max(0, remaining),
+        status: "paid" as const,
       };
     });
 
     if (Math.abs(amountDifference) < 0.01) {
-      return rows.map((row) => ({ title: row.title, amount: row.amount }));
+      return rows.map((row) => ({ title: row.title, amount: row.amount, status: row.status }));
     }
 
     if (!allocationTargetId) {
-      return rows.map((row) => ({ title: row.title, amount: row.amount }));
+      return rows.map((row) => ({ title: row.title, amount: row.amount, status: row.status }));
     }
 
     return rows.map((row) => {
       if (row.id !== allocationTargetId) {
-        return { title: row.title, amount: row.amount };
+        return { title: row.title, amount: row.amount, status: row.status };
       }
-      return { title: row.title, amount: Number((row.amount + amountDifference).toFixed(2)) };
+      return {
+        title: row.title,
+        amount: Number((row.amount + amountDifference).toFixed(2)),
+        status: row.status,
+      };
     });
-  }, [allocationTargetId, amountDifference, declinedContributionIds, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
+  }, [allocationTargetId, amountDifference, declinedContributionIds, paidElsewhereContributionIds, selectedContributions, occupantId, getOccupantRemaining, getStoreCartSubtotal, getStoreFallbackAmount]);
 
   const applyContributionSelection = useCallback(
     (id: string, checked: boolean) => {
@@ -323,6 +380,7 @@ export function ContributionBatchPaymentDialog({
 
       if (!checked) {
         setDeclinedContributionIds((current) => current.filter((value) => value !== id));
+        setPaidElsewhereContributionIds((current) => current.filter((value) => value !== id));
         setConfirmedSettledContributionIds((current) => current.filter((value) => value !== id));
       }
     },
@@ -368,10 +426,39 @@ export function ContributionBatchPaymentDialog({
       : declinedContributionIds.filter((value) => value !== id);
 
     setDeclinedContributionIds(next);
+    if (checked) {
+      setPaidElsewhereContributionIds((current) => current.filter((value) => value !== id));
+    }
     const nextSelected = contributions.filter((contribution) => selectedContributionIds.includes(contribution.id));
-    setAmount(computeAmountForSelection(nextSelected, storeCartItems, next));
+    setAmount(computeAmountForSelection(nextSelected, storeCartItems, next, paidElsewhereContributionIds.filter((value) => value !== id)));
     if (checked && allocationTargetId === id) {
       setAllocationTargetId("");
+    }
+  };
+
+  const togglePaidElsewhereContribution = (id: string, checked: boolean) => {
+    const next = checked
+      ? Array.from(new Set([...paidElsewhereContributionIds, id]))
+      : paidElsewhereContributionIds.filter((value) => value !== id);
+
+    setPaidElsewhereContributionIds(next);
+    if (checked) {
+      setDeclinedContributionIds((current) => current.filter((value) => value !== id));
+    }
+    const nextSelected = contributions.filter((contribution) => selectedContributionIds.includes(contribution.id));
+    setAmount(
+      computeAmountForSelection(
+        nextSelected,
+        storeCartItems,
+        declinedContributionIds.filter((value) => value !== id),
+        next
+      )
+    );
+    if (checked && allocationTargetId === id) {
+      setAllocationTargetId("");
+    }
+    if (!checked && next.length === 0) {
+      setPaidElsewhereLocation("");
     }
   };
 
@@ -381,6 +468,8 @@ export function ContributionBatchPaymentDialog({
       setOccupantIdRaw(resolvedPrefilledOccupantId);
       setSelectedContributionIds([]);
       setDeclinedContributionIds([]);
+      setPaidElsewhereContributionIds([]);
+      setPaidElsewhereLocation("");
       setAmount(0);
       setAllocationTargetId("");
       setPaidAtLocal(nowLocalDateTimeValue());
@@ -406,8 +495,13 @@ export function ContributionBatchPaymentDialog({
       return null;
     }
 
-    if (amount <= 0 && declinedContributionIds.length === 0) {
+    if (amount <= 0 && declinedContributionIds.length === 0 && paidElsewhereContributionIds.length === 0) {
       toast.error("Amount must be greater than zero.");
+      return null;
+    }
+
+    if (paidElsewhereContributionIds.length > 0 && !paidElsewhereLocation.trim()) {
+      toast.error("Enter where the occupant paid elsewhere.");
       return null;
     }
 
@@ -424,17 +518,34 @@ export function ContributionBatchPaymentDialog({
 
     // Use global templates for batch receipt emails
     const selectedContributionSet = new Set(
-      selectedContributionIds.filter((id) => !declinedContributionIds.includes(id))
+      selectedContributionIds.filter(
+        (id) =>
+          !declinedContributionIds.includes(id) &&
+          !paidElsewhereContributionIds.includes(id)
+      )
     );
 
     const payload: BatchPaymentPayload = {
       occupant_id: occupantId,
-      contribution_ids: selectedContributionIds.filter((id) => !declinedContributionIds.includes(id)),
-      declined_contribution_ids: declinedContributionIds,
-      allow_overpayment_contribution_ids: confirmedSettledContributionIds.filter(
-        (id) => selectedContributionSet.has(id) && !declinedContributionIds.includes(id)
+      contribution_ids: selectedContributionIds.filter(
+        (id) =>
+          !declinedContributionIds.includes(id) &&
+          !paidElsewhereContributionIds.includes(id)
       ),
-      amount: onlyDeclinesSelected ? 0 : amount,
+      declined_contribution_ids: declinedContributionIds,
+      paid_elsewhere_contribution_ids: paidElsewhereContributionIds,
+      paid_elsewhere_location:
+        paidElsewhereContributionIds.length > 0 ? paidElsewhereLocation.trim() || null : null,
+      allow_overpayment_contribution_ids: confirmedSettledContributionIds.filter(
+        (id) =>
+          selectedContributionSet.has(id) &&
+          !declinedContributionIds.includes(id) &&
+          !paidElsewhereContributionIds.includes(id)
+      ),
+      amount:
+        onlySpecialSelections
+          ? 0
+          : amount,
       method,
       paid_at_iso: paidAt.toISOString(),
       allocation_target_id: allocationTargetId || null,
@@ -499,7 +610,14 @@ export function ContributionBatchPaymentDialog({
   };
 
   const handleProceedToConfirmation = async () => {
-    if (computedTotal <= 0 && declinedContributionIds.length > 0) {
+    if (
+      computedTotal <= 0 &&
+      (declinedContributionIds.length > 0 || paidElsewhereContributionIds.length > 0)
+    ) {
+      if (sendReceiptEmail && paidElsewhereContributionIds.length > 0) {
+        await processProceedToConfirmation();
+        return;
+      }
       const payload = buildPayload();
       if (!payload) return;
       await submitPayment(payload);
@@ -574,7 +692,7 @@ export function ContributionBatchPaymentDialog({
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Record Contribution Payment</DialogTitle>
             <DialogDescription className="text-sm">
-              One payment can cover multiple contributions, and optional ones can be marked as not paid or not availed for this occupant.
+              One payment can cover multiple contributions, and selected items can also be marked as declined or paid elsewhere for this occupant.
             </DialogDescription>
           </DialogHeader>
 
@@ -623,6 +741,7 @@ export function ContributionBatchPaymentDialog({
                   contributions.map((contribution) => {
                     const checked = selectedContributionIds.includes(contribution.id);
                     const declined = declinedContributionIds.includes(contribution.id);
+                    const paidElsewhere = paidElsewhereContributionIds.includes(contribution.id);
                     const occupantRemaining = occupantId
                       ? (getOccupantRemaining(contribution.id) ?? 0)
                       : null;
@@ -658,6 +777,7 @@ export function ContributionBatchPaymentDialog({
                               {contribution.isOptional ? <Badge variant="secondary">Optional</Badge> : null}
                               {contribution.isStore ? <Badge variant="outline">Store</Badge> : null}
                               {declined ? <Badge variant="outline" className="border-amber-300 text-amber-700">Declined</Badge> : null}
+                              {paidElsewhere ? <Badge variant="outline" className="border-sky-300 text-sky-700">Paid Elsewhere</Badge> : null}
                               {isSettledForOccupant ? <Badge variant="outline" className="border-emerald-300 text-emerald-700">Settled</Badge> : null}
                             </div>
                             {occupantId ? (
@@ -694,6 +814,8 @@ export function ContributionBatchPaymentDialog({
                                   <p>
                                     {declined ? (
                                       <span className="font-semibold text-amber-700">Remaining will be set to zero.</span>
+                                    ) : paidElsewhere ? (
+                                      <span className="font-semibold text-sky-700">Remaining will be set to zero.</span>
                                     ) : (
                                       <>
                                         Remaining: <span className="font-semibold text-foreground">{formatPesos(getOccupantRemaining(contribution.id) ?? 0)}</span>
@@ -712,6 +834,12 @@ export function ContributionBatchPaymentDialog({
                                       ? "No payment will be recorded for this item."
                                       : "No payment will be recorded for this contribution."}
                                   </p>
+                                ) : paidElsewhere ? (
+                                  <p className="font-medium text-sky-700">
+                                    {contribution.isStore
+                                      ? "This item will be marked as paid elsewhere."
+                                      : "This contribution will be marked as paid elsewhere."}
+                                  </p>
                                 ) : null}
                               </div>
                             ) : (
@@ -719,23 +847,48 @@ export function ContributionBatchPaymentDialog({
                             )}
                           </div>
                         </label>
-                        {checked && contribution.isOptional && !isSettledForOccupant ? (
-                          <div className="mt-3 rounded-md border bg-amber-50/60 p-3 dark:bg-amber-950/20">
-                            <label className="flex items-start gap-3 text-sm">
-                              <Checkbox
-                                checked={declined}
-                                onCheckedChange={(value) => toggleDeclinedContribution(contribution.id, Boolean(value))}
-                                className="mt-0.5"
-                              />
-                              <div className="space-y-1">
-                                <span className="font-medium">
-                                  {contribution.isStore ? "Occupant will not avail this optional item" : "Occupant will not pay this optional contribution"}
-                                </span>
-                                <p className="text-xs text-muted-foreground">
-                                  This only affects this contribution and removes it from the payment total.
-                                </p>
+                        {checked && !isSettledForOccupant ? (
+                          <div className="mt-3 space-y-2">
+                            {contribution.isOptional ? (
+                              <div className="rounded-md border bg-amber-50/60 p-3 dark:bg-amber-950/20">
+                                <label className="flex items-start gap-3 text-sm">
+                                  <Checkbox
+                                    checked={declined}
+                                    onCheckedChange={(value) =>
+                                      toggleDeclinedContribution(contribution.id, Boolean(value))
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <div className="space-y-1">
+                                    <span className="font-medium">
+                                      {contribution.isStore ? "Occupant will not avail this optional item" : "Occupant will not pay this optional contribution"}
+                                    </span>
+                                    <p className="text-xs text-muted-foreground">
+                                      This only affects this contribution and removes it from the payment total.
+                                    </p>
+                                  </div>
+                                </label>
                               </div>
-                            </label>
+                            ) : null}
+                            <div className="rounded-md border bg-sky-50/60 p-3 dark:bg-sky-950/20">
+                              <label className="flex items-start gap-3 text-sm">
+                                <Checkbox
+                                  checked={paidElsewhere}
+                                  onCheckedChange={(value) =>
+                                    togglePaidElsewhereContribution(contribution.id, Boolean(value))
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <div className="space-y-1">
+                                  <span className="font-medium">
+                                    Occupant paid this contribution somewhere else
+                                  </span>
+                                  <p className="text-xs text-muted-foreground">
+                                    This removes the remaining balance for this contribution and sends an update email instead of counting income.
+                                  </p>
+                                </div>
+                              </label>
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -750,12 +903,17 @@ export function ContributionBatchPaymentDialog({
                     Declined: {declinedContributionIds.length}
                   </Badge>
                 ) : null}
+                {paidElsewhereContributionIds.length > 0 ? (
+                  <Badge variant="secondary" className="bg-sky-500/10 text-sky-700 dark:text-sky-400">
+                    Paid Elsewhere: {paidElsewhereContributionIds.length}
+                  </Badge>
+                ) : null}
                 <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Exact Total: ₱{computedTotal.toFixed(2)}</Badge>
               </div>
             </div>
 
             {/* Store Cart Builder — per selected store contribution */}
-            {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore && !declinedContributionIds.includes(c.id)).map((contribution) => {
+            {hasAnyStoreContributions && selectedContributions.filter((c) => c.isStore && !declinedContributionIds.includes(c.id) && !paidElsewhereContributionIds.includes(c.id)).map((contribution) => {
               const cartForContribution = storeCartItems[contribution.id] || [];
               const items = normalizeStoreItems(contribution.storeItems || []);
               const computeSubtotal = (itemId: string, quantity: number, options: unknown) =>
@@ -951,10 +1109,10 @@ export function ContributionBatchPaymentDialog({
                   type="number"
                   min="0"
                   step="0.01"
-                  value={onlyDeclinesSelected ? 0 : amount}
-                  readOnly={onlyDeclinesSelected}
+                  value={onlySpecialSelections ? 0 : amount}
+                  readOnly={onlySpecialSelections}
                   onChange={(event) => setAmount(parseFloat(event.target.value) || 0)}
-                  className={onlyDeclinesSelected ? "bg-muted font-mono" : ""}
+                  className={onlySpecialSelections ? "bg-muted font-mono" : ""}
                 />
               </div>
               <div className="space-y-2">
@@ -963,7 +1121,7 @@ export function ContributionBatchPaymentDialog({
               </div>
             </div>
 
-            {Math.abs(amountDifference) >= 0.01 && !onlyDeclinesSelected ? (
+            {Math.abs(amountDifference) >= 0.01 && !onlySpecialSelections ? (
               <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
                 <p className="text-xs font-medium text-amber-700">
                   Amount difference: {amountDifference > 0 ? "+" : ""}₱{amountDifference.toFixed(2)}
@@ -986,11 +1144,39 @@ export function ContributionBatchPaymentDialog({
               </div>
             ) : null}
 
+            {paidElsewhereContributionIds.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50/70 p-3">
+                <Label>Where was this paid?</Label>
+                <Input
+                  value={paidElsewhereLocation}
+                  onChange={(event) => setPaidElsewhereLocation(event.target.value)}
+                  placeholder="e.g. COFILANG Treasurer, officer booth, external list"
+                />
+                <p className="text-xs text-muted-foreground">
+                  This location will be shown in the app and included in the update email.
+                </p>
+              </div>
+            ) : null}
+
             <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <Label className="text-sm">Receipt Email</Label>
-                  <p className="text-xs text-muted-foreground">Send one receipt containing all selected contributions.</p>
+                  <Label className="text-sm">
+                    {onlySpecialSelections && declinedContributionIds.length > 0 && paidElsewhereContributionIds.length === 0
+                      ? "Email Update"
+                      : "Receipt Email"}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {onlySpecialSelections
+                      ? paidElsewhereContributionIds.length > 0
+                        ? "Send one receipt-style update that includes the paid-elsewhere items and their reported location."
+                        : "Send update emails for declined optional contributions."
+                      : selectedDirectPaymentCount > 0 && declinedContributionIds.length > 0
+                      ? "Send one receipt for recorded payments. Declined optional items will still be sent as a separate update."
+                      : selectedDirectPaymentCount > 0 && paidElsewhereContributionIds.length > 0
+                      ? "Send one receipt that includes both treasurer-recorded payments and paid-elsewhere items."
+                      : "Send one receipt containing all selected contributions."}
+                  </p>
                 </div>
                 <Checkbox checked={sendReceiptEmail} onCheckedChange={(value) => setSendReceiptEmail(Boolean(value))} />
               </div>
@@ -1018,13 +1204,52 @@ export function ContributionBatchPaymentDialog({
                     <div className="space-y-1 text-xs">
                       {previewRows.map((row, index) => (
                         <div key={`${row.title}-${index}`} className="flex justify-between gap-4">
-                          <span className="truncate">{row.title}</span>
+                          <div className="min-w-0">
+                            <span className="truncate">{row.title}</span>
+                            <span className="ml-2 text-[11px] text-muted-foreground">
+                              {row.status === "paid_elsewhere"
+                                ? "Paid elsewhere"
+                                : row.status === "declined"
+                                ? "Declined"
+                                : "Paid"}
+                            </span>
+                          </div>
                           <span>₱{Math.max(0, row.amount).toFixed(2)}</span>
                         </div>
                       ))}
-                      <div className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold">
-                        <span>Total</span>
-                        <span>₱{amount.toFixed(2)}</span>
+                      <div className="mt-2 border-t pt-2 text-sm font-semibold">
+                        {paidElsewhereContributionIds.length > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>Paid to Treasurer</span>
+                              <span>₱{amount.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Paid Elsewhere</span>
+                              <span>
+                                ₱
+                                {previewRows
+                                  .filter((row) => row.status === "paid_elsewhere")
+                                  .reduce((sum, row) => sum + Math.max(0, row.amount), 0)
+                                  .toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Total Covered</span>
+                              <span>
+                                ₱
+                                {previewRows
+                                  .reduce((sum, row) => sum + Math.max(0, row.amount), 0)
+                                  .toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between">
+                            <span>Total</span>
+                            <span>₱{amount.toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -461,6 +461,8 @@ export function renderContributionBatchReceiptEmail(input: {
   contributions: Array<{
     title: string;
     amountPesos: number;
+    status?: "paid" | "paid_elsewhere";
+    paidElsewhereLocation?: string | null;
     orderItems?: Array<{
       itemName: string;
       options: string[];
@@ -482,14 +484,33 @@ export function renderContributionBatchReceiptEmail(input: {
     ? input.paidAtIso
     : formatDateTimeInAppTimeZone(paidAt);
 
-  const safeRows = input.contributions.filter((item) => item.amountPesos > 0);
+  const safeRows = input.contributions
+    .filter((item) => item.amountPesos > 0)
+    .map((item) => ({
+      ...item,
+      status: item.status === "paid_elsewhere" ? "paid_elsewhere" : "paid",
+      paidElsewhereLocation: item.paidElsewhereLocation?.trim() || null,
+    }));
+  const hasPaidElsewhereRows = safeRows.some((item) => item.status === "paid_elsewhere");
+  const paidToTreasurerTotal = Number(input.totalAmountPesos.toFixed(2));
+  const paidElsewhereTotal = Number(
+    safeRows
+      .filter((item) => item.status === "paid_elsewhere")
+      .reduce((sum, item) => sum + item.amountPesos, 0)
+      .toFixed(2)
+  );
+  const updatedTotal = Number(
+    safeRows.reduce((sum, item) => sum + item.amountPesos, 0).toFixed(2)
+  );
   const greeting = input.recipientName?.trim()
     ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
     : `<p style="margin:0 0 12px 0;">Hi,</p>`;
 
   const messageHtml = input.customMessage?.trim()
     ? textToHtml(input.customMessage)
-    : `<p style="margin:0 0 12px 0;">We received your payment below. Thank you.</p>`;
+    : hasPaidElsewhereRows
+      ? `<p style="margin:0 0 12px 0;">We recorded the contribution update below. Items marked as paid elsewhere include the reported payment location.</p>`
+      : `<p style="margin:0 0 12px 0;">We received your payment below. Thank you.</p>`;
 
   const logoHtml = input.logoUrl?.trim()
     ? `<div style="margin:0 0 16px 0; text-align:center;"><img src="${escapeHtml(input.logoUrl.trim())}" alt="Logo" style="max-height:96px; width:auto;"/></div>`
@@ -499,7 +520,8 @@ export function renderContributionBatchReceiptEmail(input: {
     <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
       <thead>
         <tr>
-          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Paid</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Status</th>
           <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Amount</th>
         </tr>
       </thead>
@@ -515,6 +537,12 @@ export function renderContributionBatchReceiptEmail(input: {
                     storeSpecs: item.storeSpecs,
                   })}
                 </td>
+                <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">
+                  <div style="font-weight:600;">${item.status === "paid_elsewhere" ? "Paid elsewhere" : "Paid to treasurer"}</div>
+                  ${item.status === "paid_elsewhere" && item.paidElsewhereLocation
+                    ? `<div style="margin-top:4px; font-size:12px; color:#64748b;">${escapeHtml(item.paidElsewhereLocation)}</div>`
+                    : ""}
+                </td>
                 <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
               </tr>
             `.trim()
@@ -522,10 +550,27 @@ export function renderContributionBatchReceiptEmail(input: {
       .join("")}
       </tbody>
       <tfoot>
-        <tr>
-          <td style="padding:12px 0 0 0; color:#334155; font-weight:700;">Total</td>
-          <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(input.totalAmountPesos)}</td>
-        </tr>
+        ${hasPaidElsewhereRows
+          ? `
+            <tr>
+              <td colspan="2" style="padding:12px 0 0 0; color:#334155; font-weight:700;">Paid to Treasurer</td>
+              <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(paidToTreasurerTotal)}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:8px 0 0 0; color:#334155; font-weight:700;">Paid Elsewhere</td>
+              <td style="padding:8px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(paidElsewhereTotal)}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:8px 0 0 0; color:#334155; font-weight:700;">Total Covered</td>
+              <td style="padding:8px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(updatedTotal)}</td>
+            </tr>
+          `.trim()
+          : `
+            <tr>
+              <td colspan="2" style="padding:12px 0 0 0; color:#334155; font-weight:700;">Total</td>
+              <td style="padding:12px 0 0 0; color:#0f172a; text-align:right; font-weight:700;">${normalizePesos(paidToTreasurerTotal)}</td>
+            </tr>
+          `.trim()}
       </tfoot>
     </table>
   `.trim();
@@ -545,7 +590,7 @@ export function renderContributionBatchReceiptEmail(input: {
           <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b; width:140px;">Date</td>
           <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${escapeHtml(paidAtLabel)}</td>
         </tr>
-        ${input.method?.trim()
+        ${input.method?.trim() && paidToTreasurerTotal > 0
       ? `
               <tr>
                 <td style="padding:8px 0; border-bottom:1px solid #e2e8f0; color:#64748b;">Method</td>
@@ -568,19 +613,27 @@ export function renderContributionBatchReceiptEmail(input: {
 
   const text = [
     input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
-    input.customMessage?.trim() || "We received your payment below. Thank you.",
+    input.customMessage?.trim() ||
+      (hasPaidElsewhereRows
+        ? "We recorded the contribution update below. Items marked as paid elsewhere include the reported payment location."
+        : "We received your payment below. Thank you."),
     "",
     input.recipientName?.trim() ? `Payer: ${input.recipientName.trim()}` : "",
     ...safeRows.flatMap((item) => [
-      `${item.title}: ${normalizePesos(item.amountPesos)}`,
+      `${item.title}: ${item.status === "paid_elsewhere" ? "Paid elsewhere" : "Paid to treasurer"} (${normalizePesos(item.amountPesos)})`,
+      ...(item.status === "paid_elsewhere" && item.paidElsewhereLocation
+        ? [`  Location: ${item.paidElsewhereLocation}`]
+        : []),
       ...renderContributionLineDetailsText({
         orderItems: item.orderItems,
         storeSpecs: item.storeSpecs,
       }),
     ]),
-    `Total: ${normalizePesos(input.totalAmountPesos)}`,
+    hasPaidElsewhereRows ? `Paid to Treasurer: ${normalizePesos(paidToTreasurerTotal)}` : `Total: ${normalizePesos(paidToTreasurerTotal)}`,
+    hasPaidElsewhereRows ? `Paid Elsewhere: ${normalizePesos(paidElsewhereTotal)}` : "",
+    hasPaidElsewhereRows ? `Total Covered: ${normalizePesos(updatedTotal)}` : "",
     `Date: ${paidAtLabel}`,
-    input.method?.trim() ? `Method: ${input.method.trim()}` : "",
+    input.method?.trim() && paidToTreasurerTotal > 0 ? `Method: ${input.method.trim()}` : "",
     renderSignatureText(input.signatureOverride, input.treasurerNameOverride),
   ]
     .filter(Boolean)
@@ -661,6 +714,74 @@ export function renderOptionalContributionDeclineEmail(input: {
   return {
     subject,
     html: renderShell({ title: "Optional Contribution Update", bodyHtml }),
+    text,
+  };
+}
+
+export function renderContributionPaidElsewhereEmail(input: {
+  recipientName: string | null;
+  location: string;
+  contributions: Array<{
+    title: string;
+    eventTitle?: string | null;
+    amountPesos: number;
+  }>;
+  treasurerNameOverride?: string | null;
+}) {
+  const subject = "Contribution payment update";
+  const greeting = input.recipientName?.trim()
+    ? `<p style="margin:0 0 12px 0;">Hi ${escapeHtml(input.recipientName.trim())},</p>`
+    : `<p style="margin:0 0 12px 0;">Hi,</p>`;
+
+  const locationLabel = escapeHtml(input.location.trim());
+  const rows = input.contributions;
+  const tableHtml = `
+    <table role="presentation" style="width:100%; border-collapse:collapse; margin-top:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Contribution</th>
+          <th style="text-align:left; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Paid At</th>
+          <th style="text-align:right; padding:10px 0; border-bottom:1px solid #cbd5e1; color:#475569;">Removed Payable</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map((item) => `
+            <tr>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a;">
+                <div>${escapeHtml(item.title)}</div>
+                ${item.eventTitle?.trim() ? `<div style="font-size:12px; color:#64748b; margin-top:4px;">${escapeHtml(item.eventTitle.trim())}</div>` : ""}
+              </td>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; font-weight:600;">${locationLabel}</td>
+              <td style="padding:10px 0; border-bottom:1px solid #e2e8f0; color:#0f172a; text-align:right; font-weight:600;">${normalizePesos(item.amountPesos)}</td>
+            </tr>
+          `.trim())
+          .join("")}
+      </tbody>
+    </table>
+  `.trim();
+
+  const bodyHtml = [
+    greeting,
+    `<p style="margin:0 0 12px 0;">This confirms that the contribution update below was marked as paid at <strong>${locationLabel}</strong>. The remaining payable for these items has been set to zero in Dormy.</p>`,
+    tableHtml,
+    renderSignatureHtml(null, input.treasurerNameOverride),
+  ].join("");
+
+  const text = [
+    input.recipientName?.trim() ? `Hi ${input.recipientName.trim()},` : "Hi,",
+    `This confirms that the contribution update below was marked as paid at ${input.location.trim()}. The remaining payable for these items has been set to zero in Dormy.`,
+    "",
+    ...rows.map((item) => `${item.title}: paid at ${input.location.trim()} (${normalizePesos(item.amountPesos)})`),
+    "",
+    renderSignatureText(null, input.treasurerNameOverride),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    subject,
+    html: renderShell({ title: "Contribution Payment Update", bodyHtml }),
     text,
   };
 }

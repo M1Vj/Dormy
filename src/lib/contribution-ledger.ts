@@ -37,6 +37,10 @@ export function isOptionalContributionDeclined(metadataInput: unknown) {
   return asMetadataRecord(metadataInput).optional_declined === true;
 }
 
+export function isContributionPaidElsewhere(metadataInput: unknown) {
+  return asMetadataRecord(metadataInput).paid_elsewhere === true;
+}
+
 export function getOptionalContributionDecisionLabel(input: {
   isStore: boolean;
   count?: number;
@@ -58,7 +62,12 @@ export function getContributionSettlementStatus(input: {
   paid: number;
   remaining: number;
   declined: boolean;
+  paidElsewhere?: boolean;
 }) {
+  if (input.paidElsewhere) {
+    return "paid_elsewhere" as const;
+  }
+
   if (input.declined) {
     return "declined" as const;
   }
