@@ -17,6 +17,7 @@ import {
   getContributionChargeAmount,
   getContributionCollectedAmount,
   getContributionSettlementStatus,
+  isContributionPaidElsewhere,
   isOptionalContributionDeclined,
 } from "@/lib/contribution-ledger";
 import {
@@ -72,11 +73,12 @@ type EntryRow = {
 type OccupantWithStatus = OccupantRow & {
   paid: number;
   charged: number;
-  status: "paid" | "partial" | "unpaid" | "declined";
+  status: "paid" | "partial" | "unpaid" | "declined" | "paid_elsewhere";
   deadline: string | null;
   paymentDate: string | null;
   overdue: boolean;
   cartItems: CartItem[];
+  paidElsewhereLocation: string | null;
 };
 
 const normalizeParam = (value?: string | string[]) => {
@@ -94,6 +96,15 @@ const getRoomCode = (occupant: OccupantRow) => {
 };
 
 function StatusBadge({ status }: { status: OccupantWithStatus["status"] }) {
+  if (status === "paid_elsewhere") {
+    return (
+      <Badge variant="outline" className="border-sky-300 text-sky-700 hover:bg-sky-50">
+        <CheckCircle className="mr-1 h-3 w-3" />
+        Paid Elsewhere
+      </Badge>
+    );
+  }
+
   if (status === "declined") {
     return (
       <Badge variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50">
@@ -281,6 +292,7 @@ export default async function EventDetailsPage({
     const occupantEntries = entryRows.filter((entry) => entry.occupant_id === occupant.id);
     const chargeEntries = occupantEntries.filter((entry) => entry.entry_type !== "payment");
     const declined = occupantEntries.some((entry) => isOptionalContributionDeclined(entry.metadata));
+    const paidElsewhere = occupantEntries.some((entry) => isContributionPaidElsewhere(entry.metadata));
 
     const paid = occupantEntries.reduce(
       (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
@@ -292,7 +304,7 @@ export default async function EventDetailsPage({
       0
     );
     const charged =
-      isStore && rawCharged <= 0 && !declined
+      isStore && rawCharged <= 0 && !declined && !paidElsewhere
         ? storeBaselineAmount
         : Number(rawCharged.toFixed(2));
 
@@ -301,6 +313,7 @@ export default async function EventDetailsPage({
       paid,
       remaining: charged - paid,
       declined,
+      paidElsewhere,
     });
 
     const deadline = chargeEntries
@@ -308,20 +321,40 @@ export default async function EventDetailsPage({
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
-    const paymentDate =
-      occupantEntries
+    const paymentDateCandidates = [
+      ...occupantEntries
         .filter((entry) => entry.entry_type === "payment")
-        .map((entry) => (typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0 ? entry.posted_at : null))
-        .filter((value): value is string => Boolean(value))
-        .sort()
-        .at(-1) ?? null;
+        .map((entry) =>
+          typeof entry.posted_at === "string" && entry.posted_at.trim().length > 0
+            ? entry.posted_at
+            : null
+        ),
+      ...occupantEntries
+        .map((entry) =>
+          typeof entry.metadata?.paid_elsewhere_at === "string" &&
+          entry.metadata.paid_elsewhere_at.trim().length > 0
+            ? entry.metadata.paid_elsewhere_at.trim()
+            : null
+        ),
+    ].filter((value): value is string => Boolean(value));
+    const paymentDate = paymentDateCandidates.sort().at(-1) ?? null;
 
     const overdue =
       deadline !== null &&
       deadline < nowIso &&
       charged > 0 &&
       paid < charged &&
-      !declined;
+      !declined &&
+      !paidElsewhere;
+    const paidElsewhereLocation =
+      occupantEntries
+        .map((entry) =>
+          typeof entry.metadata?.paid_elsewhere_location === "string" &&
+          entry.metadata.paid_elsewhere_location.trim().length > 0
+            ? entry.metadata.paid_elsewhere_location.trim()
+            : null
+        )
+        .find((value): value is string => Boolean(value && value.trim().length > 0)) ?? null;
 
     const cartItems = getCanonicalContributionCartItems(
       occupantEntries.map((entry) => ({
@@ -341,6 +374,7 @@ export default async function EventDetailsPage({
       paymentDate,
       overdue,
       cartItems,
+      paidElsewhereLocation,
     };
   });
 
@@ -471,8 +505,10 @@ export default async function EventDetailsPage({
             >
               <option value="">All statuses</option>
               <option value="paid">Paid</option>
+              <option value="paid_elsewhere">Paid Elsewhere</option>
               <option value="partial">Partial</option>
               <option value="unpaid">Unpaid</option>
+              <option value="declined">Declined</option>
             </select>
             <div className="flex gap-2">
               <Button type="submit" variant="secondary" size="sm" className="w-full">
@@ -511,6 +547,11 @@ export default async function EventDetailsPage({
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <StatusBadge status={occupant.status} />
+                        {occupant.status === "paid_elsewhere" && occupant.paidElsewhereLocation ? (
+                          <p className="max-w-[10rem] text-right text-[10px] text-sky-700 [overflow-wrap:anywhere]">
+                            {occupant.paidElsewhereLocation}
+                          </p>
+                        ) : null}
                         {occupant.overdue ? (
                           <Badge variant="destructive" className="text-[10px]">
                             Overdue
@@ -536,6 +577,11 @@ export default async function EventDetailsPage({
                           : "Not paid"}
                       </span>
                     </div>
+                    {occupant.status === "paid_elsewhere" && occupant.paidElsewhereLocation ? (
+                      <p className="text-xs text-sky-700">
+                        Paid elsewhere: {occupant.paidElsewhereLocation}
+                      </p>
+                    ) : null}
                     <PaymentDialog
                       dormId={dormId}
                       occupantId={occupant.id}
@@ -601,6 +647,11 @@ export default async function EventDetailsPage({
                     <TableCell className="text-center">
                       <div className="flex flex-col items-center gap-1">
                         <StatusBadge status={occupant.status} />
+                        {occupant.status === "paid_elsewhere" && occupant.paidElsewhereLocation ? (
+                          <p className="max-w-[12rem] text-center text-[10px] text-sky-700 [overflow-wrap:anywhere]">
+                            {occupant.paidElsewhereLocation}
+                          </p>
+                        ) : null}
                         {occupant.overdue ? (
                           <Badge variant="destructive" className="text-[10px]">
                             Overdue
