@@ -37,14 +37,14 @@ export async function optimizeImage(file: File): Promise<{
     });
   }
 
-  // Convert to WebP
+  // Convert to PNG to preserve transparency across email clients
   const buffer = await pipeline
-    .webp({ quality: WEBP_QUALITY })
+    .png({ quality: WEBP_QUALITY })
     .toBuffer();
 
   return {
     buffer,
-    contentType: "image/webp",
-    extension: "webp",
+    contentType: "image/png",
+    extension: "png",
   };
 }

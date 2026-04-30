@@ -107,10 +107,10 @@ export default async function StudentAssistantReportingPage() {
   const stats = statsRes;
   const cleaning = "error" in cleaningRes ? null : cleaningRes;
 
-  const clearancePercentage = stats.totalOccupants > 0 ? (stats.occupantsCleared / stats.totalOccupants) * 100 : 0;
+  const clearancePercentage = stats.totalOccupants > 0 ? ((stats.saOccupantsCleared ?? stats.occupantsCleared) / stats.totalOccupants) * 100 : 0;
   const fineCollectionRate = stats.finesCharged > 0 ? (stats.finesPaid / stats.finesCharged) * 100 : 0;
 
-  const severityCounts = activeFines.reduce((acc: Record<string, number>, f: any) => {
+  const severityCounts = activeFines.reduce((acc: Record<string, number>, f: { rule?: { severity?: string } }) => {
     const severity = f.rule?.severity ?? "unknown";
     acc[severity] = (acc[severity] || 0) + 1;
     return acc;
@@ -146,7 +146,7 @@ export default async function StudentAssistantReportingPage() {
         <StatCard
           label="Clearance Rate"
           value={`${clearancePercentage.toFixed(0)}%`}
-          sublabel={`${stats.occupantsCleared} / ${stats.totalOccupants} cleared`}
+          sublabel={`${stats.saOccupantsCleared ?? stats.occupantsCleared} / ${stats.totalOccupants} cleared`}
           icon={Users}
           variant={clearancePercentage < 100 ? "warn" : "success"}
         />
