@@ -414,7 +414,7 @@ export default async function EventDetailsPage({
         : Number(rawPayable.toFixed(2));
 
     const paid = occupantEntries.reduce(
-      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata),
       0
     );
 
@@ -490,6 +490,7 @@ export default async function EventDetailsPage({
   const totalPayable = occupantStatus.reduce((sum, occupant) => sum + occupant.payable, 0);
   const totalRemaining = occupantStatus.reduce((sum, occupant) => sum + Math.max(0, occupant.remaining), 0);
   const overdueCount = occupantStatus.filter((occupant) => occupant.overdue).length;
+  const unpaidCount = occupantStatus.filter((occupant) => occupant.remaining > 0 && occupant.paymentStatus !== "declined" && occupant.paymentStatus !== "paid_elsewhere").length;
 
   return (
     <div className="space-y-6">
@@ -556,10 +557,10 @@ export default async function EventDetailsPage({
         </Card>
         <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Occupants</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Unpaid Occupants</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold">{occupantRows.length}</div>
+            <div className="text-2xl font-semibold text-rose-600">{unpaidCount}</div>
           </CardContent>
         </Card>
         <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
@@ -633,7 +634,7 @@ export default async function EventDetailsPage({
                       </div>
                     </div>
 
-                    {isStore && occupant.cartItems?.length > 0 && (
+                    {isStore && occupant.cartItems?.length > 0 && occupant.paymentStatus !== "declined" && (
                       <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
                     )}
 
@@ -716,7 +717,7 @@ export default async function EventDetailsPage({
                     <TableCell>
                       <div className="font-medium">{occupant.full_name ?? "Unnamed"}</div>
                       <div className="text-xs text-muted-foreground">{occupant.student_id ?? "-"}</div>
-                      {isStore && occupant.cartItems?.length > 0 && (
+                      {isStore && occupant.cartItems?.length > 0 && occupant.paymentStatus !== "declined" && (
                         <div className="mt-2 w-full min-w-0 max-w-[32rem] xl:max-w-[40rem]">
                           <CartItemsRenderer items={occupant.cartItems} storeItems={storeItems} />
                         </div>
