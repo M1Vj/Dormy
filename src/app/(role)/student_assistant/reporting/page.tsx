@@ -175,7 +175,7 @@ export default async function StudentAssistantReportingPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {Object.entries(severityCounts)
+                {(Object.entries(severityCounts) as [string, number][])
                   .sort(([, a], [, b]) => b - a)
                   .map(([severity, count]) => {
                     const pct = activeFines.length > 0 ? (count / activeFines.length) * 100 : 0;
