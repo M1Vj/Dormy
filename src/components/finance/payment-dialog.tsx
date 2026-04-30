@@ -844,7 +844,7 @@ export function PaymentDialog({
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 
-              {metadata?.is_store && Array.isArray(metadata?.store_items) ? (
+              {metadata?.is_store && Array.isArray(metadata?.store_items) && !declineOptionalContribution && !markPaidElsewhere ? (
                 <StoreCartBuilder form={form} storeItems={metadata.store_items} />
               ) : null}
 

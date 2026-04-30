@@ -346,7 +346,7 @@ export default async function EventsFinancePage({
       };
 
     const chargeAmount = getContributionChargeAmount(entry.entry_type, entry.amount_pesos);
-    const paymentAmount = getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata);
 
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
@@ -466,10 +466,19 @@ export default async function EventsFinancePage({
     const key = `${entry.occupant_id}:${metadata.contributionId}`;
     const delta =
       getContributionChargeAmount(entry.entry_type, entry.amount_pesos) -
-      getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+      getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata);
     occupantRemainingMap[key] = (occupantRemainingMap[key] ?? 0) + delta;
     occupantPaidMap[key] =
-      (occupantPaidMap[key] ?? 0) + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+      (occupantPaidMap[key] ?? 0) + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata);
+  }
+
+  const unpaidCounts: Record<string, number> = {};
+  for (const [key, amount] of Object.entries(occupantRemainingMap)) {
+    if (amount > 0) {
+      const idx = key.indexOf(":");
+      const contribId = key.slice(idx + 1);
+      unpaidCounts[contribId] = (unpaidCounts[contribId] || 0) + 1;
+    }
   }
 
   const occupantOptions = (occupants ?? []).map((occupant) => ({
@@ -550,7 +559,15 @@ export default async function EventsFinancePage({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Active Occupants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold text-blue-600">{occupants?.length ?? 0}</div>
+          </CardContent>
+        </Card>
         <Card className="bg-white/90 dark:bg-card/90 backdrop-blur-md shadow-md hover:shadow-lg transition-all duration-200 border-muted">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Visible Contributions</CardTitle>
@@ -649,9 +666,9 @@ export default async function EventsFinancePage({
                       <p className="font-medium text-emerald-600">{formatPesos(contribution.collected)}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Remaining</p>
-                      <p className={`font-medium ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                        {useStoreRange ? storePriceLabel : formatPesos(contribution.remaining)}
+                      <p className="text-muted-foreground">Unpaid</p>
+                      <p className={`font-medium ${(unpaidCounts[contribution.id] ?? 0) > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {unpaidCounts[contribution.id] ?? 0} {((unpaidCounts[contribution.id] ?? 0) === 1) ? 'occupant' : 'occupants'}
                       </p>
                     </div>
                   </div>
@@ -678,7 +695,7 @@ export default async function EventsFinancePage({
               <TableHead className="font-semibold text-foreground">Linked Event</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Charged</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Collected</TableHead>
-              <TableHead className="text-right font-semibold text-foreground">Remaining</TableHead>
+              <TableHead className="text-right font-semibold text-foreground">Unpaid Occupants</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Payable/Occupant</TableHead>
               <TableHead className="font-semibold text-foreground">Semesters</TableHead>
               <TableHead className="text-right font-semibold text-foreground">Action</TableHead>
@@ -713,8 +730,8 @@ export default async function EventsFinancePage({
                   <TableCell className="text-sm text-muted-foreground">{contribution.eventTitle ?? "—"}</TableCell>
                   <TableCell className="text-right">{useStoreRange ? storePayableLabel : formatPesos(contribution.charged)}</TableCell>
                   <TableCell className="text-right text-emerald-600">{formatPesos(contribution.collected)}</TableCell>
-                  <TableCell className={`text-right ${contribution.remaining > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                    {useStoreRange ? storePayableLabel : formatPesos(contribution.remaining)}
+                  <TableCell className={`text-right ${(unpaidCounts[contribution.id] ?? 0) > 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                    {unpaidCounts[contribution.id] ?? 0}
                   </TableCell>
                   <TableCell className="text-right">
                     {contribution.isStore
