@@ -227,7 +227,7 @@ export default async function TreasurerOccupantsPage() {
       paid: 0,
     };
 
-    existing.paid += getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+    existing.paid += getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata);
     existing.payable += getContributionChargeAmount(entry.entry_type, entry.amount_pesos);
 
     if (!existing.details && parsed.details) existing.details = parsed.details;

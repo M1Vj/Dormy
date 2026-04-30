@@ -145,7 +145,7 @@ export default async function EventsFinancePage({
     .map((event) => {
       const eventEntries = typedEntries.filter((entry) => entry.event_id === event.id);
       const collected = eventEntries.reduce((sum, entry) => {
-        return sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos);
+        return sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata);
       }, 0);
       const charged = eventEntries.reduce((sum, entry) => {
         return sum + getContributionChargeAmount(entry.entry_type, entry.amount_pesos);

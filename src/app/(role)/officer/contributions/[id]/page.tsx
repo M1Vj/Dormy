@@ -295,7 +295,7 @@ export default async function EventDetailsPage({
     const paidElsewhere = occupantEntries.some((entry) => isContributionPaidElsewhere(entry.metadata));
 
     const paid = occupantEntries.reduce(
-      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata),
       0
     );
 

@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isContributionPaymentEntry } from "@/lib/contribution-ledger";
+import { getContributionCollectedAmount } from "@/lib/contribution-ledger";
 
 const MANUAL_EXPENSE_MARKER = "[treasurer_finance_manual]";
 
@@ -141,15 +141,18 @@ export async function getTreasurerSemesterSnapshots(
   for (const row of ledgerRows) {
     if (!row.semester_id || !bySemester.has(row.semester_id)) continue;
 
-    const amount = Number(row.amount_pesos ?? 0);
-    const isPayment = isContributionPaymentEntry(row.entry_type);
-    if (!isPayment) continue;
+    const collectedAmount = getContributionCollectedAmount(
+      row.entry_type,
+      row.amount_pesos,
+      row.metadata
+    );
+    if (collectedAmount <= 0) continue;
 
     const accumulator = bySemester.get(row.semester_id);
     if (!accumulator) continue;
 
     if (isManualInflowRow(row)) {
-      accumulator.inflow += Math.abs(amount);
+      accumulator.inflow += collectedAmount;
       continue;
     }
 
@@ -157,7 +160,7 @@ export async function getTreasurerSemesterSnapshots(
       continue;
     }
 
-    accumulator.inflow += Math.abs(amount);
+    accumulator.inflow += collectedAmount;
   }
 
   for (const row of expenseRows) {
