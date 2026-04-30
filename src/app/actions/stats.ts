@@ -2,7 +2,7 @@
 
 import { ensureActiveSemesterId } from "@/lib/semesters";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isContributionPaymentEntry } from "@/lib/contribution-ledger";
+import { getContributionChargeAmount, getContributionCollectedAmount } from "@/lib/contribution-ledger";
 
 export type DashboardStats = {
   // Finance summary
@@ -12,6 +12,8 @@ export type DashboardStats = {
   cashOnHand: number;
   totalCollectibles: number;
   occupantsCleared: number;
+  saOccupantsCleared?: number;
+  treasurerOccupantsCleared?: number;
   occupantsNotCleared: number;
   totalOccupants: number;
   // Fines summary
@@ -40,7 +42,11 @@ export type ClearanceItem = {
   full_name: string;
   student_id: string | null;
   total_balance: number;
+  sa_balance?: number;
+  treasurer_balance?: number;
   is_cleared: boolean;
+  is_cleared_sa?: boolean;
+  is_cleared_treasurer?: boolean;
 };
 
 export async function getDashboardStats(dormId: string): Promise<DashboardStats | { error: string }> {
@@ -70,7 +76,7 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
 
   const { data: entries } = await supabase
     .from("ledger_entries")
-    .select("occupant_id, amount_pesos, ledger, entry_type, voided_at, semester_id")
+    .select("occupant_id, amount_pesos, ledger, entry_type, voided_at, semester_id, metadata")
     .eq("dorm_id", dormId)
     .is("voided_at", null);
 
@@ -81,6 +87,7 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     entry_type: string;
     voided_at: string | null;
     semester_id: string | null;
+    metadata: unknown;
   }>;
 
   // Get ALL approved expenses for the dorm (all time) for Cash on Hand
@@ -138,54 +145,93 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
   let gadgetsCharged = 0;
   let gadgetsPaid = 0;
 
+  // Separate balances
+  const occupantBalancesTreasurer = new Map<string, number>();
+  const occupantBalancesSA = new Map<string, number>();
+  for (const occ of occupantList) {
+    occupantBalancesTreasurer.set(occ.id, 0);
+    occupantBalancesSA.set(occ.id, 0);
+  }
+
   for (const entry of entryList) {
     const amount = Number(entry.amount_pesos);
-    const isPayment =
-      entry.ledger === "contributions"
-        ? isContributionPaymentEntry(entry.entry_type)
-        : entry.entry_type === "payment" || amount < 0;
     const isThisSem = entry.semester_id === semesterResult.semesterId;
     const ledger = entry.ledger;
+    const contributionCollectedAmount =
+      ledger === "contributions"
+        ? getContributionCollectedAmount(entry.entry_type, amount, entry.metadata)
+        : 0;
+    const contributionChargedAmount =
+      ledger === "contributions"
+        ? getContributionChargeAmount(entry.entry_type, amount)
+        : 0;
+    const isPayment =
+      ledger === "contributions"
+        ? contributionCollectedAmount > 0
+        : entry.entry_type === "payment" || amount < 0;
+    const paidAmount =
+      ledger === "contributions" ? contributionCollectedAmount : Math.abs(amount);
 
     if (isPayment) {
-      totalAllTimePaid += Math.abs(amount);
+      totalAllTimePaid += paidAmount;
     }
 
     if (!isThisSem) continue;
 
-    // Update occupant balance (Only this semester for clearance)
+    // Update occupant balance
     const current = occupantBalances.get(entry.occupant_id) ?? 0;
     occupantBalances.set(entry.occupant_id, current + amount);
 
+    if (ledger === "contributions" || ledger === "committee_funds" || ledger === "expenses") {
+      const currTreasurer = occupantBalancesTreasurer.get(entry.occupant_id) ?? 0;
+      occupantBalancesTreasurer.set(entry.occupant_id, currTreasurer + amount);
+    } else {
+      const currSA = occupantBalancesSA.get(entry.occupant_id) ?? 0;
+      occupantBalancesSA.set(entry.occupant_id, currSA + amount);
+    }
+
+    if (ledger === "contributions") {
+      totalPaid += contributionCollectedAmount;
+      eventsPaid += contributionCollectedAmount;
+      totalCharged += contributionChargedAmount;
+      eventsCharged += contributionChargedAmount;
+      continue;
+    }
+
     if (isPayment) {
-      const absAmount = Math.abs(amount);
-      totalPaid += absAmount;
-      if (ledger === "maintenance_fee") maintenancePaid += absAmount;
-      if (ledger === "sa_fines") finesPaid += absAmount;
-      if (ledger === "contributions") eventsPaid += absAmount;
-      if (ledger === "gadgets") gadgetsPaid += absAmount;
+      totalPaid += paidAmount;
+      if (ledger === "maintenance_fee") maintenancePaid += paidAmount;
+      if (ledger === "sa_fines") finesPaid += paidAmount;
+      if (ledger === "gadgets") gadgetsPaid += paidAmount;
     } else {
       totalCharged += amount;
       if (ledger === "maintenance_fee") maintenanceCharged += amount;
       if (ledger === "sa_fines") finesCharged += amount;
-      if (ledger === "contributions") eventsCharged += amount;
       if (ledger === "gadgets") gadgetsCharged += amount;
     }
   }
 
   const clearanceList: ClearanceItem[] = occupantList.map((occ) => {
     const balance = occupantBalances.get(occ.id) ?? 0;
+    const balanceSA = occupantBalancesSA.get(occ.id) ?? 0;
+    const balanceTreasurer = occupantBalancesTreasurer.get(occ.id) ?? 0;
     return {
       occupant_id: occ.id,
       full_name: occ.full_name,
       student_id: occ.student_id,
       total_balance: balance,
+      sa_balance: balanceSA,
+      treasurer_balance: balanceTreasurer,
       is_cleared: balance <= 0,
+      is_cleared_sa: balanceSA <= 0,
+      is_cleared_treasurer: balanceTreasurer <= 0,
     };
   });
 
   const occupantsCleared = clearanceList.filter((c) => c.is_cleared).length;
   const occupantsNotCleared = clearanceList.filter((c) => !c.is_cleared).length;
+  const saOccupantsCleared = clearanceList.filter((c) => c.is_cleared_sa).length;
+  const treasurerOccupantsCleared = clearanceList.filter((c) => c.is_cleared_treasurer).length;
 
   const activeFines = fineRows.filter((f) => !f.voided_at);
   const voidedFines = fineRows.filter((f) => f.voided_at);
@@ -197,6 +243,8 @@ export async function getDashboardStats(dormId: string): Promise<DashboardStats 
     cashOnHand: totalAllTimePaid - totalAllTimeExpenses,
     totalCollectibles: totalCharged - totalPaid,
     occupantsCleared,
+    saOccupantsCleared,
+    treasurerOccupantsCleared,
     occupantsNotCleared,
     totalOccupants: occupantList.length,
     totalFinesIssued: fineRows.length,
