@@ -211,7 +211,7 @@ export default async function EventDetailsPage({
     const chargeEntries = occupantEntries.filter((entry) => entry.entry_type !== "payment");
 
     const paid = occupantEntries.reduce(
-      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos),
+      (sum, entry) => sum + getContributionCollectedAmount(entry.entry_type, entry.amount_pesos, entry.metadata),
       0
     );
 

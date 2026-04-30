@@ -1,9 +1,9 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 type Row = Record<string, string | number | boolean | null | undefined>;
 
 export function buildWorkbook() {
-  return XLSX.utils.book_new();
+  return new ExcelJS.Workbook();
 }
 
 export function sanitizeCell(value: string | number | boolean | null | undefined): string | number | boolean | null {
@@ -21,7 +21,7 @@ export function sanitizeCell(value: string | number | boolean | null | undefined
 }
 
 export function appendSheet(
-  workbook: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   sheetName: string,
   rows: Row[],
   fallbackColumns?: string[]
@@ -38,50 +38,47 @@ export function appendSheet(
     fallbackColumns ??
     Object.keys(normalizedRows[0] ?? {}).filter((column) => column.length > 0);
 
-  const worksheet = columns.length
-    ? XLSX.utils.json_to_sheet(normalizedRows, { header: columns })
-    : XLSX.utils.aoa_to_sheet([["No data"]]);
+  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || "Sheet");
 
-  if (columns.length) {
-    const widths = columns.map((column) => {
-      let max = column.length;
-      for (const row of normalizedRows) {
-        const value = row[column];
-        const length = String(value ?? "").length;
-        if (length > max) {
-          max = length;
-        }
-      }
-      return { wch: Math.min(Math.max(max + 2, 10), 48) };
-    });
-    worksheet["!cols"] = widths;
+  if (!columns.length) {
+    worksheet.addRow(["No data"]);
+    return;
   }
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+  worksheet.addRow(columns);
+  for (const row of normalizedRows) {
+    worksheet.addRow(columns.map((column) => row[column] ?? null));
+  }
+
+  columns.forEach((column, index) => {
+    let max = column.length;
+    for (const row of normalizedRows) {
+      const value = row[column];
+      const length = String(value ?? "").length;
+      if (length > max) {
+        max = length;
+      }
+    }
+    worksheet.getColumn(index + 1).width = Math.min(Math.max(max + 2, 10), 48);
+  });
 }
 
 export function appendMetadataSheet(
-  workbook: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   metadata: Array<{ key: string; value: string }>
 ) {
-  const rows = metadata.map((entry) => [
-    sanitizeCell(entry.key),
-    sanitizeCell(entry.value),
-  ]);
-  const worksheet = XLSX.utils.aoa_to_sheet([
-    ["Field", "Value"],
-    ...rows,
-  ]);
-  worksheet["!cols"] = [{ wch: 24 }, { wch: 60 }];
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Metadata");
+  const worksheet = workbook.addWorksheet("Metadata");
+  worksheet.addRow(["Field", "Value"]);
+  for (const entry of metadata) {
+    worksheet.addRow([sanitizeCell(entry.key), sanitizeCell(entry.value)]);
+  }
+  worksheet.getColumn(1).width = 24;
+  worksheet.getColumn(2).width = 60;
 }
 
-export function workbookToBuffer(workbook: XLSX.WorkBook) {
-  return XLSX.write(workbook, {
-    type: "buffer",
-    bookType: "xlsx",
-    compression: true,
-  }) as Buffer;
+export async function workbookToBuffer(workbook: ExcelJS.Workbook) {
+  const content = await workbook.xlsx.writeBuffer();
+  return Buffer.from(content);
 }
 
 export function normalizeFilePart(value: string) {

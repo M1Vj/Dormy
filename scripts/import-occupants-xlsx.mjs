@@ -1,7 +1,7 @@
 import "./load-env.mjs";
 
 import fs from "node:fs";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 
 const occupantsWorkbookPath = process.argv[2];
@@ -55,6 +55,62 @@ const clean = (value) =>
     .trim();
 
 const normalizeNameKey = (value) => clean(value).toLowerCase();
+
+const normalizeCellValue = (value) => {
+  if (value == null) return "";
+  if (value instanceof Date) return value;
+  if (typeof value === "object") {
+    if ("result" in value && value.result != null) return normalizeCellValue(value.result);
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((entry) => entry.text ?? "").join("");
+    }
+    if ("hyperlink" in value) return value.text ?? value.hyperlink ?? "";
+  }
+  return value;
+};
+
+const worksheetToObjects = (worksheet) => {
+  const headerRow = worksheet.getRow(1);
+  const headers = [];
+  for (let i = 1; i <= worksheet.columnCount; i += 1) {
+    headers.push(clean(normalizeCellValue(headerRow.getCell(i).value)));
+  }
+
+  const rows = [];
+  for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex += 1) {
+    const row = worksheet.getRow(rowIndex);
+    const record = {};
+    let hasValue = false;
+
+    headers.forEach((header, idx) => {
+      if (!header) return;
+      const value = normalizeCellValue(row.getCell(idx + 1).value);
+      const normalized = value ?? "";
+      if (clean(normalized) !== "") hasValue = true;
+      record[header] = normalized;
+    });
+
+    if (hasValue) {
+      rows.push(record);
+    }
+  }
+
+  return rows;
+};
+
+const worksheetToMatrix = (worksheet) => {
+  const rows = [];
+  for (let rowIndex = 1; rowIndex <= worksheet.rowCount; rowIndex += 1) {
+    const row = worksheet.getRow(rowIndex);
+    const values = [];
+    for (let colIndex = 1; colIndex <= worksheet.columnCount; colIndex += 1) {
+      values.push(normalizeCellValue(row.getCell(colIndex).value) ?? "");
+    }
+    rows.push(values);
+  }
+  return rows;
+};
 
 const getLooseNameKey = (value) => {
   const name = clean(value).toLowerCase();
@@ -211,26 +267,28 @@ if (dormError || !dorm) {
   process.exit(1);
 }
 
-const workbook = XLSX.readFile(occupantsWorkbookPath, { cellDates: true });
-const sheet = workbook.Sheets[sheetName];
-const byRoomSheet = workbook.Sheets[byRoomSheetName];
+const workbook = new ExcelJS.Workbook();
+await workbook.xlsx.readFile(occupantsWorkbookPath);
+const sheet = workbook.getWorksheet(sheetName);
+const byRoomSheet = workbook.getWorksheet(byRoomSheetName);
+const sheetNames = workbook.worksheets.map((sheetItem) => sheetItem.name);
 
 if (!sheet) {
   console.error(
-    `Sheet "${sheetName}" not found. Available sheets: ${workbook.SheetNames.join(", ")}`
+    `Sheet "${sheetName}" not found. Available sheets: ${sheetNames.join(", ")}`
   );
   process.exit(1);
 }
 
 if (!byRoomSheet) {
   console.error(
-    `Sheet "${byRoomSheetName}" not found. Available sheets: ${workbook.SheetNames.join(", ")}`
+    `Sheet "${byRoomSheetName}" not found. Available sheets: ${sheetNames.join(", ")}`
   );
   process.exit(1);
 }
 
-const baseRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-const byRoomRows = XLSX.utils.sheet_to_json(byRoomSheet, { defval: "" });
+const baseRows = worksheetToObjects(sheet);
+const byRoomRows = worksheetToObjects(byRoomSheet);
 
 const occupantsByKey = new Map();
 const occupantLooseKeyToKeys = new Map(); // looseKey -> occupantKey[]
@@ -310,19 +368,21 @@ for (const [key, occ] of occupantsByKey.entries()) {
 }
 
 if (bigbrodsRoomsWorkbookPath) {
-  const bbWb = XLSX.readFile(bigbrodsRoomsWorkbookPath, { cellDates: true });
+  const bbWb = new ExcelJS.Workbook();
+  await bbWb.xlsx.readFile(bigbrodsRoomsWorkbookPath);
   const bbSheetName =
-    process.env.DORMY_BIGBRODS_ROOM_SHEET || bbWb.SheetNames[0] || "Sheet1";
-  const bbSheet = bbWb.Sheets[bbSheetName];
+    process.env.DORMY_BIGBRODS_ROOM_SHEET || bbWb.worksheets[0]?.name || "Sheet1";
+  const bbSheet = bbWb.getWorksheet(bbSheetName);
+  const bbSheetNames = bbWb.worksheets.map((sheetItem) => sheetItem.name);
 
   if (!bbSheet) {
     console.error(
-      `BigBrods sheet "${bbSheetName}" not found. Available sheets: ${bbWb.SheetNames.join(", ")}`
+      `BigBrods sheet "${bbSheetName}" not found. Available sheets: ${bbSheetNames.join(", ")}`
     );
     process.exit(1);
   }
 
-  const bbRows = XLSX.utils.sheet_to_json(bbSheet, { header: 1, defval: "" });
+  const bbRows = worksheetToMatrix(bbSheet);
   let startIndex = -1;
   for (let i = 0; i < bbRows.length; i += 1) {
     const left = clean(bbRows[i]?.[0]).toLowerCase();

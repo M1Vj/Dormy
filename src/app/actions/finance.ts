@@ -21,7 +21,6 @@ import {
 import {
   getContributionChargeAmount,
   getContributionCollectedAmount,
-  isContributionPaymentEntry,
 } from "@/lib/contribution-ledger";
 
 const transactionSchema = z.object({
@@ -534,7 +533,7 @@ function getContributionLedgerBalance(
   );
   const paid = Number(
     matchingRows
-      .reduce((sum, row) => sum + getContributionCollectedAmount(row.entry_type, row.amount_pesos), 0)
+      .reduce((sum, row) => sum + getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata), 0)
       .toFixed(2)
   );
   const parsedRows = matchingRows.map((row) =>
@@ -2012,7 +2011,7 @@ export async function recordContributionBatchPayment(
       outstanding: 0,
     };
 
-    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata);
     existing.payable += getContributionChargeAmount(row.entry_type, row.amount_pesos);
     existing.outstanding = Number((existing.payable - existing.paid).toFixed(2));
 
@@ -3076,7 +3075,7 @@ export async function sendContributionPayableReminders(
       };
 
     existing.outstanding += getContributionChargeAmount(row.entry_type, row.amount_pesos);
-    existing.outstanding -= getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    existing.outstanding -= getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata);
 
     if (!existing.title && contributionMetadata.contribution_title) {
       existing.title = contributionMetadata.contribution_title;
@@ -3400,7 +3399,7 @@ export async function previewContributionBatchPaymentEmail(
       outstanding: 0,
     };
 
-    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    existing.paid += getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata);
     existing.payable += getContributionChargeAmount(row.entry_type, row.amount_pesos);
     existing.outstanding = Number((existing.payable - existing.paid).toFixed(2));
 
@@ -4604,7 +4603,7 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
     await Promise.all([
       supabase
         .from("ledger_entries")
-        .select("ledger, amount_pesos, voided_at, semester_id, entry_type")
+        .select("ledger, amount_pesos, voided_at, semester_id, entry_type, metadata")
         .eq("dorm_id", dormId)
         .eq("semester_id", semesterResult.semesterId)
         .is("voided_at", null),
@@ -4640,11 +4639,8 @@ export async function getDormFinanceOverview(dormId: string): Promise<DormFinanc
       else maintenanceCollected += Math.abs(amount);
     }
     if (entry.ledger === "contributions") {
-      if (isContributionPaymentEntry(entry.entry_type)) {
-        contributionsCollected += Math.abs(amount);
-      } else {
-        contributionsCharged += amount;
-      }
+      contributionsCollected += getContributionCollectedAmount(entry.entry_type, amount, entry.metadata);
+      contributionsCharged += getContributionChargeAmount(entry.entry_type, amount);
     }
     if (entry.ledger === "gadgets") {
       if (amount >= 0) gadgetsCharged += amount;

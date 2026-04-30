@@ -2,7 +2,7 @@ import "./load-env.mjs";
 
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const EXCLUDED_SOURCE = "2nd Placer sa ATI (Most Sustained Garden)";
 const MANUAL_EXPENSE_MARKER = "[treasurer_finance_manual]";
@@ -46,6 +46,28 @@ const monthMap = {
   december: "12",
 };
 
+const normalizeCellValue = (value) => {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object") {
+    if ("result" in value && value.result != null) return normalizeCellValue(value.result);
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((entry) => entry.text ?? "").join("");
+    }
+    if ("hyperlink" in value) return value.text ?? value.hyperlink ?? null;
+  }
+  return value;
+};
+
+const excelSerialToDate = (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const epoch = Date.UTC(1899, 11, 30);
+  const millis = Math.round(value * 24 * 60 * 60 * 1000);
+  const date = new Date(epoch + millis);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 function parseAmount(raw) {
   if (typeof raw === "number") {
     return Number.isFinite(raw) ? raw : null;
@@ -80,12 +102,9 @@ function parseDate(raw, fallback = "2025-12-31") {
   }
 
   if (typeof raw === "number" && Number.isFinite(raw)) {
-    const parsed = XLSX.SSF.parse_date_code(raw);
-    if (parsed && parsed.y && parsed.m && parsed.d) {
-      const date = `${String(parsed.y).padStart(4, "0")}-${String(parsed.m).padStart(2, "0")}-${String(
-        parsed.d
-      ).padStart(2, "0")}`;
-      return normalizeFirstSemYear(date);
+    const parsedDate = excelSerialToDate(raw);
+    if (parsedDate) {
+      return normalizeFirstSemYear(formatDate(parsedDate));
     }
   }
 
@@ -136,15 +155,40 @@ function uniqueJoined(setLike, separator = ", ") {
 }
 
 function loadRowsFromSheet(workbook, sheetName) {
-  const sheet = workbook.Sheets[sheetName];
+  const sheet = workbook.getWorksheet(sheetName);
   if (!sheet) {
     throw new Error(`Missing sheet: ${sheetName}`);
   }
-  return XLSX.utils.sheet_to_json(sheet, {
-    defval: null,
-    raw: true,
-    range: 2,
-  });
+
+  const headerRowIndex = 3;
+  const headerRow = sheet.getRow(headerRowIndex);
+  const headers = [];
+  for (let i = 1; i <= sheet.columnCount; i += 1) {
+    headers.push(clean(normalizeCellValue(headerRow.getCell(i).value)));
+  }
+
+  const rows = [];
+  for (let rowIndex = headerRowIndex + 1; rowIndex <= sheet.rowCount; rowIndex += 1) {
+    const row = sheet.getRow(rowIndex);
+    const record = {};
+    let hasValue = false;
+
+    headers.forEach((header, idx) => {
+      if (!header) return;
+      const value = normalizeCellValue(row.getCell(idx + 1).value);
+      const normalized = value == null || value === "" ? null : value;
+      if (normalized != null && clean(normalized) !== "") {
+        hasValue = true;
+      }
+      record[header] = normalized;
+    });
+
+    if (hasValue) {
+      rows.push(record);
+    }
+  }
+
+  return rows;
 }
 
 async function resolveDorm(dormSlugValue) {
@@ -384,9 +428,8 @@ function prepareExpenseRows(expenseRowsRaw) {
 
 async function run() {
   const resolvedXlsxPath = path.resolve(xlsxPath);
-  const workbook = XLSX.readFile(resolvedXlsxPath, {
-    cellDates: true,
-  });
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(resolvedXlsxPath);
 
   const receivedMoneyRows = loadRowsFromSheet(workbook, "Received_Money");
   const expensesRows = loadRowsFromSheet(workbook, "Expenses");
