@@ -237,7 +237,7 @@ export default async function TreasurerReportingPage() {
       pendingExpenses: 0,
     };
     const chargeAmount = getContributionChargeAmount(row.entry_type, row.amount_pesos);
-    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata);
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
     if (!existing.eventTitle && group.eventTitle) {

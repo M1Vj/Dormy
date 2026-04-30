@@ -9,6 +9,20 @@ function normalizeAmount(value: number | string | null | undefined) {
   return Number(value ?? 0);
 }
 
+function isExcludedFromTreasurerCollected(metadataInput: unknown) {
+  const metadata = asMetadataRecord(metadataInput);
+
+  const paidElsewhereFlag =
+    metadata.paid_elsewhere === true ||
+    (typeof metadata.status === "string" && metadata.status.trim().toLowerCase() === "paid_elsewhere");
+
+  const declinedFlag =
+    metadata.optional_declined === true ||
+    (typeof metadata.status === "string" && metadata.status.trim().toLowerCase() === "declined");
+
+  return paidElsewhereFlag || declinedFlag;
+}
+
 export function isContributionPaymentEntry(entryType: string | null | undefined) {
   return entryType === "payment";
 }
@@ -23,10 +37,20 @@ export function getContributionChargeAmount(
 
 export function getContributionCollectedAmount(
   entryType: string | null | undefined,
-  amountInput: number | string | null | undefined
+  amountInput: number | string | null | undefined,
+  metadataInput?: unknown
 ) {
   const amount = normalizeAmount(amountInput);
-  return isContributionPaymentEntry(entryType) ? Math.abs(amount) : 0;
+
+  if (!isContributionPaymentEntry(entryType)) {
+    return 0;
+  }
+
+  if (metadataInput !== undefined && isExcludedFromTreasurerCollected(metadataInput)) {
+    return 0;
+  }
+
+  return Math.abs(amount);
 }
 
 export function isOptionalContribution(metadataInput: unknown) {

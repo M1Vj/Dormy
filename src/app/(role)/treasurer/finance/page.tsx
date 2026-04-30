@@ -400,7 +400,7 @@ export default async function TreasurerFinancePage({
       };
 
     const chargeAmount = getContributionChargeAmount(row.entry_type, row.amount_pesos);
-    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos);
+    const paymentAmount = getContributionCollectedAmount(row.entry_type, row.amount_pesos, row.metadata);
 
     existing.charged += chargeAmount;
     existing.collected += paymentAmount;
