@@ -48,9 +48,20 @@ npm -v
 
 echo
 
-echo "== Project-local CLIs (via npx) =="
-# These should never require global installs.
-(npx --yes shadcn@latest --version) 2>/dev/null || echo "WARN: shadcn@latest not runnable"
-(npx --yes eslint --version) 2>/dev/null || echo "WARN: eslint not runnable"
-(npx --yes next --version) 2>/dev/null || echo "WARN: next not runnable"
-(npx --yes tsc --version) 2>/dev/null || echo "WARN: tsc not runnable"
+echo "== Project-local CLIs (no installs) =="
+project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+check_local_cli() {
+  local name="$1"
+  local executable="$project_root/node_modules/.bin/$name"
+  if [[ ! -x "$executable" ]]; then
+    echo "MISSING: project-local $name"
+  elif ! "$executable" --version; then
+    echo "WARN: project-local $name not runnable"
+  fi
+}
+
+for cli in shadcn eslint next tsc; do
+  check_local_cli "$cli"
+done
+
